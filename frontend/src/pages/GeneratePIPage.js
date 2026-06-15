@@ -1,0 +1,531 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box, Button, Typography, TextField, Grid, Paper,
+  IconButton, CircularProgress,
+} from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { ArrowBack, Print, Edit, CheckCircle } from '@mui/icons-material';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ordersAPI, companyAPI } from '../services/api';
+import { slate } from '../theme/appTheme';
+
+// ── Number to words ───────────────────────────────────────────────────────────
+const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
+  'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN',
+  'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+
+function numToWords(n) {
+  if (!n || n === 0) return 'ZERO';
+  const num = Math.round(n);
+  if (num < 20)   return ones[num];
+  if (num < 100)  return tens[Math.floor(num / 10)] + (num % 10 ? ' ' + ones[num % 10] : '');
+  if (num < 1000) return ones[Math.floor(num / 100)] + ' HUNDRED' + (num % 100 ? ' ' + numToWords(num % 100) : '');
+  if (num < 100000)  return numToWords(Math.floor(num / 1000)) + ' THOUSAND' + (num % 1000 ? ' ' + numToWords(num % 1000) : '');
+  if (num < 10000000) return numToWords(Math.floor(num / 100000)) + ' LAKH' + (num % 100000 ? ' ' + numToWords(num % 100000) : '');
+  return numToWords(Math.floor(num / 10000000)) + ' CRORE' + (num % 10000000 ? ' ' + numToWords(num % 10000000) : '');
+}
+
+function amountInWords(amount, currency = 'USD') {
+  if (!amount) return '';
+  const [intPart, decPart] = Number(amount).toFixed(2).split('.');
+  let words = `${currency} ${numToWords(parseInt(intPart))}`;
+  if (parseInt(decPart) > 0) words += ` AND CENTS ${numToWords(parseInt(decPart))}`;
+  return words + ' ONLY';
+}
+
+// ── Group PO lines by item_name ───────────────────────────────────────────────
+function groupLines(lines) {
+  const map = new Map();
+  (lines || []).forEach((line) => {
+    const key = (line.item_name || '').trim().toUpperCase();
+    if (!map.has(key)) {
+      map.set(key, {
+        item_name: line.item_name,
+        fabric: line.fabric || '',
+        color: line.color || '',
+        unit_price: parseFloat(line.unit_price) || 0,
+        discount: parseFloat(line.discount) || 0,
+        uom: line.uom || 'PCS',
+        sizes: [],
+        quantity: 0,
+      });
+    }
+    const grp = map.get(key);
+    (line.size_breakdown || []).forEach((sb) => {
+      const qty = parseInt(sb.qty) || 0;
+      if (!qty) return;
+      const existing = grp.sizes.find((s) => s.size.toUpperCase() === (sb.size || '').toUpperCase());
+      if (existing) existing.qty += qty;
+      else grp.sizes.push({ size: sb.size, qty });
+    });
+    grp.quantity += parseInt(line.quantity) || 0;
+  });
+  return Array.from(map.values()).map((g) => ({
+    ...g,
+    line_amount: g.unit_price && g.quantity
+      ? g.quantity * g.unit_price * (1 - g.discount / 100)
+      : 0,
+  }));
+}
+
+function ordinalDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const day = d.getDate();
+  const suffix = [, 'ST', 'ND', 'RD'][((day % 100) - 20) % 10] || [, 'ST', 'ND', 'RD'][day % 100] || 'TH';
+  return `${day}${suffix} ${d.toLocaleString('en-US', { month: 'long' }).toUpperCase()} ${d.getFullYear()}`;
+}
+
+// ── Print styles injected into <head> ─────────────────────────────────────────
+// Use visibility trick: `body * { visibility:hidden }` then restore the print
+// root — this works even when #pi-print-root is nested inside #root.
+const PRINT_STYLE = `
+@media print {
+  body * { visibility: hidden !important; }
+  #pi-print-root,
+  #pi-print-root * { visibility: visible !important; }
+  #pi-print-root {
+    position: fixed;
+    left: 0; top: 0;
+    width: 100%;
+    background: #fff !important;
+    padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page { size: A4 portrait; margin: 14mm 14mm; }
+}
+@media screen {
+  #pi-print-root { display: none; }
+}
+`;
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function GeneratePIPage() {
+  const navigate = useNavigate();
+  const { id } = useParams();
+
+  const [po, setPo] = useState(null);
+  const [company, setCompany] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(true); // true = edit form; false = preview only
+
+  // Editable PI fields
+  const [piDate, setPiDate]       = useState(new Date().toISOString().slice(0, 10));
+  const [piRef, setPiRef]         = useState('');
+  const [portOfDischarge, setPort] = useState('');
+  const [ourBank, setOurBank]     = useState('');
+  const [interBank, setInterBank] = useState('');
+  const [paymentTerms, setPaymentTerms] = useState('');
+
+  // Editable grouped items (user can adjust unit price per group)
+  const [piLines, setPiLines] = useState([]);
+
+  useEffect(() => {
+    // Inject print style
+    const style = document.createElement('style');
+    style.id = 'pi-print-style';
+    style.textContent = PRINT_STYLE;
+    document.head.appendChild(style);
+    return () => style.remove();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const [poRes, coRes, refRes] = await Promise.all([
+          ordersAPI.getBuyerPO(id),
+          companyAPI.getProfile(),
+          ordersAPI.getNextPiRef(),
+        ]);
+        const poData = poRes.data;
+        const coData = coRes.data;
+        setPo(poData);
+        setCompany(coData);
+        setPaymentTerms(poData.payment_terms || '');
+        setPort(localStorage.getItem('pi_port') || '');
+        setOurBank(localStorage.getItem('pi_our_bank') || '');
+        setInterBank(localStorage.getItem('pi_inter_bank') || '');
+        // Use existing pi_ref if already generated, otherwise use next available
+        setPiRef(poData.pi_ref || refRes.data.pi_ref || '');
+        setPiLines(groupLines(poData.lines));
+      } catch (e) {
+        console.error(e);
+        navigate(-1);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [id, navigate]);
+
+  const updateLine = (i, patch) =>
+    setPiLines((ls) => ls.map((l, idx) => idx === i ? {
+      ...l, ...patch,
+      line_amount: ((patch.unit_price ?? l.unit_price) * (l.discount ? (1 - l.discount / 100) : 1) * l.quantity),
+    } : l));
+
+  const totalQty = piLines.reduce((s, l) => s + (l.quantity || 0), 0);
+  const totalAmt = piLines.reduce((s, l) => s + (l.line_amount || 0), 0);
+
+  const handleConfirm = async () => {
+    // Persist PI ref to the PO so seq counter stays accurate
+    try {
+      if (piRef && (!po.pi_ref || po.pi_ref !== piRef)) {
+        await ordersAPI.savePiRef(id, piRef);
+      }
+    } catch (e) {
+      console.warn('Could not save PI ref:', e.message);
+    }
+    // Save bank/port to localStorage for next time
+    localStorage.setItem('pi_port', portOfDischarge);
+    localStorage.setItem('pi_our_bank', ourBank);
+    localStorage.setItem('pi_inter_bank', interBank);
+    setEditing(false);
+  };
+
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
+  if (loading) return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <CircularProgress />
+    </Box>
+  );
+
+  // ── Address helper ──────────────────────────────────────────────────────────
+  const companyAddress = [
+    company?.address_line1,
+    company?.address_line2,
+    [company?.city, company?.region_state, company?.postal_code].filter(Boolean).join(', '),
+    company?.country,
+  ].filter(Boolean).join(', ');
+
+  // ── PI Document (shared between screen preview and print) ───────────────────
+  const PIDocument = () => (
+    <Box sx={{ fontFamily: '"Times New Roman", serif', color: '#000', fontSize: '11pt', lineHeight: 1.4, p: 0 }}>
+      {/* Letterhead */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5, pb: 1.5, borderBottom: '2px solid #000' }}>
+        <Box>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 900, fontSize: '18pt', lineHeight: 1.1, color: '#000' }}>
+            {company?.legal_name || 'J B INTERNATIONAL'}
+          </Typography>
+          {company?.tagline && (
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#444', mt: 0.25 }}>
+              {company.tagline}
+            </Typography>
+          )}
+          <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', mt: 0.5, whiteSpace: 'pre-line', color: '#222' }}>
+            {companyAddress}
+          </Typography>
+          {company?.phone && (
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#222' }}>
+              TEL: {company.phone}{company?.fax ? `  FAX: ${company.fax}` : ''}
+            </Typography>
+          )}
+        </Box>
+        {company?.logo && (
+          <Box component="img" src={company.logo} alt="logo"
+            sx={{ height: 64, objectFit: 'contain', ml: 2 }} />
+        )}
+      </Box>
+
+      {/* Title */}
+      <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '14pt', textAlign: 'center', textDecoration: 'underline', mb: 2, letterSpacing: '0.06em' }}>
+        PROFORMA INVOICE
+      </Typography>
+
+      {/* TO + Meta */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, gap: 3 }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '10pt', mb: 0.3 }}>TO,</Typography>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '11pt' }}>{po?.buyer_name}</Typography>
+          {po?.buyer_address && (
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '10pt', whiteSpace: 'pre-line' }}>{po.buyer_address}</Typography>
+          )}
+        </Box>
+        <Box sx={{ minWidth: 200, textAlign: 'left' }}>
+          {[
+            ['DATE', piDate ? new Date(piDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : ''],
+            ['REF NO', piRef],
+            ['BUYER PO NO.', `#${po?.po_number}`],
+          ].map(([label, val]) => (
+            <Box key={label} sx={{ display: 'flex', gap: 1, mb: 0.25 }}>
+              <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '10pt', minWidth: 100 }}>{label}:</Typography>
+              <Typography sx={{ fontFamily: 'inherit', fontSize: '10pt' }}>{val}</Typography>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+      {/* Items table */}
+      <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', mb: 1.5, fontSize: '10pt', fontFamily: 'inherit' }}>
+        <Box component="thead">
+          <Box component="tr" sx={{ bgcolor: '#f0f0f0' }}>
+            {['S/N\nO.', 'ITEM', 'DESCRIPTION', 'QTY\nPCS.', `FOB UNIT\nPRICE (${po?.currency || 'USD'})`, `VALUE\n(${po?.currency || 'USD'})`].map((h) => (
+              <Box component="th" key={h} sx={{
+                border: '1px solid #000', p: '5px 7px', fontWeight: 700, fontFamily: 'inherit',
+                verticalAlign: 'middle', textAlign: 'center', whiteSpace: 'pre-line', lineHeight: 1.3, fontSize: '9.5pt',
+              }}>
+                {h}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+        <Box component="tbody">
+          {piLines.map((line, i) => {
+              const sizeDesc = line.sizes.map((s) => `${s.size} – ${s.qty} pcs`).join(', ');
+            const disc = line.discount ? (1 - line.discount / 100) : 1;
+            const netPrice = line.unit_price * disc;
+            const lineAmt = netPrice * line.quantity;
+            return (
+              <Box component="tr" key={i}>
+                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', textAlign: 'center', verticalAlign: 'top', fontFamily: 'inherit' }}>{i + 1}.</Box>
+                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', fontWeight: 700, verticalAlign: 'top', fontFamily: 'inherit' }}>
+                  {line.item_name}
+                  {line.color && (
+                    <Box component="span" sx={{ display: 'block', mt: '6px' }}>
+                      <Box component="span" sx={{
+                        display: 'inline-block',
+                        px: '6px', py: '2px',
+                        border: '1px solid #666',
+                        borderRadius: '3px',
+                        fontSize: '8.5pt',
+                        fontStyle: 'italic',
+                        fontWeight: 600,
+                        color: '#222',
+                        letterSpacing: '0.03em',
+                        background: '#f0f0f0',
+                      }}>
+                        Colour: {line.color}
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
+                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', verticalAlign: 'top', fontFamily: 'inherit', fontSize: '9.5pt' }}>
+                  {line.fabric && (
+                    <Box component="span" sx={{ display: 'block', fontWeight: 700, fontSize: '9.5pt', mb: '4px' }}>
+                      {line.fabric}
+                    </Box>
+                  )}
+                  <Box component="span" sx={{ display: 'block', color: '#333', lineHeight: 1.5 }}>
+                    {sizeDesc}
+                  </Box>
+                </Box>
+                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', textAlign: 'center', verticalAlign: 'top', fontFamily: 'inherit' }}>
+                  {line.quantity}
+                </Box>
+                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', textAlign: 'center', verticalAlign: 'top', fontFamily: 'inherit' }}>
+                  {netPrice.toFixed(3)}
+                </Box>
+                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', textAlign: 'right', verticalAlign: 'top', fontFamily: 'inherit' }}>
+                  {lineAmt.toFixed(3)}
+                </Box>
+              </Box>
+            );
+          })}
+          {/* Total row */}
+          <Box component="tr" sx={{ bgcolor: '#f0f0f0' }}>
+            <Box component="td" colSpan={3} sx={{ border: '1px solid #000', p: '5px 7px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit' }}>TOTAL:-</Box>
+            <Box component="td" sx={{ border: '1px solid #000', p: '5px 7px', fontWeight: 700, textAlign: 'center', fontFamily: 'inherit' }}>{totalQty}</Box>
+            <Box component="td" sx={{ border: '1px solid #000', p: '5px 7px', fontFamily: 'inherit' }} />
+            <Box component="td" sx={{ border: '1px solid #000', p: '5px 7px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit' }}>{totalAmt.toFixed(3)}</Box>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Footer details */}
+      <Box sx={{ fontSize: '9.5pt', fontFamily: 'inherit', mt: 1.5 }}>
+        {[
+          ['VALUE IN WORD',      amountInWords(totalAmt, po?.currency || 'USD')],
+          ['DATE OF DISPATCH',   po?.ex_factory_date ? `${ordinalDate(po.ex_factory_date)} (EX-FACTORY DATE)` : ''],
+          ['PAYMENT TERMS',      paymentTerms],
+          ['PORT OF DISCHARGE',  portOfDischarge],
+        ].filter(([, v]) => v).map(([label, val]) => (
+          <Box key={label} sx={{ display: 'flex', gap: 1, mb: 0.4, fontFamily: 'inherit' }}>
+            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', minWidth: 160 }}>{label}</Typography>
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt' }}>: {val}</Typography>
+          </Box>
+        ))}
+        {ourBank && (
+          <Box sx={{ mt: 0.5, fontFamily: 'inherit' }}>
+            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>OUR BANK: </Typography>
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>- {ourBank}</Typography>
+          </Box>
+        )}
+        {interBank && (
+          <Box sx={{ mt: 0.4, fontFamily: 'inherit' }}>
+            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>INTERMEDIARY BANK: </Typography>
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>- {interBank}</Typography>
+          </Box>
+        )}
+      </Box>
+
+      {/* Signature */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 5, pt: 1, borderTop: '1px solid #ccc', fontFamily: 'inherit', fontSize: '9.5pt' }}>
+        <Box>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt' }}>SIGNATURE &amp; SEAL</Typography>
+          <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt' }}>FOR: {po?.buyer_name?.toUpperCase()}</Typography>
+        </Box>
+        <Box sx={{ textAlign: 'right' }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt' }}>SIGNATURE &amp; SEAL</Typography>
+          <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt' }}>FOR: {company?.legal_name?.toUpperCase()}</Typography>
+        </Box>
+      </Box>
+
+      {company?.email && (
+        <Typography sx={{ fontFamily: 'inherit', fontSize: '8pt', textAlign: 'center', mt: 1.5, borderTop: '1px solid #eee', pt: 0.75, color: '#555' }}>
+          PLS. SEAL &amp; SIGN ON THE ABOVE AND RETURN US BY E-MAIL ID: {company.email}
+        </Typography>
+      )}
+    </Box>
+  );
+
+  return (
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
+      {/* ── Toolbar ── */}
+      <Box sx={{
+        display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap',
+        mb: 3, p: 2, bgcolor: '#fff', borderRadius: 2, border: `1px solid ${slate[200]}`,
+        boxShadow: `0 2px 12px ${alpha(slate[900], 0.06)}`,
+        position: 'sticky', top: 12, zIndex: 100,
+      }}>
+        <IconButton size="small" onClick={() => navigate(`/buyer-pos/${id}`)} sx={{ bgcolor: slate[50] }}>
+          <ArrowBack fontSize="small" />
+        </IconButton>
+        <Box>
+          <Typography sx={{ fontWeight: 900, fontSize: '1rem', color: slate[900] }}>Generate Proforma Invoice</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: slate[500] }}>PO {po?.po_number} · {po?.buyer_name}</Typography>
+        </Box>
+        <Box sx={{ flex: 1 }} />
+        {!editing && (
+          <Button startIcon={<Edit />} variant="outlined" size="small" onClick={() => setEditing(true)}
+            sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
+            Edit Details
+          </Button>
+        )}
+        {editing ? (
+          <Button startIcon={<CheckCircle />} variant="contained" onClick={handleConfirm}
+            sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 3 }}>
+            Confirm &amp; Preview
+          </Button>
+        ) : (
+          <Button startIcon={<Print />} variant="contained" onClick={handlePrint}
+            sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 3 }}>
+            Print / Download PDF
+          </Button>
+        )}
+      </Box>
+
+      <Grid container spacing={3}>
+        {/* ── Edit form ── */}
+        {editing && (
+          <Grid item xs={12} md={4}>
+            <Paper elevation={0} sx={{ borderRadius: 2, border: `1px solid ${slate[200]}`, overflow: 'hidden' }}>
+              <Box sx={{ px: 3, py: 2, bgcolor: slate[50], borderBottom: `1px solid ${slate[200]}` }}>
+                <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', color: slate[700] }}>PI Details</Typography>
+              </Box>
+              <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                <TextField size="small" fullWidth label="PI Date" type="date"
+                  value={piDate} onChange={(e) => setPiDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }} />
+                <TextField size="small" fullWidth label="PI Ref No."
+                  value={piRef} onChange={(e) => setPiRef(e.target.value)}
+                  placeholder="e.g. JBI/26-27/11" />
+                <TextField size="small" fullWidth label="Port of Discharge"
+                  value={portOfDischarge} onChange={(e) => setPort(e.target.value)}
+                  placeholder="e.g. KHIDIRPUR PORT" />
+                <TextField size="small" fullWidth label="Payment Terms"
+                  value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}
+                  placeholder="e.g. BOL 60 DAYS" />
+                <TextField size="small" fullWidth multiline minRows={3} label="Our Bank Details"
+                  value={ourBank} onChange={(e) => setOurBank(e.target.value)}
+                  placeholder="Bank name, A/C No, SWIFT code…" />
+                <TextField size="small" fullWidth multiline minRows={2} label="Intermediary Bank"
+                  value={interBank} onChange={(e) => setInterBank(e.target.value)}
+                  placeholder="Correspondent bank details…" />
+              </Box>
+            </Paper>
+
+            {/* Item unit prices */}
+            <Paper elevation={0} sx={{ mt: 2, borderRadius: 2, border: `1px solid ${slate[200]}`, overflow: 'hidden' }}>
+              <Box sx={{ px: 3, py: 2, bgcolor: slate[50], borderBottom: `1px solid ${slate[200]}` }}>
+                <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', color: slate[700] }}>Adjust Unit Prices</Typography>
+                <Typography sx={{ fontSize: '0.7rem', color: slate[400] }}>Items grouped by name · edit prices if needed</Typography>
+              </Box>
+              <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {piLines.map((line, i) => (
+                  <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: slate[800] }} noWrap>
+                        {line.item_name}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.68rem', color: slate[400] }}>
+                        {line.quantity} pcs · {line.sizes.length} sizes
+                      </Typography>
+                    </Box>
+                    <TextField
+                      size="small"
+                      type="number"
+                      value={line.unit_price}
+                      onChange={(e) => updateLine(i, { unit_price: parseFloat(e.target.value) || 0 })}
+                      InputProps={{ startAdornment: <Typography sx={{ fontSize: '0.8rem', color: slate[400], mr: 0.5 }}>$</Typography> }}
+                      sx={{ width: 90,
+                        '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': { display: 'none' },
+                        '& input[type=number]': { MozAppearance: 'textfield' },
+                      }}
+                    />
+                  </Box>
+                ))}
+              </Box>
+            </Paper>
+          </Grid>
+        )}
+
+        {/* ── PI Preview ── */}
+        <Grid item xs={12} md={editing ? 8 : 12}>
+          <Paper elevation={0} sx={{ borderRadius: 2, border: `1px solid ${slate[200]}`, overflow: 'hidden' }}>
+            {/* Summary banner */}
+            <Box sx={{ px: 3, py: 1.75, bgcolor: slate[900], display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Box>
+                <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4) }}>Styles</Typography>
+                <Typography sx={{ fontWeight: 900, fontSize: '1.1rem', color: '#f1f5f9' }}>{piLines.length}</Typography>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4) }}>Total Qty</Typography>
+                <Typography sx={{ fontWeight: 900, fontSize: '1.1rem', color: '#f1f5f9', fontVariantNumeric: 'tabular-nums' }}>{totalQty.toLocaleString()} pcs</Typography>
+              </Box>
+              <Box sx={{ flex: 1 }} />
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4) }}>Invoice Value</Typography>
+                <Typography sx={{ fontWeight: 900, fontSize: '1.3rem', color: '#93c5fd', fontVariantNumeric: 'tabular-nums' }}>
+                  {po?.currency || 'USD'} {totalAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </Typography>
+              </Box>
+            </Box>
+
+            {/* A4-like white sheet */}
+            <Box sx={{ p: { xs: 2, sm: 4 }, bgcolor: '#f8fafc' }}>
+              <Box sx={{
+                bgcolor: '#fff',
+                p: { xs: 3, sm: 5 },
+                boxShadow: `0 4px 32px ${alpha(slate[900], 0.1)}`,
+                borderRadius: 1,
+                minHeight: 800,
+              }}>
+                <PIDocument />
+              </Box>
+            </Box>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      {/* ── Hidden print-only area ── */}
+      <Box id="pi-print-root" sx={{ p: 0 }}>
+        <PIDocument />
+      </Box>
+    </Box>
+  );
+}

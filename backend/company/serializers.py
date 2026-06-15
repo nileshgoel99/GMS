@@ -26,6 +26,7 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             'tax_registration',
             'logo',
             'logo_url',
+            'pi_ref_prefix',
             'watermark_text',
             'pdf_footer_note',
             'updated_at',

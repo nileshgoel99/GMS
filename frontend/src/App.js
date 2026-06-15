@@ -18,6 +18,7 @@ import IntentEditorPage from './pages/IntentEditorPage';
 import CompanyPage from './pages/CompanyPage';
 import BuyerPOs from './pages/BuyerPOs';
 import BuyerPOEditorPage from './pages/BuyerPOEditorPage';
+import GeneratePIPage from './pages/GeneratePIPage';
 
 // Forces a full remount when navigating between different PO IDs (new vs edit)
 function BuyerPOEditorPageKeyed() {
@@ -149,6 +150,16 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <BuyerPOEditorPageKeyed />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/buyer-pos/:id/generate-pi"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <GeneratePIPage />
                   </Layout>
                 </PrivateRoute>
               }

@@ -31,6 +31,7 @@ const emptyForm = {
   tax_registration: '',
   watermark_text: '',
   pdf_footer_note: '',
+  pi_ref_prefix: 'JBI',
 };
 
 const CompanyPage = () => {
@@ -74,6 +75,7 @@ const CompanyPage = () => {
         tax_registration: data.tax_registration || '',
         watermark_text: data.watermark_text || '',
         pdf_footer_note: data.pdf_footer_note || '',
+        pi_ref_prefix: data.pi_ref_prefix || 'JBI',
       });
       setLogoUrl(data.logo_url || null);
       setLogoFile(null);
@@ -197,6 +199,16 @@ const CompanyPage = () => {
               value={form.tagline}
               onChange={(e) => setForm({ ...form, tagline: e.target.value })}
               placeholder="e.g. Garment manufacturing · Since 1998"
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="PI Ref Prefix"
+              value={form.pi_ref_prefix}
+              onChange={(e) => setForm({ ...form, pi_ref_prefix: e.target.value })}
+              helperText="Used for PI reference numbers, e.g. JBI → JBI/26-27/1"
+              inputProps={{ maxLength: 20 }}
             />
           </Grid>
           <Grid item xs={12} md={6}>

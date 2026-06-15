@@ -481,7 +481,7 @@ class BuyerPOListSerializer(serializers.ModelSerializer):
             'id', 'po_number', 'po_date', 'buyer_name', 'buyer_contact',
             'customer', 'customer_name', 'currency', 'status',
             'ex_factory_date', 'total_qty', 'total_value', 'lines_count',
-            'created_at',
+            'po_document', 'pi_ref', 'created_at',
         ]
 
     def get_customer_name(self, obj):
@@ -505,6 +505,7 @@ class BuyerPOSerializer(serializers.ModelSerializer):
             'delivery_terms', 'payment_terms', 'delivery_method',
             'freight_terms', 'packaging_terms', 'ex_factory_date',
             'total_qty', 'total_value', 'status', 'notes', 'pi',
+            'po_document', 'pi_ref',
             'lines', 'created_by', 'created_by_name', 'created_at', 'updated_at',
         ]
         read_only_fields = ('id', 'created_by', 'created_at', 'updated_at')

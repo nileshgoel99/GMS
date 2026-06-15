@@ -331,6 +331,15 @@ class BuyerPO(models.Model):
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RECEIVED')
     notes = models.TextField(blank=True, default='')
+    po_document = models.FileField(upload_to='buyer_po_docs/', null=True, blank=True, help_text='Scanned/original PO file from buyer')
+
+    pi_ref = models.CharField(
+        max_length=80,
+        blank=True,
+        default='',
+        unique=False,
+        help_text='PI reference number generated from this PO, e.g. JBI/26-27/11',
+    )
 
     pi = models.ForeignKey(
         ProformaInvoice,

@@ -143,14 +143,18 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='item-catalogue')
     def item_catalogue(self, request):
-        """Return distinct item codes with their most recent item_name and fabric."""
+        """Return distinct item codes with their most recent item_name and fabric.
+        Optionally filtered by ?customer=<id> so codes stay buyer-specific."""
         from .models import BuyerPOLine
         from django.db.models import Max
 
+        customer_id = request.query_params.get('customer')
+        qs = BuyerPOLine.objects.exclude(item_code='')
+        if customer_id:
+            qs = qs.filter(po__customer_id=customer_id)
+
         latest_ids = (
-            BuyerPOLine.objects
-            .exclude(item_code='')
-            .values('item_code')
+            qs.values('item_code')
             .annotate(latest_id=Max('id'))
             .values_list('latest_id', flat=True)
         )
@@ -161,3 +165,67 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
             .order_by('item_code')
         )
         return Response(list(items))
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='upload-document',
+        parser_classes=[parsers.MultiPartParser, parsers.FormParser],
+    )
+    def upload_document(self, request, pk=None):
+        """Upload or replace the original PO document file."""
+        po = self.get_object()
+        uploaded = request.FILES.get('file')
+        if not uploaded:
+            return Response({'detail': 'No file provided.'}, status=status.HTTP_400_BAD_REQUEST)
+        if po.po_document:
+            po.po_document.delete(save=False)
+        po.po_document.save(uploaded.name, uploaded, save=True)
+        doc_url = request.build_absolute_uri(po.po_document.url) if po.po_document else None
+        return Response({'po_document': doc_url}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['delete'], url_path='remove-document')
+    def remove_document(self, request, pk=None):
+        """Delete the attached PO document."""
+        po = self.get_object()
+        if po.po_document:
+            po.po_document.delete(save=True)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'], url_path='next-pi-ref')
+    def next_pi_ref(self, request):
+        """Return the next available PI ref number for the current fiscal year.
+        Format: {prefix}/{YY-YY}/{seq}  e.g. JBI/26-27/12
+        Indian fiscal year: April 1 → March 31.
+        """
+        from datetime import date
+        from company.models import CompanyProfile
+
+        today = date.today()
+        # Determine fiscal year (April–March)
+        if today.month >= 4:
+            fy_start, fy_end = today.year, today.year + 1
+        else:
+            fy_start, fy_end = today.year - 1, today.year
+        fy_label = f"{str(fy_start)[-2:]}-{str(fy_end)[-2:]}"
+
+        company = CompanyProfile.get_solo()
+        prefix = company.pi_ref_prefix or 'JBI'
+
+        # Count PIs already issued this fiscal year
+        pattern = f"{prefix}/{fy_label}/"
+        existing = BuyerPO.objects.filter(pi_ref__startswith=pattern).count()
+        seq = existing + 1
+
+        return Response({'pi_ref': f"{prefix}/{fy_label}/{seq}", 'prefix': prefix, 'fy_label': fy_label, 'seq': seq})
+
+    @action(detail=True, methods=['patch'], url_path='save-pi-ref')
+    def save_pi_ref(self, request, pk=None):
+        """Persist the confirmed PI ref number onto the BuyerPO record."""
+        po = self.get_object()
+        ref = request.data.get('pi_ref', '').strip()
+        if not ref:
+            return Response({'detail': 'pi_ref is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        po.pi_ref = ref
+        po.save(update_fields=['pi_ref'])
+        return Response({'pi_ref': po.pi_ref})

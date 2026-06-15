@@ -100,7 +100,15 @@ export const ordersAPI = {
   createBuyerPO: (data) => api.post('/orders/buyer-pos/', data),
   updateBuyerPO: (id, data) => api.put(`/orders/buyer-pos/${id}/`, data),
   deleteBuyerPO: (id) => api.delete(`/orders/buyer-pos/${id}/`),
-  getItemCatalogue: () => api.get('/orders/buyer-pos/item-catalogue/'),
+  getItemCatalogue: (customerId) => api.get('/orders/buyer-pos/item-catalogue/', { params: customerId ? { customer: customerId } : {} }),
+  uploadPoDocument: (id, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post(`/orders/buyer-pos/${id}/upload-document/`, form);
+  },
+  removePoDocument: (id) => api.delete(`/orders/buyer-pos/${id}/remove-document/`),
+  getNextPiRef: () => api.get('/orders/buyer-pos/next-pi-ref/'),
+  savePiRef: (id, piRef) => api.patch(`/orders/buyer-pos/${id}/save-pi-ref/`, { pi_ref: piRef }),
 };
 
 export const inventoryAPI = {

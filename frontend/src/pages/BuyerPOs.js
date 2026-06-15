@@ -21,7 +21,7 @@ import {
   Collapse,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
-import { Add, Edit, Delete, Visibility } from '@mui/icons-material';
+import { Add, Edit, Delete, Visibility, ReceiptLong } from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
@@ -48,7 +48,7 @@ const fmtMoney = (n, ccy = 'USD') =>
     : `${ccy} ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // ── Detail dialog (read-only) ─────────────────────────────────────────────────
-function BuyerPoDetailDialog({ poId, onClose, onEdit }) {
+function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI }) {
   const theme = useTheme();
   const [po, setPo] = useState(null);
   const [showBuyer, setShowBuyer] = useState(false);
@@ -300,15 +300,44 @@ function BuyerPoDetailDialog({ poId, onClose, onEdit }) {
                   <Typography sx={{ fontSize: '0.85rem', color: slate[700], whiteSpace: 'pre-line' }}>{po.notes}</Typography>
                 </Box>
               )}
+
+              {/* PO Document */}
+              {po.po_document && (
+                <Box sx={{ mt: 2, p: 2, bgcolor: alpha('#0f766e', 0.04), border: `1px solid ${alpha('#0f766e', 0.2)}`, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#0f766e', flex: 1 }}>
+                    📎 Original PO Document
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    component="a"
+                    href={po.po_document}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    sx={{ fontWeight: 700, textTransform: 'none', borderColor: '#0f766e', color: '#0f766e', borderRadius: 1.5, fontSize: '0.78rem' }}
+                  >
+                    Open / Download
+                  </Button>
+                </Box>
+              )}
             </Box>
           </Box>
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 2, bgcolor: '#fff', borderTop: `1px solid ${slate[100]}` }}>
+      <DialogActions sx={{ px: 3, py: 2, bgcolor: '#fff', borderTop: `1px solid ${slate[100]}`, gap: 1 }}>
         <Button onClick={onClose} sx={{ color: slate[500], fontWeight: 700 }}>Close</Button>
-        <Button variant="contained" onClick={onEdit} sx={{ fontWeight: 700, borderRadius: 1.5 }}>
+        <Box sx={{ flex: 1 }} />
+        <Button variant="outlined" onClick={onEdit} sx={{ fontWeight: 700, borderRadius: 1.5 }}>
           Edit PO
+        </Button>
+        <Button
+          variant="contained"
+          startIcon={<ReceiptLong />}
+          onClick={onGeneratePI}
+          sx={{ fontWeight: 700, borderRadius: 1.5, bgcolor: '#0f766e', '&:hover': { bgcolor: '#0d6560' } }}
+        >
+          Generate PI
         </Button>
       </DialogActions>
     </Dialog>
@@ -637,6 +666,7 @@ export default function BuyerPOs() {
           poId={detailId}
           onClose={() => setDetailId(null)}
           onEdit={() => { setDetailId(null); navigate(`/buyer-pos/${detailId}`); }}
+          onGeneratePI={() => { setDetailId(null); navigate(`/buyer-pos/${detailId}/generate-pi`); }}
         />
       )}
     </Box>

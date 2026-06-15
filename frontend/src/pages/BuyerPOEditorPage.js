@@ -11,11 +11,6 @@ import {
   Divider,
   IconButton,
   Tooltip,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
   InputAdornment,
   LinearProgress,
   Tabs,
@@ -33,6 +28,9 @@ import {
   ExpandMore,
   ExpandLess,
   DeleteOutline,
+  AttachFile,
+  OpenInNew,
+  ReceiptLong,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, customersAPI } from '../services/api';
@@ -66,12 +64,7 @@ const emptyLine = (exFactoryDate = '') => ({
   color: '',
   customer_ref: '',
   size_breakdown: [
-    { size: 'S',   qty: '' },
-    { size: 'M',   qty: '' },
-    { size: 'L',   qty: '' },
-    { size: 'XL',  qty: '' },
-    { size: 'XXL', qty: '' },
-    { size: '3XL', qty: '' },
+    { size: '', qty: '' },
   ],
   uom: 'PCS',
   unit_price: '',
@@ -90,7 +83,7 @@ const emptyForm = () => ({
   supplier_code: '',
   currency: 'USD',
   delivery_terms: 'FOB-FREE ON BOARD',
-  payment_terms: '60 DAYS FROM B/L DATE\nD/A DOCUMENTS AGAINST ACCEPTANCE',
+  payment_terms: '60 DAYS FROM B/L DATE, D/A',
   delivery_method: 'THROUGH CARRIER - BY SEA',
   freight_terms: 'CARRIER',
   packaging_terms: 'STANDARD PACKAGING',
@@ -473,160 +466,111 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
           </Grid>
         </Grid>
 
-        {/* Size breakdown */}
-        <Box
-          sx={{
-            bgcolor: '#f8fafc',
-            borderRadius: 2.5,
-            border: `1px solid ${slate[200]}`,
-            p: 2,
-            position: 'relative',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1.5 }}>
-            <Box sx={{ width: 4, height: 16, bgcolor: theme.palette.primary.main, borderRadius: 1 }} />
-            <Typography
-              sx={{
-                fontSize: '0.7rem',
-                fontWeight: 800,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                color: slate[500],
-              }}
-            >
+        {/* Size breakdown — horizontal chips */}
+        <Box sx={{ bgcolor: '#f8fafc', borderRadius: 2.5, border: `1px solid ${slate[200]}`, p: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, gap: 1.5 }}>
+            <Box sx={{ width: 4, height: 14, bgcolor: theme.palette.primary.main, borderRadius: 1 }} />
+            <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: slate[500] }}>
               Size breakdown
             </Typography>
-            <Box sx={{ flex: 1 }} />
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<AddCircleOutline sx={{ fontSize: '14px !important' }} />}
-              onClick={addSize}
-              sx={{ 
-                textTransform: 'none', 
-                fontSize: '0.75rem', 
-                fontWeight: 700, 
-                py: 0.4, 
-                px: 1.5,
-                borderRadius: 1.5,
-                bgcolor: '#fff',
-                borderColor: slate[200],
-                color: slate[600],
-                '&:hover': {
-                  bgcolor: slate[50],
-                  borderColor: slate[300],
-                }
-              }}
-            >
-              Add size
-            </Button>
+            {qty > 0 && (
+              <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: slate[400] }}>
+                · {fmtNum(qty)} pcs total
+              </Typography>
+            )}
           </Box>
-          <Box sx={{ overflowX: 'auto', mx: -1, px: 1 }}>
-            <Table
-              size="small"
-              sx={{
-                minWidth: 400,
-                tableLayout: 'fixed',
-                '& td, & th': { px: 0.75, py: 1, borderColor: slate[200] },
-              }}
-            >
-              <TableHead>
-                <TableRow>
-                  {line.size_breakdown.map((r, si) => (
-                    <TableCell
-                      key={si}
-                      align="center"
-                      sx={{ width: 72, pb: 1, borderBottom: `2px solid ${slate[200]}` }}
-                    >
-                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-                        <TextField
-                          value={r.size}
-                          onChange={(e) => setSizeName(si, e.target.value)}
-                          inputProps={{
-                            style: {
-                              textAlign: 'center',
-                              fontWeight: 800,
-                              fontSize: '0.8rem',
-                              padding: '4px 2px',
-                              letterSpacing: '0.04em',
-                              color: slate[800],
-                            },
-                          }}
-                          sx={{
-                            width: 60,
-                            '& .MuiOutlinedInput-root': { 
-                              borderRadius: 1.25,
-                              bgcolor: '#fff',
-                              '& fieldset': { borderColor: slate[200] },
-                            },
-                          }}
-                        />
-                        {line.size_breakdown.length > 1 && (
-                          <IconButton
-                            size="small"
-                            onClick={() => removeSize(si)}
-                            sx={{ p: 0.2, color: slate[300], '&:hover': { color: 'error.main' } }}
-                          >
-                            <RemoveCircleOutline sx={{ fontSize: 14 }} />
-                          </IconButton>
-                        )}
-                      </Box>
-                    </TableCell>
-                  ))}
-                  <TableCell
-                    align="center"
-                    sx={{
-                      width: 88,
+
+          {/* Horizontal wrapping pairs */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'flex-start' }}>
+            {line.size_breakdown.map((r, si) => (
+              <Box
+                key={si}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'stretch',
+                  border: `1px solid ${slate[200]}`,
+                  borderRadius: 1.5,
+                  overflow: 'hidden',
+                  bgcolor: '#fff',
+                  boxShadow: `0 1px 3px ${alpha(slate[900], 0.04)}`,
+                }}
+              >
+                {/* Size name */}
+                <Box sx={{ borderRight: `1px solid ${slate[200]}` }}>
+                  <input
+                    value={r.size}
+                    onChange={(e) => setSizeName(si, e.target.value)}
+                    placeholder="Size"
+                    style={{
+                      width: 72,
+                      height: '100%',
+                      border: 'none',
+                      outline: 'none',
+                      textAlign: 'center',
                       fontWeight: 800,
-                      fontSize: '0.75rem',
-                      color: slate[400],
-                      letterSpacing: '0.08em',
-                      borderBottom: `2px solid ${slate[200]}`,
-                      verticalAlign: 'top',
-                      pt: 1.5
+                      fontSize: '0.9rem',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      color: slate[700],
+                      background: 'transparent',
+                      padding: '10px 6px',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                </Box>
+                {/* Qty */}
+                <input
+                  type="number"
+                  value={r.qty}
+                  onChange={(e) => setSizeQty(si, e.target.value)}
+                  placeholder="Qty"
+                  min={0}
+                  style={{
+                    width: 76,
+                    height: '100%',
+                    border: 'none',
+                    outline: 'none',
+                    textAlign: 'center',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    color: slate[900],
+                    background: 'transparent',
+                    padding: '10px 6px',
+                    fontFamily: 'inherit',
+                    MozAppearance: 'textfield',
+                  }}
+                />
+                {/* Remove */}
+                {line.size_breakdown.length > 1 && (
+                  <Box
+                    onClick={() => removeSize(si)}
+                    sx={{
+                      display: 'flex', alignItems: 'center', px: 0.5,
+                      borderLeft: `1px solid ${slate[100]}`,
+                      cursor: 'pointer', color: slate[300],
+                      '&:hover': { color: 'error.main', bgcolor: alpha('#ef4444', 0.06) },
                     }}
                   >
-                    TOTAL
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                <TableRow>
-                  {line.size_breakdown.map((r, si) => (
-                    <TableCell key={si} align="center" sx={{ py: 1.5 }}>
-                      <TextField
-                        type="number"
-                        value={r.qty}
-                        onChange={(e) => setSizeQty(si, e.target.value)}
-                        inputProps={{ min: 0, ...cellInputProps }}
-                        sx={{
-                          width: 60,
-                          '& .MuiOutlinedInput-root': { 
-                            borderRadius: 1.5, 
-                            bgcolor: '#fff',
-                            boxShadow: `0 1px 2px ${alpha(slate[900], 0.04)}`,
-                          },
-                          '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': { display: 'none' },
-                          '& input[type=number]': { MozAppearance: 'textfield' },
-                        }}
-                      />
-                    </TableCell>
-                  ))}
-                  <TableCell align="center" sx={{ py: 1.5 }}>
-                    <Typography
-                      sx={{
-                        fontWeight: 900,
-                        fontSize: '1.1rem',
-                        color: qty > 0 ? slate[900] : slate[200],
-                        fontVariantNumeric: 'tabular-nums',
-                      }}
-                    >
-                      {qty > 0 ? fmtNum(qty) : '0'}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+                    <RemoveCircleOutline sx={{ fontSize: 13 }} />
+                  </Box>
+                )}
+              </Box>
+            ))}
+
+            {/* Add size */}
+            <Box
+              onClick={addSize}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 0.5,
+                border: `1px dashed ${alpha(theme.palette.primary.main, 0.35)}`,
+                borderRadius: 1.5, px: 1.5, py: '6px',
+                cursor: 'pointer', color: theme.palette.primary.main,
+                fontSize: '0.75rem', fontWeight: 700,
+                '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.05), borderColor: theme.palette.primary.main },
+              }}
+            >
+              <AddCircleOutline sx={{ fontSize: 14 }} /> Add
+            </Box>
           </Box>
         </Box>
 
@@ -803,6 +747,8 @@ export default function BuyerPOEditorPage() {
   const [saving, setSaving]         = useState(false);
   const [customers, setCustomers]   = useState([]);
   const [itemCatalogue, setItemCatalogue] = useState([]);
+  const [poDocument, setPoDocument] = useState(null);   // URL of uploaded doc
+  const [uploading, setUploading]   = useState(false);
   const [sectionTab, setSectionTab] = useState(0);
   const [formData, setFormData]     = useState(emptyForm());
   const [lines, setLines]           = useState([emptyLine('')]);
@@ -828,15 +774,19 @@ export default function BuyerPOEditorPage() {
     return Number.isNaN(n) ? null : n;
   }, [id, isCreate]);
 
-  // Load customers + item catalogue
+  // Load customers
   useEffect(() => {
     customersAPI.getAll({ page_size: 500 })
       .then((r) => setCustomers(r.data.results ?? r.data))
       .catch(() => {});
-    ordersAPI.getItemCatalogue()
+  }, []);
+
+  // Reload item catalogue whenever the customer changes (codes are buyer-specific)
+  useEffect(() => {
+    ordersAPI.getItemCatalogue(formData.customer || null)
       .then((r) => setItemCatalogue(r.data))
       .catch(() => {});
-  }, []);
+  }, [formData.customer]);
 
   // Load PO if editing
   useEffect(() => {
@@ -865,6 +815,7 @@ export default function BuyerPOEditorPage() {
           status:          po.status || 'RECEIVED',
           notes:           po.notes || '',
         });
+        setPoDocument(po.po_document || null);
         setLines(
           (po.lines || []).map((l) => ({
             _key: l.id,
@@ -875,7 +826,7 @@ export default function BuyerPOEditorPage() {
             customer_ref:   l.customer_ref || '',
             size_breakdown: l.size_breakdown?.length
               ? l.size_breakdown.map((s) => ({ size: s.size, qty: s.qty != null ? String(s.qty) : '' }))
-              : [{ size: 'S', qty: '' }, { size: 'M', qty: '' }, { size: 'L', qty: '' }, { size: 'XL', qty: '' }],
+              : [{ size: '', qty: '' }],
             uom:           l.uom || 'PCS',
             unit_price:    l.unit_price != null ? String(l.unit_price) : '',
             discount:      l.discount != null ? String(l.discount) : '',
@@ -931,8 +882,8 @@ export default function BuyerPOEditorPage() {
   const addLine    = () => setLines((ls) => [...ls, emptyLine(formData.ex_factory_date)]);
   const removeLine = (idx) => setLines((ls) => ls.filter((_, i) => i !== idx));
 
-  // Save
-  const handleSave = async () => {
+  // Save — returns the saved PO id (used by both save buttons)
+  const handleSave = async ({ generatePI = false } = {}) => {
     if (!formData.po_number.trim()) return alert('PO Number is required.');
     if (!formData.po_date)          return alert('PO Date is required.');
     if (lines.some((l) => !l.item_name.trim())) return alert('Every line needs an Item Name.');
@@ -960,12 +911,19 @@ export default function BuyerPOEditorPage() {
 
     setSaving(true);
     try {
+      let savedId;
       if (isCreate) {
-        await ordersAPI.createBuyerPO(payload);
+        const res = await ordersAPI.createBuyerPO(payload);
+        savedId = res.data.id;
       } else {
         await ordersAPI.updateBuyerPO(numericId, payload);
+        savedId = numericId;
       }
-      navigate('/buyer-pos');
+      if (generatePI) {
+        navigate(`/buyer-pos/${savedId}/generate-pi`);
+      } else {
+        navigate('/buyer-pos');
+      }
     } catch (e) {
       console.error(e);
       const msg = e.response?.data ? JSON.stringify(e.response.data, null, 2) : e.message;
@@ -973,6 +931,28 @@ export default function BuyerPOEditorPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Upload PO document (only available after PO is saved)
+  const handleUploadDoc = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !numericId) return;
+    setUploading(true);
+    try {
+      const res = await ordersAPI.uploadPoDocument(numericId, file);
+      setPoDocument(res.data.po_document);
+    } catch (err) {
+      alert('Upload failed: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveDoc = async () => {
+    if (!numericId || !window.confirm('Remove the attached document?')) return;
+    await ordersAPI.removePoDocument(numericId);
+    setPoDocument(null);
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -1063,10 +1043,20 @@ export default function BuyerPOEditorPage() {
                 sx={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.65rem', letterSpacing: '0.05em' }}
               />
             )}
+            {!isCreate && (
+              <Button
+                variant="outlined"
+                startIcon={<ReceiptLong />}
+                onClick={() => navigate(`/buyer-pos/${numericId}/generate-pi`)}
+                sx={{ borderRadius: 2, px: 2.5, fontWeight: 700, textTransform: 'none' }}
+              >
+                Generate PI
+              </Button>
+            )}
             <Button
               variant="contained"
               startIcon={<Save />}
-              onClick={handleSave}
+              onClick={() => handleSave()}
               disabled={saving || loading}
               sx={{ 
                 borderRadius: 2, 
@@ -1322,9 +1312,9 @@ export default function BuyerPOEditorPage() {
                   placeholder="e.g. FOB-FREE ON BOARD" sx={fieldSx} />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField size="small" fullWidth multiline minRows={2} maxRows={3} label="Terms of Payment"
+                <TextField size="small" fullWidth label="Terms of Payment"
                   value={formData.payment_terms} onChange={(e) => setField('payment_terms', e.target.value)}
-                  placeholder="e.g. 60 DAYS FROM B/L DATE" sx={fieldSx} />
+                  placeholder="e.g. 60 DAYS FROM B/L DATE, D/A" sx={fieldSx} />
               </Grid>
               <Grid item xs={12} sm={4}>
                 <TextField size="small" fullWidth label="Delivery Method"
@@ -1349,6 +1339,75 @@ export default function BuyerPOEditorPage() {
               value={formData.notes} onChange={(e) => setField('notes', e.target.value)}
               placeholder="Any internal remarks about this PO (won't be printed)…" 
               sx={{ ...fieldSx, '& .MuiInputBase-root': { bgcolor: '#fcfcfc' } }} />
+
+            <Divider sx={{ my: 4, borderStyle: 'dashed' }} />
+
+            {/* PO Document upload */}
+            <Typography sx={groupLabelSx}>Original PO Document</Typography>
+            <Box
+              sx={{
+                border: `2px dashed ${poDocument ? alpha(accentGreen, 0.4) : slate[200]}`,
+                borderRadius: 2,
+                p: 2.5,
+                bgcolor: poDocument ? alpha(accentGreen, 0.03) : '#fcfcfc',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+                flexWrap: 'wrap',
+              }}
+            >
+              <AttachFile sx={{ color: poDocument ? accentGreen : slate[400], fontSize: 28 }} />
+              <Box sx={{ flex: 1 }}>
+                {poDocument ? (
+                  <>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: slate[800] }}>
+                      Document attached
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: slate[400], wordBreak: 'break-all' }}>
+                      {poDocument.split('/').pop()}
+                    </Typography>
+                  </>
+                ) : (
+                  <>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: slate[600] }}>
+                      {isCreate ? 'Save the PO first, then upload the document' : 'No document attached yet'}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: slate[400] }}>
+                      PDF, image or any file from the buyer
+                    </Typography>
+                  </>
+                )}
+              </Box>
+              {poDocument && (
+                <>
+                  <Tooltip title="Open document">
+                    <IconButton size="small" component="a" href={poDocument} target="_blank" rel="noopener noreferrer"
+                      sx={{ color: accentGreen, '&:hover': { bgcolor: alpha(accentGreen, 0.08) } }}>
+                      <OpenInNew fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Remove document">
+                    <IconButton size="small" onClick={handleRemoveDoc}
+                      sx={{ color: slate[400], '&:hover': { color: 'error.main', bgcolor: alpha('#ef4444', 0.08) } }}>
+                      <DeleteOutline fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
+              {!isCreate && (
+                <Button
+                  component="label"
+                  variant="outlined"
+                  size="small"
+                  disabled={uploading}
+                  startIcon={<AttachFile />}
+                  sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, borderColor: slate[300], color: slate[600], '&:hover': { borderColor: accentGreen, color: accentGreen } }}
+                >
+                  {uploading ? 'Uploading…' : poDocument ? 'Replace' : 'Upload'}
+                  <input type="file" hidden onChange={handleUploadDoc} accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx" />
+                </Button>
+              )}
+            </Box>
           </Box>
         </Collapse>
       </Box>
@@ -1394,11 +1453,11 @@ export default function BuyerPOEditorPage() {
           variant="contained"
           size="large"
           startIcon={<Save />}
-          onClick={handleSave}
+          onClick={() => handleSave()}
           disabled={saving || loading}
           sx={{
             py: 1.5,
-            px: 5,
+            px: 4,
             borderRadius: 2,
             fontWeight: 900,
             fontSize: '1rem',
@@ -1412,6 +1471,29 @@ export default function BuyerPOEditorPage() {
           }}
         >
           {saving ? 'Saving…' : isCreate ? 'Create PO' : 'Save Changes'}
+        </Button>
+        <Button
+          variant="contained"
+          size="large"
+          startIcon={<ReceiptLong />}
+          onClick={() => handleSave({ generatePI: true })}
+          disabled={saving || loading}
+          sx={{
+            py: 1.5,
+            px: 4,
+            borderRadius: 2,
+            fontWeight: 900,
+            fontSize: '1rem',
+            textTransform: 'none',
+            bgcolor: '#0f766e',
+            boxShadow: `0 4px 20px ${alpha('#0f766e', 0.5)}`,
+            '&:hover': {
+              bgcolor: '#0d6560',
+              boxShadow: `0 6px 24px ${alpha('#0f766e', 0.6)}`,
+            },
+          }}
+        >
+          {saving ? 'Saving…' : isCreate ? 'Create PO & Generate PI' : 'Save & Generate PI'}
         </Button>
       </Box>
     </Box>

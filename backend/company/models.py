@@ -36,6 +36,13 @@ class CompanyProfile(models.Model):
 
     logo = models.ImageField(upload_to='company/logo/', blank=True, null=True)
 
+    pi_ref_prefix = models.CharField(
+        max_length=20,
+        blank=True,
+        default='JBI',
+        help_text='Short prefix for PI reference numbers, e.g. JBI → JBI/26-27/1',
+    )
+
     watermark_text = models.CharField(
         max_length=64,
         blank=True,
