@@ -20,30 +20,50 @@ import {
   Switch,
   FormControlLabel,
   InputAdornment,
-  Paper,
+  Stack,
+  Alert,
+  CircularProgress,
+  Divider,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import { alpha, styled, useTheme } from '@mui/material/styles';
 import { DataGrid } from '@mui/x-data-grid';
-import { Add, Edit, Delete, ArrowBack, ArrowForward, Search } from '@mui/icons-material';
+import {
+  Add,
+  Edit,
+  Delete,
+  ArrowBack,
+  ArrowForward,
+  Search,
+  PersonAdd,
+  Star,
+  Visibility,
+  ViewList,
+  AccountTree,
+} from '@mui/icons-material';
 import PageHeader from '../components/PageHeader';
-import { slate, warm } from '../theme/appTheme';
+import DataGridShell from '../components/DataGridShell';
+import { slate, warm, dataGridSx } from '../theme/appTheme';
 import { customersAPI } from '../services/api';
+
+const emptyContact = (primary = false) => ({
+  name: '',
+  email: '',
+  phone: '',
+  designation: '',
+  is_primary: primary,
+});
 
 const emptyForm = {
   customer_code: '',
   company_legal_name: '',
-  trading_name: '',
   country: '',
   region_state: '',
   city: '',
   postal_code: '',
   address_line1: '',
   address_line2: '',
-  primary_email: '',
-  secondary_email: '',
-  phone: '',
-  mobile: '',
-  fax: '',
   website: '',
   tax_id_vat: '',
   default_currency: 'USD',
@@ -53,13 +73,205 @@ const emptyForm = {
   bank_details: '',
   notes: '',
   is_active: true,
+  contacts: [emptyContact(true)],
 };
 
+const detailLabelSx = { fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: slate[500], mb: 0.35 };
+const detailValueSx = { fontSize: '0.875rem', color: slate[800], lineHeight: 1.5, whiteSpace: 'pre-wrap' };
+
+function DetailField({ label, value }) {
+  if (value == null || value === '') return null;
+  return (
+    <Box sx={{ mb: 1.5 }}>
+      <Typography sx={detailLabelSx}>{label}</Typography>
+      <Typography sx={detailValueSx}>{value}</Typography>
+    </Box>
+  );
+}
+
+function CustomerDetailDialog({ open, customer, onClose, onEdit }) {
+  const theme = useTheme();
+  if (!customer) return null;
+  const contacts = customer.contacts?.length
+    ? customer.contacts
+    : customer.primary_email || customer.phone
+      ? [{ name: 'Primary contact', email: customer.primary_email, phone: customer.phone || customer.mobile, designation: '', is_primary: true }]
+      : [];
+
+  const address = [customer.address_line1, customer.address_line2, [customer.city, customer.region_state, customer.postal_code].filter(Boolean).join(', '), customer.country]
+    .filter(Boolean)
+    .join('\n');
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth scroll="paper">
+      <DialogTitle sx={{ pb: 1 }}>
+        <Box>
+          <Typography variant="overline" color="primary" fontWeight={700}>
+            {customer.customer_code}
+          </Typography>
+          <Typography variant="h6" fontWeight={700} sx={{ mt: 0.25 }}>
+            {customer.company_legal_name}
+          </Typography>
+        </Box>
+      </DialogTitle>
+      <DialogContent dividers sx={{ bgcolor: alpha(theme.palette.grey[50], 0.4) }}>
+        <Grid container spacing={2.5}>
+          <Grid item xs={12} md={6}>
+            <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1 }}>
+              Company
+            </Typography>
+            <DetailField label="Currency" value={customer.default_currency} />
+            <DetailField label="Language" value={customer.preferred_language} />
+            <DetailField label="Website" value={customer.website} />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1 }}>
+              Address
+            </Typography>
+            <DetailField label="Registered address" value={address || '—'} />
+          </Grid>
+          <Grid item xs={12}>
+            <Divider sx={{ mb: 1.5 }} />
+            <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1 }}>
+              Contacts ({contacts.length})
+            </Typography>
+            <Stack spacing={1}>
+              {contacts.map((c, i) => (
+                <Box
+                  key={c.id || i}
+                  sx={{
+                    p: 1.25,
+                    borderRadius: 1.5,
+                    border: `1px solid ${alpha(theme.palette.divider, 0.9)}`,
+                    bgcolor: 'background.paper',
+                  }}
+                >
+                  <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+                    <Typography fontWeight={600}>{c.name}</Typography>
+                    {c.is_primary && <Chip size="small" label="Primary" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />}
+                    {c.designation && (
+                      <Typography variant="caption" color="text.secondary">
+                        {c.designation}
+                      </Typography>
+                    )}
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontFamily: '"IBM Plex Mono", monospace', fontSize: '0.78rem' }}>
+                    {[c.email, c.phone].filter(Boolean).join(' · ') || '—'}
+                  </Typography>
+                </Box>
+              ))}
+              {!contacts.length && <Typography color="text.disabled">No contacts on file</Typography>}
+            </Stack>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1 }}>
+              Trade
+            </Typography>
+            <DetailField label="Tax / VAT ID" value={customer.tax_id_vat} />
+            <DetailField label="Incoterms" value={customer.incoterms_default} />
+            <DetailField label="Payment terms" value={customer.payment_terms_default} />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1 }}>
+              Banking & notes
+            </Typography>
+            <DetailField label="Bank details" value={customer.bank_details} />
+            <DetailField label="Internal notes" value={customer.notes} />
+          </Grid>
+        </Grid>
+      </DialogContent>
+      <DialogActions sx={{ px: 2, py: 1.5 }}>
+        <Button onClick={onClose} color="inherit">
+          Close
+        </Button>
+        <Button variant="contained" startIcon={<Edit fontSize="small" />} onClick={() => onEdit(customer)}>
+          Edit
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 const STEPS = [
-  { label: 'Company', short: 'Identity & defaults' },
-  { label: 'Address & contact', short: 'Location & how to reach them' },
-  { label: 'Trade & banking', short: 'Terms, tax & remittance' },
+  { label: 'Company', short: 'Code & legal entity' },
+  { label: 'Address & contacts', short: 'Location & people' },
+  { label: 'Trade & banking', short: 'Terms & remittance' },
 ];
+
+const customerToForm = (c) => {
+  let contacts = (c.contacts || []).map((row) => ({
+    id: row.id,
+    name: row.name || '',
+    email: row.email || '',
+    phone: row.phone || '',
+    designation: row.designation || '',
+    is_primary: !!row.is_primary,
+  }));
+  if (!contacts.length) {
+    const legacy = emptyContact(true);
+    if (c.primary_email || c.phone || c.mobile) {
+      legacy.email = c.primary_email || '';
+      legacy.phone = c.phone || c.mobile || '';
+      legacy.name = 'Primary contact';
+    }
+    contacts = [legacy];
+  }
+  return {
+    customer_code: c.customer_code,
+    company_legal_name: c.company_legal_name,
+    country: c.country || '',
+    region_state: c.region_state || '',
+    city: c.city || '',
+    postal_code: c.postal_code || '',
+    address_line1: c.address_line1 || '',
+    address_line2: c.address_line2 || '',
+    website: c.website || '',
+    tax_id_vat: c.tax_id_vat || '',
+    default_currency: c.default_currency || 'USD',
+    preferred_language: c.preferred_language || 'en',
+    incoterms_default: c.incoterms_default || '',
+    payment_terms_default: c.payment_terms_default || '',
+    bank_details: c.bank_details || '',
+    notes: c.notes || '',
+    is_active: c.is_active,
+    contacts,
+  };
+};
+
+const formToPayload = (formData) => {
+  const contacts = (formData.contacts || [])
+    .filter((c) => (c.name || '').trim())
+    .map((c, i) => ({
+      ...(c.id ? { id: c.id } : {}),
+      name: c.name.trim(),
+      email: (c.email || '').trim(),
+      phone: (c.phone || '').trim(),
+      designation: (c.designation || '').trim(),
+      is_primary: !!c.is_primary,
+      sort_order: i,
+    }));
+  return {
+    customer_code: formData.customer_code.trim(),
+    company_legal_name: formData.company_legal_name.trim(),
+    trading_name: '',
+    country: formData.country,
+    region_state: formData.region_state,
+    city: formData.city,
+    postal_code: formData.postal_code,
+    address_line1: formData.address_line1,
+    address_line2: formData.address_line2,
+    website: formData.website,
+    tax_id_vat: formData.tax_id_vat,
+    default_currency: formData.default_currency,
+    preferred_language: formData.preferred_language,
+    incoterms_default: formData.incoterms_default,
+    payment_terms_default: formData.payment_terms_default,
+    bank_details: formData.bank_details,
+    notes: formData.notes,
+    is_active: formData.is_active,
+    contacts,
+  };
+};
 
 const compactField = {
   '& .MuiInputBase-root': { borderRadius: 1.25 },
@@ -84,6 +296,10 @@ const Customers = () => {
   const [selected, setSelected] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [formData, setFormData] = useState(emptyForm);
+  const [codeLookup, setCodeLookup] = useState({ loading: false, customers: [] });
+  const [groupByCode, setGroupByCode] = useState(false);
+  const [detailCustomer, setDetailCustomer] = useState(null);
+  const [openDetail, setOpenDetail] = useState(false);
 
   const isLastStep = activeStep === STEPS.length - 1;
   const isNew = !selected;
@@ -107,7 +323,7 @@ const Customers = () => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) =>
-      [r.customer_code, r.company_legal_name, r.trading_name, r.primary_email, r.city, r.country]
+      [r.customer_code, r.company_legal_name, r.primary_contact_name, r.primary_email, r.city, r.country]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q)),
     );
@@ -120,31 +336,7 @@ const Customers = () => {
         const res = await customersAPI.getById(row.id);
         const c = res.data;
         setSelected(c);
-        setFormData({
-          customer_code: c.customer_code,
-          company_legal_name: c.company_legal_name,
-          trading_name: c.trading_name || '',
-          country: c.country || '',
-          region_state: c.region_state || '',
-          city: c.city || '',
-          postal_code: c.postal_code || '',
-          address_line1: c.address_line1 || '',
-          address_line2: c.address_line2 || '',
-          primary_email: c.primary_email || '',
-          secondary_email: c.secondary_email || '',
-          phone: c.phone || '',
-          mobile: c.mobile || '',
-          fax: c.fax || '',
-          website: c.website || '',
-          tax_id_vat: c.tax_id_vat || '',
-          default_currency: c.default_currency || 'USD',
-          preferred_language: c.preferred_language || 'en',
-          incoterms_default: c.incoterms_default || '',
-          payment_terms_default: c.payment_terms_default || '',
-          bank_details: c.bank_details || '',
-          notes: c.notes || '',
-          is_active: c.is_active,
-        });
+        setFormData(customerToForm(c));
       } catch (e) {
         console.error(e);
         alert('Could not load customer');
@@ -161,14 +353,70 @@ const Customers = () => {
     setOpenDialog(false);
     setSelected(null);
     setActiveStep(0);
+    setCodeLookup({ loading: false, customers: [] });
+  };
+
+  useEffect(() => {
+    if (!openDialog) return undefined;
+    const code = formData.customer_code.trim();
+    if (code.length < 1) {
+      setCodeLookup({ loading: false, customers: [] });
+      return undefined;
+    }
+    const timer = setTimeout(async () => {
+      setCodeLookup((s) => ({ ...s, loading: true }));
+      try {
+        const res = await customersAPI.lookupCode(code, selected?.id);
+        setCodeLookup({ loading: false, customers: res.data.customers || [] });
+      } catch {
+        setCodeLookup({ loading: false, customers: [] });
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [formData.customer_code, openDialog, selected?.id]);
+
+  const setContact = (index, patch) => {
+    setFormData((fd) => ({
+      ...fd,
+      contacts: fd.contacts.map((c, i) => (i === index ? { ...c, ...patch } : c)),
+    }));
+  };
+
+  const setPrimaryContact = (index) => {
+    setFormData((fd) => ({
+      ...fd,
+      contacts: fd.contacts.map((c, i) => ({ ...c, is_primary: i === index })),
+    }));
+  };
+
+  const addContact = () => {
+    setFormData((fd) => ({
+      ...fd,
+      contacts: [...fd.contacts, emptyContact(false)],
+    }));
+  };
+
+  const removeContact = (index) => {
+    setFormData((fd) => {
+      const next = fd.contacts.filter((_, i) => i !== index);
+      if (!next.length) return { ...fd, contacts: [emptyContact(true)] };
+      if (!next.some((c) => c.is_primary)) next[0].is_primary = true;
+      return { ...fd, contacts: next };
+    });
   };
 
   const handleSubmit = async () => {
     try {
+      const payload = formToPayload(formData);
+      const named = payload.contacts.filter((c) => c.name);
+      if (named.length && named.filter((c) => c.is_primary).length !== 1) {
+        alert('Mark exactly one contact as primary.');
+        return;
+      }
       if (selected) {
-        await customersAPI.update(selected.id, formData);
+        await customersAPI.update(selected.id, payload);
       } else {
-        await customersAPI.create(formData);
+        await customersAPI.create(payload);
       }
       fetchRows();
       handleCloseDialog();
@@ -182,9 +430,17 @@ const Customers = () => {
     return Boolean(formData.customer_code.trim() && formData.company_legal_name.trim());
   }, [formData.customer_code, formData.company_legal_name]);
 
+  const canProceedFromStep1 = useCallback(() => {
+    return Boolean((formData.country || '').trim());
+  }, [formData.country]);
+
   const handleNext = () => {
     if (activeStep === 0 && !canProceedFromStep0()) {
       alert('Enter customer code and company legal name to continue.');
+      return;
+    }
+    if (activeStep === 1 && !canProceedFromStep1()) {
+      alert('Enter country to continue.');
       return;
     }
     setActiveStep((s) => Math.min(s + 1, STEPS.length - 1));
@@ -205,107 +461,127 @@ const Customers = () => {
     }
   };
 
-  /** MUI sets background on each .columnHeader (paper); override both container + cells + corner fillers. */
-  const headerSolid = theme.palette.primary.dark;
+  const handleViewDetail = async (row) => {
+    try {
+      const res = await customersAPI.getById(row.id);
+      setDetailCustomer(res.data);
+      setOpenDetail(true);
+    } catch (e) {
+      console.error(e);
+      alert('Could not load customer details');
+    }
+  };
+
+  const handleEditFromDetail = async (customer) => {
+    setOpenDetail(false);
+    await handleOpenDialog({ id: customer.id });
+  };
+
+  const groupedByCode = useMemo(() => {
+    const map = new Map();
+    for (const r of filteredRows) {
+      const code = (r.customer_code || '—').trim();
+      if (!map.has(code)) map.set(code, []);
+      map.get(code).push(r);
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [filteredRows]);
+
+  const gridRowIndex = useMemo(() => {
+    const idx = new Map();
+    filteredRows.forEach((r, i) => idx.set(r.id, i));
+    return idx;
+  }, [filteredRows]);
+
+  const cellMuted = { fontSize: '0.8125rem', fontWeight: 400, color: slate[600], lineHeight: 1.4 };
+  const cellPrimary = { fontSize: '0.875rem', fontWeight: 600, color: slate[900], lineHeight: 1.4 };
+
   const customersGridSx = {
-    border: 'none',
-    fontFamily: theme.typography.fontFamily,
+    ...dataGridSx,
+    width: '100%',
+    bgcolor: '#fff',
     '& .MuiDataGrid-columnHeaders': {
-      background: `linear-gradient(180deg, ${alpha(headerSolid, 1)} 0%, ${alpha(theme.palette.primary.main, 0.88)} 100%)`,
-      borderBottom: `1px solid ${alpha('#000', 0.28)}`,
-      boxShadow: `inset 0 -1px 0 ${alpha('#fff', 0.1)}`,
+      ...dataGridSx['& .MuiDataGrid-columnHeaders'],
+      minHeight: '44px !important',
+      maxHeight: '44px !important',
+      bgcolor: warm[50],
     },
     '& .MuiDataGrid-columnHeader': {
-      background: `linear-gradient(180deg, ${headerSolid} 0%, ${alpha(theme.palette.primary.main, 0.85)} 100%) !important`,
-      color: '#ffffff !important',
-      fontSize: '0.75rem',
-      fontWeight: 800,
-      letterSpacing: '0.07em',
+      '&:focus, &:focus-within': { outline: 'none' },
+    },
+    '& .MuiDataGrid-columnHeaderTitle': {
+      fontWeight: 600,
+      fontSize: '0.6875rem',
+      letterSpacing: '0.06em',
       textTransform: 'uppercase',
-      borderRight: `1px solid ${alpha('#fff', 0.14)} !important`,
-      WebkitFontSmoothing: 'antialiased',
-    },
-    '& .MuiDataGrid-columnHeaderTitle, & .MuiDataGrid-columnHeaderTitleContainer, & .MuiDataGrid-columnHeaderTitleContainerContent':
-      {
-        color: '#ffffff !important',
-        opacity: '1 !important',
-        fontWeight: 800,
-      },
-    '& .MuiDataGrid-iconButtonContainer': { color: '#ffffff !important' },
-    '& .MuiDataGrid-sortIcon, & .MuiDataGrid-menuIcon .MuiSvgIcon-root': {
-      color: `${alpha('#fff', 0.95)} !important`,
-    },
-    '& .MuiDataGrid-columnSeparator': { color: alpha('#fff', 0.35) },
-    '& .MuiDataGrid-scrollbarFiller--header, & .MuiDataGrid-filler--header': {
-      backgroundColor: `${headerSolid} !important`,
-    },
-    '& .MuiDataGrid-main': {
-      backgroundColor: '#ffffff',
-      backgroundImage: 'none',
-    },
-    '& .MuiDataGrid-virtualScroller': {
-      backgroundColor: '#ffffff',
+      color: slate[500],
     },
     '& .MuiDataGrid-row': {
-      transition: 'background-color 0.15s ease',
-      borderBottom: `1px solid ${alpha(slate[200], 0.75)} !important`,
+      ...dataGridSx['& .MuiDataGrid-row'],
     },
     '& .MuiDataGrid-row.customer-row--alt': {
-      backgroundColor: alpha(theme.palette.primary.main, 0.028),
+      bgcolor: `${alpha(slate[200], 0.42)} !important`,
     },
-    '& .MuiDataGrid-row:hover': {
-      backgroundColor: `${alpha(theme.palette.info.main, 0.09)} !important`,
+    '& .MuiDataGrid-row.customer-row--alt:hover': {
+      bgcolor: `${alpha(theme.palette.primary.main, 0.1)} !important`,
     },
     '& .MuiDataGrid-cell': {
-      py: 0.35,
-      borderColor: alpha(slate[200], 0.6),
+      ...dataGridSx['& .MuiDataGrid-cell'],
+      display: 'flex',
+      alignItems: 'center',
+      py: 0,
+      fontWeight: 400,
       fontSize: '0.8125rem',
-      fontWeight: 700,
-      '& .MuiTypography-root': { fontWeight: 700 },
-      '& .MuiChip-label, & .MuiChip-root': { fontWeight: 700 },
+      color: slate[700],
     },
     '& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus': { outline: 'none' },
     '& .MuiDataGrid-footerContainer': {
-      minHeight: 48,
-      borderTop: `1px solid ${alpha(slate[200], 0.9)} !important`,
-      backgroundColor: '#ffffff',
+      ...dataGridSx['& .MuiDataGrid-footerContainer'],
+      minHeight: 44,
+      fontSize: '0.8125rem',
+      color: slate[600],
     },
   };
 
-  const columns = [
-    {
-      field: 'customer_code',
-      headerName: 'Code',
-      minWidth: 92,
-      flex: 0.5,
-      renderCell: (p) => (
-        <Chip
-          label={p.value || '—'}
-          size="small"
-          variant="outlined"
-          sx={{
-            fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
-            fontWeight: 700,
-            fontSize: '0.7rem',
-            height: 22,
-            borderColor: alpha(theme.palette.primary.main, 0.4),
-            bgcolor: alpha(theme.palette.primary.main, 0.1),
-            color: theme.palette.primary.dark,
-          }}
-        />
-      ),
-    },
+  const codeColumn = {
+    field: 'customer_code',
+    headerName: 'Code',
+    minWidth: 88,
+    flex: 0.45,
+    renderCell: (p) => (
+      <Typography
+        component="span"
+        sx={{
+          fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          letterSpacing: '0.02em',
+          color: theme.palette.primary.dark,
+          bgcolor: alpha(theme.palette.primary.main, 0.07),
+          px: 1,
+          py: 0.35,
+          borderRadius: 1,
+          border: `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
+          lineHeight: 1.2,
+        }}
+      >
+        {p.value || '—'}
+      </Typography>
+    ),
+  };
+
+  const dataColumns = [
     {
       field: 'company_legal_name',
       headerName: 'Legal name',
       minWidth: 200,
-      flex: 1.4,
+      flex: 1.35,
       renderCell: (p) => (
-        <Tooltip title={p.value || '—'} enterDelay={500}>
+        <Tooltip title={p.value || ''} enterDelay={600}>
           <Typography
-            variant="body2"
-            sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.35, display: 'block' }}
             noWrap
+            sx={{ ...cellPrimary, cursor: 'pointer', '&:hover': { color: theme.palette.primary.main } }}
+            onClick={() => handleViewDetail(p.row)}
           >
             {p.value || '—'}
           </Typography>
@@ -313,12 +589,12 @@ const Customers = () => {
       ),
     },
     {
-      field: 'trading_name',
-      headerName: 'Trading as',
-      minWidth: 110,
+      field: 'primary_contact_name',
+      headerName: 'Contact',
+      minWidth: 120,
       flex: 0.6,
       renderCell: (p) => (
-        <Typography variant="body2" color="text.secondary" noWrap sx={{ fontWeight: 500 }}>
+        <Typography noWrap sx={cellMuted}>
           {p.value || '—'}
         </Typography>
       ),
@@ -326,35 +602,21 @@ const Customers = () => {
     {
       field: 'country',
       headerName: 'Country',
-      minWidth: 96,
-      flex: 0.5,
-      renderCell: (p) =>
-        p.value ? (
-          <Chip
-            label={p.value}
-            size="small"
-            sx={{
-              height: 22,
-              fontSize: '0.7rem',
-              fontWeight: 600,
-              bgcolor: alpha(theme.palette.info.main, 0.12),
-              color: theme.palette.info.dark,
-              border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
-            }}
-          />
-        ) : (
-          <Typography variant="body2" color="text.disabled">
-            —
-          </Typography>
-        ),
+      minWidth: 90,
+      flex: 0.45,
+      renderCell: (p) => (
+        <Typography noWrap sx={cellMuted}>
+          {p.value || '—'}
+        </Typography>
+      ),
     },
     {
       field: 'city',
       headerName: 'City',
-      minWidth: 86,
-      flex: 0.5,
+      minWidth: 80,
+      flex: 0.4,
       renderCell: (p) => (
-        <Typography variant="body2" sx={{ fontWeight: 500, color: slate[700] }} noWrap>
+        <Typography noWrap sx={cellMuted}>
           {p.value || '—'}
         </Typography>
       ),
@@ -362,21 +624,19 @@ const Customers = () => {
     {
       field: 'primary_email',
       headerName: 'Email',
-      minWidth: 200,
-      flex: 1.05,
+      minWidth: 180,
+      flex: 1,
       renderCell: (p) => (
         <Tooltip title={p.value || ''}>
           <Typography
-            variant="body2"
+            noWrap
             component="span"
             sx={{
+              ...cellMuted,
               fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
-              fontSize: '0.78rem',
-              color: p.value ? theme.palette.primary.main : 'text.disabled',
-              fontWeight: 500,
-              display: 'block',
+              fontSize: '0.75rem',
+              color: p.value ? slate[700] : slate[400],
             }}
-            noWrap
           >
             {p.value || '—'}
           </Typography>
@@ -386,77 +646,45 @@ const Customers = () => {
     {
       field: 'default_currency',
       headerName: 'CCY',
-      minWidth: 64,
-      flex: 0.3,
+      minWidth: 56,
+      flex: 0.28,
       align: 'center',
       headerAlign: 'center',
       renderCell: (p) => (
-        <Chip
-          label={(p.value || '—').toString().toUpperCase()}
-          size="small"
+        <Typography
           sx={{
-            minWidth: 40,
-            height: 22,
-            fontWeight: 800,
-            fontSize: '0.68rem',
             fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
-            bgcolor: alpha(theme.palette.secondary.main, 0.12),
-            color: slate[800],
-            border: `1px solid ${alpha(slate[400], 0.35)}`,
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            color: slate[700],
           }}
-        />
-      ),
-    },
-    {
-      field: 'is_active',
-      headerName: 'Status',
-      minWidth: 84,
-      flex: 0.4,
-      align: 'center',
-      headerAlign: 'center',
-      renderCell: (p) => (
-        <Chip
-          label={p.value ? 'Active' : 'Off'}
-          size="small"
-          color={p.value ? 'success' : 'default'}
-          variant={p.value ? 'filled' : 'outlined'}
-          sx={{ fontWeight: 700, fontSize: '0.65rem', height: 22 }}
-        />
+        >
+          {(p.value || '—').toString().toUpperCase()}
+        </Typography>
       ),
     },
     {
       field: 'actions',
-      headerName: 'Actions',
-      minWidth: 120,
-      flex: 0.55,
+      headerName: '',
+      minWidth: 112,
+      flex: 0.38,
       sortable: false,
-      align: 'center',
-      headerAlign: 'center',
+      align: 'right',
+      headerAlign: 'right',
       renderCell: (p) => (
-        <Box sx={{ display: 'flex', width: '100%', gap: 0, justifyContent: 'center' }}>
+        <Box sx={{ display: 'flex', gap: 0.25, justifyContent: 'flex-end', width: '100%' }}>
+          <Tooltip title="View details">
+            <IconButton size="small" onClick={() => handleViewDetail(p.row)} aria-label="View customer">
+              <Visibility fontSize="small" />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Edit">
-            <IconButton
-              size="small"
-              onClick={() => handleOpenDialog(p.row)}
-              sx={{
-                color: theme.palette.primary.main,
-                bgcolor: alpha(theme.palette.primary.main, 0.08),
-                '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.16) },
-              }}
-            >
+            <IconButton size="small" onClick={() => handleOpenDialog(p.row)} aria-label="Edit customer">
               <Edit fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Delete">
-            <IconButton
-              size="small"
-              onClick={() => handleDelete(p.row.id)}
-              sx={{
-                color: theme.palette.error.main,
-                bgcolor: alpha(theme.palette.error.main, 0.06),
-                '&:hover': { bgcolor: alpha(theme.palette.error.main, 0.12) },
-              }}
-            >
+            <IconButton size="small" color="error" onClick={() => handleDelete(p.row.id)} aria-label="Delete customer">
               <Delete fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -464,6 +692,36 @@ const Customers = () => {
       ),
     },
   ];
+
+  const columns = [codeColumn, ...dataColumns];
+  const groupedColumns = dataColumns;
+
+  const renderDataGrid = (gridRows, cols, { compactFooter = false, localStriping = false } = {}) => (
+    <DataGrid
+      rows={gridRows}
+      columns={cols}
+      getRowId={(r) => r.id}
+      getRowClassName={(params) => {
+        const idx = localStriping
+          ? gridRows.findIndex((r) => r.id === params.id)
+          : gridRowIndex.get(params.id) ?? 0;
+        return idx % 2 === 1 ? 'customer-row--alt' : '';
+      }}
+      pageSizeOptions={[10, 25, 50]}
+      initialState={{ pagination: { paginationModel: { pageSize: compactFooter ? 25 : 10 } } }}
+      hideFooter={compactFooter && gridRows.length <= 25}
+      loading={loading}
+      disableRowSelectionOnClick
+      rowHeight={44}
+      columnHeaderHeight={44}
+      onRowDoubleClick={(params) => handleViewDetail(params.row)}
+      sx={{
+        ...customersGridSx,
+        height: '100%',
+        border: 'none',
+      }}
+    />
+  );
 
   return (
     <Box>
@@ -478,88 +736,149 @@ const Customers = () => {
         }
       />
 
-      <Paper
-        elevation={0}
+      <DataGridShell
         sx={{
           width: '100%',
-          maxWidth: '100%',
-          mx: 0,
-          mb: 2,
-          borderRadius: 2.5,
-          overflow: 'hidden',
           border: `1px solid ${alpha(slate[200], 0.95)}`,
-          borderLeft: `5px solid ${theme.palette.primary.main}`,
-          boxShadow: `0 4px 28px ${alpha(slate[900], 0.09)}, 0 0 0 1px ${alpha(slate[100], 0.8)}`,
-          bgcolor: '#ffffff',
+          boxShadow: `0 1px 3px ${alpha(slate[900], 0.06)}`,
         }}
       >
         <Box
           sx={{
-            px: { xs: 1.5, sm: 2.5 },
-            py: 2,
-            background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.07)} 0%, ${alpha(theme.palette.info.main, 0.04)} 45%, ${alpha(warm[100], 0.5)} 100%)`,
-            borderBottom: `1px solid ${alpha(slate[200], 0.9)}`,
+            px: { xs: 2, sm: 2.5 },
+            py: 1.75,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 1.5,
+            borderBottom: `1px solid ${slate[200]}`,
+            bgcolor: warm[50],
           }}
         >
           <TextField
-            fullWidth
             size="small"
-            placeholder="Search by code, name, email, city…"
+            placeholder="Search code, name, email, city…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             aria-label="Search customers"
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <Search sx={{ color: theme.palette.primary.main, fontSize: 22, opacity: 0.85 }} />
+                  <Search sx={{ fontSize: 20, color: slate[500] }} />
                 </InputAdornment>
               ),
             }}
             sx={{
-              maxWidth: { xs: '100%', md: 640 },
+              flex: '1 1 280px',
+              maxWidth: 480,
               '& .MuiOutlinedInput-root': {
-                bgcolor: alpha('#fff', 0.95),
-                borderRadius: 2,
-                boxShadow: `0 1px 4px ${alpha(slate[900], 0.07)}`,
-                border: `1px solid ${alpha(slate[200], 0.95)}`,
-                '&:hover': { borderColor: alpha(theme.palette.primary.main, 0.45) },
-                '&.Mui-focused': {
-                  borderColor: 'primary.main',
-                  boxShadow: `0 0 0 3px ${alpha(theme.palette.primary.main, 0.15)}`,
-                },
+                bgcolor: '#fff',
+                fontSize: '0.875rem',
+                '& fieldset': { borderColor: slate[200] },
               },
             }}
           />
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontWeight: 500 }}>
-            {filteredRows.length} {filteredRows.length === 1 ? 'customer' : 'customers'}
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={groupByCode ? 'group' : 'list'}
+            onChange={(_, v) => v && setGroupByCode(v === 'group')}
+            aria-label="View mode"
+          >
+            <ToggleButton value="list">
+              <ViewList fontSize="small" sx={{ mr: 0.75 }} />
+              List
+            </ToggleButton>
+            <ToggleButton value="group">
+              <AccountTree fontSize="small" sx={{ mr: 0.75 }} />
+              Group by code
+            </ToggleButton>
+          </ToggleButtonGroup>
+          <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+            {filteredRows.length} {filteredRows.length === 1 ? 'record' : 'records'}
             {searchQuery.trim() ? ' · filtered' : ''}
+            {groupByCode ? ` · ${groupedByCode.length} groups` : ''}
           </Typography>
         </Box>
 
-        <Box sx={{ width: '100%', '& .MuiDataGrid-root': { border: 'none' } }}>
-          <DataGrid
-            rows={filteredRows}
-            columns={columns}
-            getRowId={(r) => r.id}
-            getRowClassName={(params) =>
-              params.indexRelativeToCurrentPage % 2 === 0 ? 'customer-row--alt' : ''
-            }
-            autoHeight
-            rowHeight={38}
-            columnHeaderHeight={40}
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-            loading={loading}
-            disableRowSelectionOnClick
+        {!groupByCode ? (
+          <Box sx={{ height: { xs: 520, md: 580 }, width: '100%' }}>
+            {renderDataGrid(filteredRows, columns)}
+          </Box>
+        ) : (
+          <Box
             sx={{
-              ...customersGridSx,
-              width: '100%',
+              maxHeight: { xs: 520, md: 580 },
+              overflow: 'auto',
+              px: { xs: 1, sm: 1.5 },
+              py: 1.5,
+              bgcolor: '#fff',
             }}
-          />
-        </Box>
-      </Paper>
+          >
+            <Stack spacing={1.5}>
+              {groupedByCode.map(([code, items]) => (
+                <Box
+                  key={code}
+                  sx={{
+                    borderRadius: 2,
+                    border: `1px solid ${alpha(slate[200], 0.95)}`,
+                    overflow: 'hidden',
+                    bgcolor: '#fff',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      px: 2,
+                      py: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      bgcolor: alpha(theme.palette.primary.main, 0.06),
+                      borderBottom: `1px solid ${alpha(slate[200], 0.9)}`,
+                    }}
+                  >
+                    <Typography
+                      sx={{
+                        fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+                        fontWeight: 700,
+                        fontSize: '0.8125rem',
+                        color: theme.palette.primary.dark,
+                      }}
+                    >
+                      {code}
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={`${items.length} ${items.length === 1 ? 'entity' : 'entities'}`}
+                      sx={{ height: 22, fontWeight: 600, fontSize: '0.7rem' }}
+                    />
+                  </Box>
+                  <Box sx={{ height: Math.min(44 * items.length + 52, 320), width: '100%' }}>
+                    {renderDataGrid(items, groupedColumns, { compactFooter: true, localStriping: true })}
+                  </Box>
+                </Box>
+              ))}
+              {groupedByCode.length === 0 && !loading && (
+                <Typography color="text.secondary" textAlign="center" py={4}>
+                  No customers match your search.
+                </Typography>
+              )}
+            </Stack>
+          </Box>
+        )}
+      </DataGridShell>
 
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth scroll="paper">
+      <CustomerDetailDialog
+        open={openDetail}
+        customer={detailCustomer}
+        onClose={() => {
+          setOpenDetail(false);
+          setDetailCustomer(null);
+        }}
+        onEdit={handleEditFromDetail}
+      />
+
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="lg" fullWidth scroll="paper">
         <DialogTitle sx={{ pb: 1 }}>
           <Typography variant="h6" component="span" sx={{ fontWeight: 700 }}>
             {selected ? 'Edit customer' : 'New customer'}
@@ -620,20 +939,28 @@ const Customers = () => {
 
             {activeStep === 0 && (
               <Grid container spacing={1.5}>
-                <Grid item xs={12} sm={6}>
+                <Grid item xs={12} md={7}>
                   <TextField
                     required
                     fullWidth
                     size="small"
                     label="Customer code"
                     value={formData.customer_code}
-                    onChange={(e) => setFormData({ ...formData, customer_code: e.target.value })}
-                    disabled={!!selected}
-                    helperText="Unique. Cannot change after create."
+                    onChange={(e) =>
+                      setFormData({ ...formData, customer_code: e.target.value.toUpperCase().replace(/\s+/g, '') })
+                    }
+                    helperText="Required. Same code can link multiple subsidiaries."
                     sx={compactField}
+                    InputProps={{
+                      endAdornment: codeLookup.loading ? (
+                        <InputAdornment position="end">
+                          <CircularProgress size={16} />
+                        </InputAdornment>
+                      ) : null,
+                    }}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'center' }}>
+                <Grid item xs={12} md={5} sx={{ display: 'flex', alignItems: 'center', justifyContent: { md: 'flex-end' } }}>
                   <FormControlLabel
                     control={
                       <Switch
@@ -645,6 +972,40 @@ const Customers = () => {
                     label={<Typography variant="body2">Active</Typography>}
                   />
                 </Grid>
+
+                {formData.customer_code.trim().length > 0 && (
+                  <Grid item xs={12}>
+                    {codeLookup.customers.length > 0 ? (
+                      <Alert severity="info" sx={{ py: 0.5, '& .MuiAlert-message': { width: '100%' } }}>
+                        <Typography variant="caption" fontWeight={700} display="block" sx={{ mb: 0.75 }}>
+                          Code in use — linked entities ({codeLookup.customers.length})
+                        </Typography>
+                        <Stack direction="row" flexWrap="wrap" gap={0.75}>
+                          {codeLookup.customers.map((c) => (
+                            <Chip
+                              key={c.id}
+                              size="small"
+                              label={`${c.company_legal_name}${c.city ? ` · ${c.city}` : ''}`}
+                              variant="outlined"
+                              color={c.is_active ? 'primary' : 'default'}
+                              sx={{ fontWeight: 600, maxWidth: '100%' }}
+                            />
+                          ))}
+                        </Stack>
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
+                          You are adding another subsidiary under this group code.
+                        </Typography>
+                      </Alert>
+                    ) : (
+                      !codeLookup.loading && (
+                        <Alert severity="success" sx={{ py: 0.5 }}>
+                          New group code — first entity for &quot;{formData.customer_code.trim()}&quot;.
+                        </Alert>
+                      )
+                    )}
+                  </Grid>
+                )}
+
                 <Grid item xs={12}>
                   <TextField
                     required
@@ -653,43 +1014,33 @@ const Customers = () => {
                     label="Company legal name"
                     value={formData.company_legal_name}
                     onChange={(e) => setFormData({ ...formData, company_legal_name: e.target.value })}
+                    placeholder="Legal entity / subsidiary name"
                     sx={compactField}
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid item xs={4} sm={3}>
                   <TextField
                     fullWidth
                     size="small"
-                    label="Trading name"
-                    value={formData.trading_name}
-                    onChange={(e) => setFormData({ ...formData, trading_name: e.target.value })}
-                    helperText="On documents, if different from legal name"
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={6} sm={4}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    label="Default currency"
+                    label="Currency"
                     value={formData.default_currency}
                     onChange={(e) => setFormData({ ...formData, default_currency: e.target.value.toUpperCase() })}
                     inputProps={{ maxLength: 3 }}
                     sx={compactField}
                   />
                 </Grid>
-                <Grid item xs={6} sm={4}>
+                <Grid item xs={4} sm={3}>
                   <TextField
                     fullWidth
                     size="small"
-                    label="Preferred language"
+                    label="Language"
                     value={formData.preferred_language}
                     onChange={(e) => setFormData({ ...formData, preferred_language: e.target.value })}
-                    placeholder="e.g. en"
+                    placeholder="en"
                     sx={compactField}
                   />
                 </Grid>
-                <Grid item xs={12} sm={4}>
+                <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
                     size="small"
@@ -704,133 +1055,169 @@ const Customers = () => {
             )}
 
             {activeStep === 1 && (
-              <Grid container spacing={1.5}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    required
-                    fullWidth
-                    size="small"
-                    label="Country / territory"
-                    value={formData.country}
-                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                    helperText="Name or ISO code"
-                    sx={compactField}
-                  />
+              <Box>
+                <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ mb: 1, display: 'block' }}>
+                  Registered address
+                </Typography>
+                <Grid container spacing={1.25} sx={{ mb: 2 }}>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <TextField
+                      required
+                      fullWidth
+                      size="small"
+                      label="Country"
+                      value={formData.country}
+                      onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                      sx={compactField}
+                    />
+                  </Grid>
+                  <Grid item xs={6} sm={3} md={2}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="City"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      sx={compactField}
+                    />
+                  </Grid>
+                  <Grid item xs={6} sm={3} md={3}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Region / state"
+                      value={formData.region_state}
+                      onChange={(e) => setFormData({ ...formData, region_state: e.target.value })}
+                      sx={compactField}
+                    />
+                  </Grid>
+                  <Grid item xs={6} sm={3} md={2}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Postal"
+                      value={formData.postal_code}
+                      onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
+                      sx={compactField}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={9} md={2} />
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Address line 1"
+                      value={formData.address_line1}
+                      onChange={(e) => setFormData({ ...formData, address_line1: e.target.value })}
+                      sx={compactField}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Address line 2"
+                      value={formData.address_line2}
+                      onChange={(e) => setFormData({ ...formData, address_line2: e.target.value })}
+                      sx={compactField}
+                    />
+                  </Grid>
                 </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    label="Region / state"
-                    value={formData.region_state}
-                    onChange={(e) => setFormData({ ...formData, region_state: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={6} sm={4}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    label="City"
-                    value={formData.city}
-                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={6} sm={4}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    label="Postal code"
-                    value={formData.postal_code}
-                    onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={4} />
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    multiline
-                    minRows={1}
-                    maxRows={3}
-                    label="Address line 1"
-                    value={formData.address_line1}
-                    onChange={(e) => setFormData({ ...formData, address_line1: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    multiline
-                    minRows={1}
-                    maxRows={3}
-                    label="Address line 2"
-                    value={formData.address_line2}
-                    onChange={(e) => setFormData({ ...formData, address_line2: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    type="email"
-                    label="Primary email"
-                    value={formData.primary_email}
-                    onChange={(e) => setFormData({ ...formData, primary_email: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    type="email"
-                    label="Secondary email"
-                    value={formData.secondary_email}
-                    onChange={(e) => setFormData({ ...formData, secondary_email: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    label="Phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    label="Mobile"
-                    value={formData.mobile}
-                    onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    label="Fax"
-                    value={formData.fax}
-                    onChange={(e) => setFormData({ ...formData, fax: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-              </Grid>
+
+                <Divider sx={{ mb: 1.5 }} />
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={700}>
+                    Contacts
+                  </Typography>
+                  <Button size="small" startIcon={<PersonAdd fontSize="small" />} onClick={addContact}>
+                    Add contact
+                  </Button>
+                </Box>
+
+                <Stack spacing={1}>
+                  {formData.contacts.map((contact, ci) => (
+                    <Box
+                      key={ci}
+                      sx={{
+                        p: 1.25,
+                        borderRadius: 1.5,
+                        border: `1px solid ${alpha(theme.palette.divider, 0.9)}`,
+                        bgcolor: contact.is_primary ? alpha(theme.palette.primary.main, 0.04) : 'background.paper',
+                      }}
+                    >
+                      <Grid container spacing={1} alignItems="center">
+                        <Grid item xs={12} sm={3}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Name"
+                            value={contact.name}
+                            onChange={(e) => setContact(ci, { name: e.target.value })}
+                            sx={compactField}
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={2.5}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Designation"
+                            value={contact.designation}
+                            onChange={(e) => setContact(ci, { designation: e.target.value })}
+                            placeholder="Buyer, MD…"
+                            sx={compactField}
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            type="email"
+                            label="Email"
+                            value={contact.email}
+                            onChange={(e) => setContact(ci, { email: e.target.value })}
+                            sx={compactField}
+                          />
+                        </Grid>
+                        <Grid item xs={9} sm={2.5}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Phone"
+                            value={contact.phone}
+                            onChange={(e) => setContact(ci, { phone: e.target.value })}
+                            sx={compactField}
+                          />
+                        </Grid>
+                        <Grid item xs={3} sm={1} sx={{ display: 'flex', justifyContent: 'center', gap: 0.25 }}>
+                          <Tooltip title={contact.is_primary ? 'Primary contact' : 'Set as primary'}>
+                            <IconButton size="small" onClick={() => setPrimaryContact(ci)} color={contact.is_primary ? 'primary' : 'default'}>
+                              <Star fontSize="small" sx={{ opacity: contact.is_primary ? 1 : 0.35 }} />
+                            </IconButton>
+                          </Tooltip>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => removeContact(ci)}
+                            disabled={formData.contacts.length <= 1}
+                            aria-label="Remove contact"
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </Grid>
+                      </Grid>
+                      {contact.is_primary && (
+                        <Typography variant="caption" color="primary.main" fontWeight={700} sx={{ mt: 0.5, display: 'block' }}>
+                          Primary — used on PIs and lists
+                        </Typography>
+                      )}
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
             )}
 
             {activeStep === 2 && (
-              <Grid container spacing={1.5}>
+              <Grid container spacing={1.25}>
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
@@ -852,30 +1239,30 @@ const Customers = () => {
                     sx={compactField}
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid item xs={12} md={6}>
                   <TextField
                     fullWidth
                     size="small"
                     multiline
                     minRows={2}
-                    maxRows={5}
-                    label="Default payment terms"
+                    maxRows={4}
+                    label="Payment terms"
                     value={formData.payment_terms_default}
                     onChange={(e) => setFormData({ ...formData, payment_terms_default: e.target.value })}
                     sx={compactField}
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid item xs={12} md={6}>
                   <TextField
                     fullWidth
                     size="small"
                     multiline
                     minRows={2}
-                    maxRows={8}
-                    label="Bank details (PI / remittance)"
+                    maxRows={4}
+                    label="Bank details"
                     value={formData.bank_details}
                     onChange={(e) => setFormData({ ...formData, bank_details: e.target.value })}
-                    placeholder="Account name, bank, IBAN, SWIFT…"
+                    placeholder="Account, bank, IBAN, SWIFT…"
                     sx={compactField}
                   />
                 </Grid>
@@ -885,7 +1272,7 @@ const Customers = () => {
                     size="small"
                     multiline
                     minRows={1}
-                    maxRows={4}
+                    maxRows={3}
                     label="Internal notes"
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}

@@ -7,6 +7,8 @@ from .models import (
     IntentSheet,
     IntentLine,
     IntentAttachment,
+    BuyerPO,
+    BuyerPOLine,
 )
 
 
@@ -71,3 +73,19 @@ class PlanningSheetAdmin(admin.ModelAdmin):
     list_display = ['pi', 'created_at', 'updated_at']
     search_fields = ['pi__pi_number']
     readonly_fields = ['created_at', 'updated_at']
+
+
+class BuyerPOLineInline(admin.TabularInline):
+    model = BuyerPOLine
+    extra = 0
+    fields = ['line_number', 'item_code', 'item_name', 'fabric', 'color', 'customer_ref', 'quantity', 'unit_price', 'delivery_date', 'line_amount']
+
+
+@admin.register(BuyerPO)
+class BuyerPOAdmin(admin.ModelAdmin):
+    list_display = ['po_number', 'po_date', 'buyer_name', 'customer', 'currency', 'total_qty', 'total_value', 'status', 'ex_factory_date']
+    list_filter = ['status', 'currency', 'po_date']
+    search_fields = ['po_number', 'buyer_name', 'buyer_contact', 'lines__item_code']
+    readonly_fields = ['created_at', 'updated_at', 'total_qty', 'total_value']
+    inlines = [BuyerPOLineInline]
+    date_hierarchy = 'po_date'

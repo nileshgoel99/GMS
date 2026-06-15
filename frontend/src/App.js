@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import { appTheme } from './theme/appTheme';
 import { AuthProvider } from './context/AuthContext';
@@ -16,6 +16,14 @@ import Production from './pages/Production';
 import Intents from './pages/Intents';
 import IntentEditorPage from './pages/IntentEditorPage';
 import CompanyPage from './pages/CompanyPage';
+import BuyerPOs from './pages/BuyerPOs';
+import BuyerPOEditorPage from './pages/BuyerPOEditorPage';
+
+// Forces a full remount when navigating between different PO IDs (new vs edit)
+function BuyerPOEditorPageKeyed() {
+  const { id } = useParams();
+  return <BuyerPOEditorPage key={id} />;
+}
 
 function App() {
   return (
@@ -121,6 +129,26 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <CompanyPage />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/buyer-pos"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <BuyerPOs />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/buyer-pos/:id"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <BuyerPOEditorPageKeyed />
                   </Layout>
                 </PrivateRoute>
               }

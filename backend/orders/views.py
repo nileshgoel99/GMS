@@ -6,7 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import ProformaInvoice, PlanningSheet, Intent
+from .models import ProformaInvoice, PlanningSheet, Intent, BuyerPO
 from .pdf import build_pi_pdf_bytes
 from .serializers import (
     ProformaInvoiceSerializer,
@@ -15,6 +15,8 @@ from .serializers import (
     IntentSerializer,
     IntentListSerializer,
     IntentAttachmentSerializer,
+    BuyerPOSerializer,
+    BuyerPOListSerializer,
 )
 
 
@@ -121,3 +123,41 @@ class IntentViewSet(viewsets.ModelViewSet):
             serializer.save(intent=intent, uploaded_by=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class BuyerPOViewSet(viewsets.ModelViewSet):
+    queryset = BuyerPO.objects.all().select_related('customer', 'pi', 'created_by').prefetch_related('lines')
+    serializer_class = BuyerPOSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'customer', 'currency']
+    search_fields = ['po_number', 'buyer_name', 'buyer_contact', 'lines__item_code', 'lines__item_name']
+    ordering_fields = ['po_date', 'created_at', 'po_number', 'total_value']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return BuyerPOListSerializer
+        return BuyerPOSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='item-catalogue')
+    def item_catalogue(self, request):
+        """Return distinct item codes with their most recent item_name and fabric."""
+        from .models import BuyerPOLine
+        from django.db.models import Max
+
+        latest_ids = (
+            BuyerPOLine.objects
+            .exclude(item_code='')
+            .values('item_code')
+            .annotate(latest_id=Max('id'))
+            .values_list('latest_id', flat=True)
+        )
+        items = (
+            BuyerPOLine.objects
+            .filter(id__in=latest_ids)
+            .values('item_code', 'item_name', 'fabric')
+            .order_by('item_code')
+        )
+        return Response(list(items))

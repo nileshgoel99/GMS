@@ -4,11 +4,11 @@ from django.db import models
 
 class Customer(models.Model):
     """
-    Customer / buyer master record.
-    Canonical party for orders and proforma invoices (PI).
+    Customer / buyer master record (one row per legal entity / subsidiary).
+    Multiple records may share the same customer_code (group / parent account).
     """
 
-    customer_code = models.CharField(max_length=40, unique=True, db_index=True)
+    customer_code = models.CharField(max_length=40, db_index=True)
     company_legal_name = models.CharField(max_length=255)
     trading_name = models.CharField(max_length=255, blank=True, null=True)
 
@@ -20,6 +20,7 @@ class Customer(models.Model):
     address_line1 = models.TextField(blank=True, null=True)
     address_line2 = models.TextField(blank=True, null=True)
 
+    # Denormalized from primary contact for list views / PI export
     primary_email = models.EmailField(blank=True, null=True)
     secondary_email = models.EmailField(blank=True, null=True)
     phone = models.CharField(max_length=40, blank=True, null=True)
@@ -63,4 +64,24 @@ class Customer(models.Model):
 
     @property
     def display_name(self):
-        return self.trading_name or self.company_legal_name
+        return self.company_legal_name
+
+
+class CustomerContact(models.Model):
+    """People at the customer — one company can have many contacts."""
+
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='contacts')
+    name = models.CharField(max_length=120)
+    email = models.EmailField(blank=True, default='')
+    phone = models.CharField(max_length=40, blank=True, default='')
+    designation = models.CharField(max_length=120, blank=True, default='')
+    is_primary = models.BooleanField(default=False)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-is_primary', 'sort_order', 'id']
+        verbose_name = 'Customer contact'
+        verbose_name_plural = 'Customer contacts'
+
+    def __str__(self):
+        return f"{self.name} ({self.customer.customer_code})"

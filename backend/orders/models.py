@@ -287,6 +287,108 @@ class IntentLine(models.Model):
         return f"{self.intent.indent_number} {self.sheet.label} L{self.line_number}: {self.material_description}"
 
 
+class BuyerPO(models.Model):
+    """
+    Purchase Order received FROM a buyer (e.g. COFRA PO 1112673).
+    Captures all header metadata and links to line items.
+    """
+    STATUS_CHOICES = [
+        ('RECEIVED', 'Received'),
+        ('ACKNOWLEDGED', 'Acknowledged'),
+        ('IN_PRODUCTION', 'In Production'),
+        ('SHIPPED', 'Shipped'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+
+    po_number = models.CharField(max_length=100, unique=True, db_index=True)
+    po_date = models.DateField()
+
+    customer = models.ForeignKey(
+        'customers.Customer',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='buyer_pos',
+    )
+    buyer_name = models.CharField(max_length=200, blank=True, default='')
+    buyer_address = models.TextField(blank=True, default='')
+    buyer_contact = models.CharField(max_length=200, blank=True, default='', help_text='e.g. Mr. Himanshu Banka')
+    supplier_code = models.CharField(max_length=50, blank=True, default='', help_text="Buyer's supplier code for us")
+
+    currency = models.CharField(max_length=3, default='USD')
+
+    delivery_terms = models.CharField(max_length=200, blank=True, default='', help_text='e.g. FOB-FREE ON BOARD')
+    payment_terms = models.TextField(blank=True, default='', help_text='e.g. 60 DAYS FROM B/L DATE, D/A')
+    delivery_method = models.CharField(max_length=200, blank=True, default='', help_text='e.g. THROUGH CARRIER - BY SEA')
+    freight_terms = models.CharField(max_length=200, blank=True, default='')
+    packaging_terms = models.CharField(max_length=200, blank=True, default='')
+
+    ex_factory_date = models.DateField(null=True, blank=True)
+
+    total_qty = models.PositiveIntegerField(default=0)
+    total_value = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RECEIVED')
+    notes = models.TextField(blank=True, default='')
+
+    pi = models.ForeignKey(
+        ProformaInvoice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='buyer_pos',
+        help_text='Our internal PI linked to this buyer PO',
+    )
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_buyer_pos')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-po_date', '-created_at']
+        verbose_name = 'Buyer PO'
+        verbose_name_plural = 'Buyer POs'
+
+    def __str__(self):
+        return f"PO {self.po_number} — {self.buyer_name or 'Unknown buyer'}"
+
+
+class BuyerPOLine(models.Model):
+    """One garment style / colour on a buyer PO."""
+
+    po = models.ForeignKey(BuyerPO, on_delete=models.CASCADE, related_name='lines')
+    line_number = models.PositiveIntegerField(default=1)
+
+    item_code = models.CharField(max_length=100, blank=True, default='', help_text='e.g. V181-0-02A')
+    item_name = models.CharField(max_length=300, help_text='e.g. TROUSERS "RABAT"')
+    fabric = models.CharField(max_length=500, blank=True, default='', help_text='e.g. 65% polyester/35% cotton 245gr./sqm')
+    color = models.CharField(max_length=120, blank=True, default='')
+
+    customer_ref = models.CharField(max_length=200, blank=True, default='', help_text='OdL No / buyer line ref')
+    agreement_no = models.CharField(max_length=200, blank=True, default='')
+
+    size_breakdown = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='[{"size": "S", "qty": 350}, ...] — flexible sizes per party',
+    )
+    quantity = models.PositiveIntegerField(default=0, help_text='Total pieces (auto-sum from sizes or manual)')
+    uom = models.CharField(max_length=20, default='PCS', blank=True, help_text='Unit of measure, e.g. PCS, DZ')
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    discount = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text='Discount % (0–100)')
+    delivery_date = models.DateField(null=True, blank=True)
+    line_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    notes = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['po', 'line_number']
+        unique_together = [('po', 'line_number')]
+
+    def __str__(self):
+        return f"PO {self.po.po_number} L{self.line_number}: {self.item_name}"
+
+
 class IntentAttachment(models.Model):
     intent = models.ForeignKey(Intent, on_delete=models.CASCADE, related_name='attachments')
     file = models.FileField(upload_to='intent_attachments/%Y/%m/')

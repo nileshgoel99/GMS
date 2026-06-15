@@ -14,6 +14,8 @@ from .models import (
     IntentSheet,
     IntentLine,
     IntentAttachment,
+    BuyerPO,
+    BuyerPOLine,
 )
 
 
@@ -449,4 +451,105 @@ class IntentSerializer(serializers.ModelSerializer):
                 for j, line_data in enumerate(lines, start=1):
                     _create_intent_line_from_dict(sh, instance, line_data, j)
             _rollup_intent_header_from_sheets(instance)
+        return instance
+
+
+# ---------------------------------------------------------------------------
+# Buyer PO serializers
+# ---------------------------------------------------------------------------
+
+class BuyerPOLineSerializer(serializers.ModelSerializer):
+    line_amount = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, allow_null=True)
+
+    class Meta:
+        model = BuyerPOLine
+        fields = [
+            'id', 'line_number', 'item_code', 'item_name', 'fabric', 'color',
+            'customer_ref', 'agreement_no', 'size_breakdown', 'quantity',
+            'uom', 'unit_price', 'discount', 'delivery_date', 'line_amount', 'notes',
+        ]
+        read_only_fields = ('id',)
+
+
+class BuyerPOListSerializer(serializers.ModelSerializer):
+    customer_name = serializers.SerializerMethodField()
+    lines_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BuyerPO
+        fields = [
+            'id', 'po_number', 'po_date', 'buyer_name', 'buyer_contact',
+            'customer', 'customer_name', 'currency', 'status',
+            'ex_factory_date', 'total_qty', 'total_value', 'lines_count',
+            'created_at',
+        ]
+
+    def get_customer_name(self, obj):
+        return obj.customer.company_legal_name if obj.customer else None
+
+    def get_lines_count(self, obj):
+        return obj.lines.count()
+
+
+class BuyerPOSerializer(serializers.ModelSerializer):
+    lines = BuyerPOLineSerializer(many=True)
+    customer_name = serializers.SerializerMethodField()
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+
+    class Meta:
+        model = BuyerPO
+        fields = [
+            'id', 'po_number', 'po_date',
+            'customer', 'customer_name', 'buyer_name', 'buyer_address',
+            'buyer_contact', 'supplier_code', 'currency',
+            'delivery_terms', 'payment_terms', 'delivery_method',
+            'freight_terms', 'packaging_terms', 'ex_factory_date',
+            'total_qty', 'total_value', 'status', 'notes', 'pi',
+            'lines', 'created_by', 'created_by_name', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ('id', 'created_by', 'created_at', 'updated_at')
+
+    def get_customer_name(self, obj):
+        return obj.customer.company_legal_name if obj.customer else None
+
+    def _save_lines(self, po, lines_data):
+        po.lines.all().delete()
+        for i, line_data in enumerate(lines_data, start=1):
+            line_data.pop('id', None)
+            # Auto-sum quantity from size_breakdown if provided
+            sizes = line_data.get('size_breakdown') or []
+            if sizes:
+                line_data['quantity'] = sum(s.get('qty', 0) for s in sizes)
+            # Auto-compute line_amount (apply discount if present)
+            qty = line_data.get('quantity', 0)
+            price = line_data.get('unit_price')
+            disc = line_data.get('discount')
+            if price is not None and qty:
+                gross = Decimal(str(price)) * qty
+                if disc is not None:
+                    gross = gross * (1 - Decimal(str(disc)) / 100)
+                line_data['line_amount'] = gross.quantize(Decimal('0.01'))
+            BuyerPOLine.objects.create(po=po, line_number=i, **line_data)
+
+    def _update_totals(self, po):
+        agg = po.lines.aggregate(total_qty=Sum('quantity'), total_value=Sum('line_amount'))
+        po.total_qty = agg['total_qty'] or 0
+        po.total_value = agg['total_value']
+        po.save(update_fields=['total_qty', 'total_value'])
+
+    def create(self, validated_data):
+        lines_data = validated_data.pop('lines', [])
+        po = BuyerPO.objects.create(**validated_data)
+        self._save_lines(po, lines_data)
+        self._update_totals(po)
+        return po
+
+    def update(self, instance, validated_data):
+        lines_data = validated_data.pop('lines', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if lines_data is not None:
+            self._save_lines(instance, lines_data)
+        self._update_totals(instance)
         return instance

@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from .models import Customer
+from .models import Customer, CustomerContact
+
+
+class CustomerContactInline(admin.TabularInline):
+    model = CustomerContact
+    extra = 1
+    fields = ['name', 'designation', 'email', 'phone', 'is_primary', 'sort_order']
 
 
 @admin.register(Customer)
@@ -16,5 +22,6 @@ class CustomerAdmin(admin.ModelAdmin):
         'created_at',
     ]
     list_filter = ['country', 'is_active', 'default_currency']
-    search_fields = ['customer_code', 'company_legal_name', 'trading_name', 'primary_email', 'tax_id_vat']
+    search_fields = ['customer_code', 'company_legal_name', 'primary_email', 'tax_id_vat']
     readonly_fields = ['created_at', 'updated_at']
+    inlines = [CustomerContactInline]

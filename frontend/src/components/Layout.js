@@ -34,6 +34,7 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
   Business as BusinessIcon,
+  ReceiptLong as ReceiptLongIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -51,7 +52,8 @@ const navGroups = [
     id: 'commercial',
     label: 'Merchandising & sales',
     items: [
-      { text: 'Buyers & accounts', icon: <PublicIcon />, path: '/customers' },
+      { text: 'Buyers', icon: <PublicIcon />, path: '/customers' },
+      { text: 'Buyer POs', icon: <ReceiptLongIcon />, path: '/buyer-pos' },
       { text: 'Proforma invoices', icon: <AssignmentIcon />, path: '/orders' },
     ],
   },
@@ -82,7 +84,7 @@ const navGroups = [
 
 const routeMeta = {
   '/': { title: 'Plant dashboard' },
-  '/customers': { title: 'Buyers & accounts' },
+  '/customers': { title: 'Buyers' },
   '/orders': { title: 'Proforma invoices' },
   '/intents': { title: 'Intents' },
   '/inventory': { title: 'Inventory' },

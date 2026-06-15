@@ -69,6 +69,8 @@ export const companyAPI = {
 export const customersAPI = {
   getAll: (params) => api.get('/customers/', { params }),
   getById: (id) => api.get(`/customers/${id}/`),
+  lookupCode: (code, excludeId) =>
+    api.get('/customers/lookup-code/', { params: { code, exclude_id: excludeId || undefined } }),
   create: (data) => api.post('/customers/', data),
   update: (id, data) => api.put(`/customers/${id}/`, data),
   delete: (id) => api.delete(`/customers/${id}/`),
@@ -92,6 +94,13 @@ export const ordersAPI = {
   updateIntent: (id, data) => api.put(`/orders/intents/${id}/`, data),
   deleteIntent: (id) => api.delete(`/orders/intents/${id}/`),
   uploadIntentAttachment: (id, formData) => api.post(`/orders/intents/${id}/attachments/`, formData),
+
+  getBuyerPOs: (params) => api.get('/orders/buyer-pos/', { params }),
+  getBuyerPO: (id) => api.get(`/orders/buyer-pos/${id}/`),
+  createBuyerPO: (data) => api.post('/orders/buyer-pos/', data),
+  updateBuyerPO: (id, data) => api.put(`/orders/buyer-pos/${id}/`, data),
+  deleteBuyerPO: (id) => api.delete(`/orders/buyer-pos/${id}/`),
+  getItemCatalogue: () => api.get('/orders/buyer-pos/item-catalogue/'),
 };
 
 export const inventoryAPI = {

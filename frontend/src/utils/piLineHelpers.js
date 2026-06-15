@@ -65,3 +65,15 @@ export const mergeQuickAndExtra = (quick, extra) => {
   });
   return out;
 };
+
+/** When sizes are entered, keep line total in sync automatically. */
+export const patchLineWithAutoQty = (line, patch) => {
+  const next = { ...line, ...patch };
+  if ('size_breakdown' in patch) {
+    const sum = sumSizeQty(next.size_breakdown);
+    if (sum > 0) {
+      next.quantity_pcs = String(sum);
+    }
+  }
+  return next;
+};

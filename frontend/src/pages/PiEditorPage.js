@@ -28,7 +28,7 @@ import { format } from 'date-fns';
 import { ordersAPI, customersAPI } from '../services/api';
 import { formatDispatchFromIso } from '../utils/formatDispatchDate';
 import { usdAmountToWords } from '../utils/numberToWordsUsd';
-import { lineValue, sumSizeQty } from '../utils/piLineHelpers';
+import { lineValue, patchLineWithAutoQty } from '../utils/piLineHelpers';
 import PiLineItemsSection from '../components/pi/PiLineItemsSection';
 
 const DEFAULT_PAYMENT =
@@ -290,22 +290,14 @@ const PiEditorPage = () => {
   );
 
   const updateLine = (index, patch) => {
-    setPiLines((rows) => rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+    setPiLines((rows) =>
+      rows.map((r, i) => (i === index ? patchLineWithAutoQty(r, patch) : r)),
+    );
   };
 
   const addLine = () => setPiLines((rows) => [...rows, emptyLine()]);
   const removeLine = (index) => {
     setPiLines((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)));
-  };
-
-  const moveLine = (index, delta) => {
-    setPiLines((rows) => {
-      const j = index + delta;
-      if (j < 0 || j >= rows.length) return rows;
-      const next = [...rows];
-      [next[index], next[j]] = [next[j], next[index]];
-      return next;
-    });
   };
 
   const duplicateLine = (index) => {
@@ -319,41 +311,6 @@ const PiEditorPage = () => {
       };
       return [...rows.slice(0, index + 1), copy, ...rows.slice(index + 1)];
     });
-  };
-
-  const addSizeRow = (lineIndex) => {
-    setPiLines((rows) =>
-      rows.map((r, i) =>
-        i === lineIndex ? { ...r, size_breakdown: [...(r.size_breakdown || []), { size: '', qty: '' }] } : r,
-      ),
-    );
-  };
-
-  const updateSizeRow = (lineIndex, sizeIndex, patch) => {
-    setPiLines((rows) =>
-      rows.map((r, i) => {
-        if (i !== lineIndex) return r;
-        const sb = [...(r.size_breakdown || [])];
-        sb[sizeIndex] = { ...sb[sizeIndex], ...patch };
-        return { ...r, size_breakdown: sb };
-      }),
-    );
-  };
-
-  const removeSizeRow = (lineIndex, sizeIndex) => {
-    setPiLines((rows) =>
-      rows.map((r, i) => {
-        if (i !== lineIndex) return r;
-        const sb = (r.size_breakdown || []).filter((_, j) => j !== sizeIndex);
-        return { ...r, size_breakdown: sb };
-      }),
-    );
-  };
-
-  const syncQtyFromSizes = (lineIndex) => {
-    setPiLines((rows) =>
-      rows.map((r, i) => (i === lineIndex ? { ...r, quantity_pcs: String(sumSizeQty(r.size_breakdown)) } : r)),
-    );
   };
 
   const applyDispatchFromDelivery = () => {
@@ -781,12 +738,7 @@ const PiEditorPage = () => {
           onAddLine={addLine}
           onRemoveLine={removeLine}
           onLineChange={updateLine}
-          onMoveLine={moveLine}
           onDuplicateLine={duplicateLine}
-          onAddSizeRow={addSizeRow}
-          onUpdateSizeRow={updateSizeRow}
-          onRemoveSizeRow={removeSizeRow}
-          onSyncQtyFromSizes={syncQtyFromSizes}
           accent={theme.palette.info.main}
         />
 
