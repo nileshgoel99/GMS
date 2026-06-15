@@ -64,6 +64,10 @@ export const authAPI = {
 export const companyAPI = {
   getProfile: () => api.get('/company/profile/'),
   updateProfile: (data) => api.patch('/company/profile/', data),
+  getCurrencyBanks: () => api.get('/company/currency-banks/'),
+  createCurrencyBank: (data) => api.post('/company/currency-banks/', data),
+  updateCurrencyBank: (id, data) => api.put(`/company/currency-banks/${id}/`, data),
+  deleteCurrencyBank: (id) => api.delete(`/company/currency-banks/${id}/`),
 };
 
 export const customersAPI = {
@@ -109,6 +113,11 @@ export const ordersAPI = {
   removePoDocument: (id) => api.delete(`/orders/buyer-pos/${id}/remove-document/`),
   getNextPiRef: () => api.get('/orders/buyer-pos/next-pi-ref/'),
   savePiRef: (id, piRef) => api.patch(`/orders/buyer-pos/${id}/save-pi-ref/`, { pi_ref: piRef }),
+  createPiFromBuyerPo: (id, data) => api.post(`/orders/buyer-pos/${id}/create-pi/`, data),
+
+  getPIs: (params) => api.get('/orders/pi/', { params }),
+  getPI: (id) => api.get(`/orders/pi/${id}/`),
+  deletePI: (id) => api.delete(`/orders/pi/${id}/`),
 };
 
 export const inventoryAPI = {

@@ -1,6 +1,13 @@
 from rest_framework import serializers
 
-from .models import CompanyProfile
+from .models import CompanyProfile, CompanyCurrencyBank
+
+
+class CompanyCurrencyBankSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompanyCurrencyBank
+        fields = ['id', 'currency', 'intermediary_bank_details', 'notes', 'updated_at']
+        read_only_fields = ('id', 'updated_at')
 
 
 class CompanyProfileSerializer(serializers.ModelSerializer):
@@ -27,6 +34,7 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             'logo',
             'logo_url',
             'pi_ref_prefix',
+            'our_bank_details',
             'watermark_text',
             'pdf_footer_note',
             'updated_at',

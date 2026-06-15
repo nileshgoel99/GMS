@@ -90,6 +90,11 @@ const emptyForm = () => ({
   ex_factory_date: '',
   status: 'RECEIVED',
   notes: '',
+  inco_terms: '',
+  port_of_loading: '',
+  port_of_discharge: '',
+  pi_ref: '',
+  pi: null,
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -814,6 +819,11 @@ export default function BuyerPOEditorPage() {
           ex_factory_date: po.ex_factory_date || '',
           status:          po.status || 'RECEIVED',
           notes:           po.notes || '',
+          inco_terms:      po.inco_terms || '',
+          port_of_loading: po.port_of_loading || '',
+          port_of_discharge: po.port_of_discharge || '',
+          pi_ref:          po.pi_ref || '',
+          pi:              po.pi || null,
         });
         setPoDocument(po.po_document || null);
         setLines(
@@ -1044,14 +1054,25 @@ export default function BuyerPOEditorPage() {
               />
             )}
             {!isCreate && (
-              <Button
-                variant="outlined"
-                startIcon={<ReceiptLong />}
-                onClick={() => navigate(`/buyer-pos/${numericId}/generate-pi`)}
-                sx={{ borderRadius: 2, px: 2.5, fontWeight: 700, textTransform: 'none' }}
-              >
-                Generate PI
-              </Button>
+              formData.pi ? (
+                <Button
+                  variant="outlined"
+                  startIcon={<ReceiptLong />}
+                  onClick={() => navigate(`/orders/pi/${formData.pi}/view`)}
+                  sx={{ borderRadius: 2, px: 2.5, fontWeight: 700, textTransform: 'none', borderColor: '#0f766e', color: '#0f766e' }}
+                >
+                  View PI
+                </Button>
+              ) : (
+                <Button
+                  variant="outlined"
+                  startIcon={<ReceiptLong />}
+                  onClick={() => navigate(`/buyer-pos/${numericId}/generate-pi`)}
+                  sx={{ borderRadius: 2, px: 2.5, fontWeight: 700, textTransform: 'none' }}
+                >
+                  Generate PI
+                </Button>
+              )
             )}
             <Button
               variant="contained"
@@ -1332,10 +1353,31 @@ export default function BuyerPOEditorPage() {
               </Grid>
             </Grid>
 
-            <Divider sx={{ mb: 4, borderStyle: 'dashed' }} />
+            <Divider sx={{ mb: 3, borderStyle: 'dashed' }} />
+
+            <Typography sx={groupLabelSx}>Port & Inco Terms</Typography>
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12} sm={4}>
+                <TextField size="small" fullWidth label="Inco Terms"
+                  value={formData.inco_terms} onChange={(e) => setField('inco_terms', e.target.value)}
+                  placeholder="e.g. FOB NHAVA SHEVA" sx={fieldSx} />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField size="small" fullWidth label="Port of Loading"
+                  value={formData.port_of_loading} onChange={(e) => setField('port_of_loading', e.target.value)}
+                  placeholder="e.g. NHAVA SHEVA PORT" sx={fieldSx} />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField size="small" fullWidth label="Port of Discharge"
+                  value={formData.port_of_discharge} onChange={(e) => setField('port_of_discharge', e.target.value)}
+                  placeholder="e.g. KHIDIRPUR PORT" sx={fieldSx} />
+              </Grid>
+            </Grid>
+
+            <Divider sx={{ mb: 3, borderStyle: 'dashed' }} />
 
             <Typography sx={groupLabelSx}>Internal remarks</Typography>
-            <TextField size="small" fullWidth multiline minRows={2} maxRows={2} label="Internal notes"
+            <TextField size="small" fullWidth label="Internal notes"
               value={formData.notes} onChange={(e) => setField('notes', e.target.value)}
               placeholder="Any internal remarks about this PO (won't be printed)…" 
               sx={{ ...fieldSx, '& .MuiInputBase-root': { bgcolor: '#fcfcfc' } }} />
@@ -1472,29 +1514,37 @@ export default function BuyerPOEditorPage() {
         >
           {saving ? 'Saving…' : isCreate ? 'Create PO' : 'Save Changes'}
         </Button>
-        <Button
-          variant="contained"
-          size="large"
-          startIcon={<ReceiptLong />}
-          onClick={() => handleSave({ generatePI: true })}
-          disabled={saving || loading}
-          sx={{
-            py: 1.5,
-            px: 4,
-            borderRadius: 2,
-            fontWeight: 900,
-            fontSize: '1rem',
-            textTransform: 'none',
-            bgcolor: '#0f766e',
-            boxShadow: `0 4px 20px ${alpha('#0f766e', 0.5)}`,
-            '&:hover': {
-              bgcolor: '#0d6560',
-              boxShadow: `0 6px 24px ${alpha('#0f766e', 0.6)}`,
-            },
-          }}
-        >
-          {saving ? 'Saving…' : isCreate ? 'Create PO & Generate PI' : 'Save & Generate PI'}
-        </Button>
+        {!isCreate && formData.pi ? (
+          <Button
+            variant="contained"
+            size="large"
+            startIcon={<ReceiptLong />}
+            onClick={() => navigate(`/orders/pi/${formData.pi}/view`)}
+            disabled={saving || loading}
+            sx={{
+              py: 1.5, px: 4, borderRadius: 2, fontWeight: 900, fontSize: '1rem', textTransform: 'none',
+              bgcolor: '#0f766e', boxShadow: `0 4px 20px ${alpha('#0f766e', 0.5)}`,
+              '&:hover': { bgcolor: '#0d6560', boxShadow: `0 6px 24px ${alpha('#0f766e', 0.6)}` },
+            }}
+          >
+            View PI
+          </Button>
+        ) : (
+          <Button
+            variant="contained"
+            size="large"
+            startIcon={<ReceiptLong />}
+            onClick={() => handleSave({ generatePI: true })}
+            disabled={saving || loading}
+            sx={{
+              py: 1.5, px: 4, borderRadius: 2, fontWeight: 900, fontSize: '1rem', textTransform: 'none',
+              bgcolor: '#0f766e', boxShadow: `0 4px 20px ${alpha('#0f766e', 0.5)}`,
+              '&:hover': { bgcolor: '#0d6560', boxShadow: `0 6px 24px ${alpha('#0f766e', 0.6)}` },
+            }}
+          >
+            {saving ? 'Saving…' : isCreate ? 'Create PO & Generate PI' : 'Save & Generate PI'}
+          </Button>
+        )}
       </Box>
     </Box>
   );

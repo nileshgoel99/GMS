@@ -52,6 +52,8 @@ class ProformaInvoice(models.Model):
         help_text='e.g. 20% ADVANCE, REMAINING 80% AGAINST SHIPMENT DOCUMENTS',
     )
     port_of_discharge = models.CharField(max_length=400, blank=True, default='')
+    port_of_loading = models.CharField(max_length=400, blank=True, default='', help_text='e.g. NHAVA SHEVA PORT')
+    inco_terms = models.CharField(max_length=200, blank=True, default='', help_text='e.g. FOB NHAVA SHEVA')
     our_bank_details = models.TextField(blank=True, default='', help_text='OUR BANK block on PI')
     intermediary_bank_details = models.TextField(blank=True, default='', help_text='INTERMEDIARY BANK block on PI')
     seller_signatory_for = models.CharField(max_length=200, blank=True, default='CID TRADING LTD')
@@ -83,6 +85,7 @@ class ProformaInvoiceLine(models.Model):
     pi = models.ForeignKey(ProformaInvoice, on_delete=models.CASCADE, related_name='lines')
     line_number = models.PositiveIntegerField(default=1)
 
+    item_code = models.CharField(max_length=100, blank=True, default='', help_text='Product code / style ref, e.g. V181-0-02A')
     item_name = models.CharField(max_length=300, help_text='Garment / style name')
     description = models.TextField(
         blank=True,
@@ -323,6 +326,9 @@ class BuyerPO(models.Model):
     delivery_method = models.CharField(max_length=200, blank=True, default='', help_text='e.g. THROUGH CARRIER - BY SEA')
     freight_terms = models.CharField(max_length=200, blank=True, default='')
     packaging_terms = models.CharField(max_length=200, blank=True, default='')
+    inco_terms = models.CharField(max_length=200, blank=True, default='', help_text='e.g. FOB NHAVA SHEVA')
+    port_of_loading = models.CharField(max_length=400, blank=True, default='', help_text='e.g. NHAVA SHEVA PORT')
+    port_of_discharge = models.CharField(max_length=400, blank=True, default='', help_text='e.g. KHIDIRPUR PORT')
 
     ex_factory_date = models.DateField(null=True, blank=True)
 

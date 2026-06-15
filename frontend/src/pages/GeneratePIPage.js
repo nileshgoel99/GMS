@@ -41,6 +41,7 @@ function groupLines(lines) {
     const key = (line.item_name || '').trim().toUpperCase();
     if (!map.has(key)) {
       map.set(key, {
+        item_code: line.item_code || '',
         item_name: line.item_name,
         fabric: line.fabric || '',
         color: line.color || '',
@@ -112,11 +113,13 @@ export default function GeneratePIPage() {
   const [editing, setEditing] = useState(true); // true = edit form; false = preview only
 
   // Editable PI fields
-  const [piDate, setPiDate]       = useState(new Date().toISOString().slice(0, 10));
-  const [piRef, setPiRef]         = useState('');
-  const [portOfDischarge, setPort] = useState('');
-  const [ourBank, setOurBank]     = useState('');
-  const [interBank, setInterBank] = useState('');
+  const [piDate, setPiDate]             = useState(new Date().toISOString().slice(0, 10));
+  const [piRef, setPiRef]               = useState('');
+  const [portOfDischarge, setPort]      = useState('');
+  const [portOfLoading, setPortLoading] = useState('');
+  const [incoTerms, setIncoTerms]       = useState('');
+  const [ourBank, setOurBank]           = useState('');
+  const [interBank, setInterBank]       = useState('');
   const [paymentTerms, setPaymentTerms] = useState('');
 
   // Editable grouped items (user can adjust unit price per group)
@@ -135,19 +138,27 @@ export default function GeneratePIPage() {
     (async () => {
       setLoading(true);
       try {
-        const [poRes, coRes, refRes] = await Promise.all([
+        const [poRes, coRes, refRes, banksRes] = await Promise.all([
           ordersAPI.getBuyerPO(id),
           companyAPI.getProfile(),
           ordersAPI.getNextPiRef(),
+          companyAPI.getCurrencyBanks(),
         ]);
         const poData = poRes.data;
         const coData = coRes.data;
+        const banks = banksRes.data.results || banksRes.data;
+        const currency = (poData.currency || 'USD').toUpperCase();
+        const matchedBank = banks.find((b) => b.currency.toUpperCase() === currency);
+
         setPo(poData);
         setCompany(coData);
         setPaymentTerms(poData.payment_terms || '');
-        setPort(localStorage.getItem('pi_port') || '');
-        setOurBank(localStorage.getItem('pi_our_bank') || '');
-        setInterBank(localStorage.getItem('pi_inter_bank') || '');
+        setPort(poData.port_of_discharge || localStorage.getItem('pi_port') || '');
+        setPortLoading(poData.port_of_loading || localStorage.getItem('pi_port_loading') || '');
+        setIncoTerms(poData.inco_terms || poData.delivery_terms || localStorage.getItem('pi_inco_terms') || '');
+        // Our bank: from company profile; intermediary: from per-currency bank
+        setOurBank(coData.our_bank_details || localStorage.getItem('pi_our_bank') || '');
+        setInterBank(matchedBank?.intermediary_bank_details || localStorage.getItem('pi_inter_bank') || '');
         // Use existing pi_ref if already generated, otherwise use next available
         setPiRef(poData.pi_ref || refRes.data.pi_ref || '');
         setPiLines(groupLines(poData.lines));
@@ -169,20 +180,51 @@ export default function GeneratePIPage() {
   const totalQty = piLines.reduce((s, l) => s + (l.quantity || 0), 0);
   const totalAmt = piLines.reduce((s, l) => s + (l.line_amount || 0), 0);
 
+  const [confirming, setConfirming] = useState(false);
+
   const handleConfirm = async () => {
-    // Persist PI ref to the PO so seq counter stays accurate
+    setConfirming(true);
     try {
-      if (piRef && (!po.pi_ref || po.pi_ref !== piRef)) {
-        await ordersAPI.savePiRef(id, piRef);
-      }
+      // Save bank/port/inco to localStorage for next time
+      localStorage.setItem('pi_port', portOfDischarge);
+      localStorage.setItem('pi_port_loading', portOfLoading);
+      localStorage.setItem('pi_inco_terms', incoTerms);
+      localStorage.setItem('pi_our_bank', ourBank);
+      localStorage.setItem('pi_inter_bank', interBank);
+
+      const disc = (line) => line.discount ? (1 - line.discount / 100) : 1;
+
+      const res = await ordersAPI.createPiFromBuyerPo(id, {
+        pi_ref:                   piRef,
+        pi_date:                  piDate,
+        port_of_discharge:        portOfDischarge,
+        port_of_loading:          portOfLoading,
+        inco_terms:               incoTerms,
+        payment_terms:            paymentTerms,
+        our_bank_details:         ourBank,
+        intermediary_bank_details: interBank,
+        date_of_dispatch_display: po.ex_factory_date ? `${ordinalDate(po.ex_factory_date)} (EX-FACTORY DATE)` : '',
+        lines: piLines.map((line) => ({
+          item_code:      line.item_code,
+          item_name:      line.item_name,
+          fabric:         line.fabric,
+          color:          line.color,
+          sizes:          line.sizes,
+          quantity:       line.quantity,
+          unit_price:     line.unit_price,
+          line_amount:    +(line.unit_price * disc(line) * line.quantity).toFixed(3),
+        })),
+      });
+
+      // Navigate to the saved PI view
+      navigate(`/orders/pi/${res.data.id}/view`, { replace: true });
     } catch (e) {
-      console.warn('Could not save PI ref:', e.message);
+      console.error(e);
+      const msg = e.response?.data ? JSON.stringify(e.response.data, null, 2) : e.message;
+      alert('Error saving PI:\n' + msg);
+    } finally {
+      setConfirming(false);
     }
-    // Save bank/port to localStorage for next time
-    localStorage.setItem('pi_port', portOfDischarge);
-    localStorage.setItem('pi_our_bank', ourBank);
-    localStorage.setItem('pi_inter_bank', interBank);
-    setEditing(false);
   };
 
   const handlePrint = useCallback(() => {
@@ -285,22 +327,9 @@ export default function GeneratePIPage() {
                 <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', textAlign: 'center', verticalAlign: 'top', fontFamily: 'inherit' }}>{i + 1}.</Box>
                 <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', fontWeight: 700, verticalAlign: 'top', fontFamily: 'inherit' }}>
                   {line.item_name}
-                  {line.color && (
-                    <Box component="span" sx={{ display: 'block', mt: '6px' }}>
-                      <Box component="span" sx={{
-                        display: 'inline-block',
-                        px: '6px', py: '2px',
-                        border: '1px solid #666',
-                        borderRadius: '3px',
-                        fontSize: '8.5pt',
-                        fontStyle: 'italic',
-                        fontWeight: 600,
-                        color: '#222',
-                        letterSpacing: '0.03em',
-                        background: '#f0f0f0',
-                      }}>
-                        Colour: {line.color}
-                      </Box>
+                  {line.item_code && (
+                    <Box component="span" sx={{ display: 'block', mt: '4px', fontWeight: 400, fontSize: '8.5pt', color: '#444', letterSpacing: '0.02em' }}>
+                      Code: <Box component="span" sx={{ fontWeight: 700, color: '#111' }}>{line.item_code}</Box>
                     </Box>
                   )}
                 </Box>
@@ -308,6 +337,18 @@ export default function GeneratePIPage() {
                   {line.fabric && (
                     <Box component="span" sx={{ display: 'block', fontWeight: 700, fontSize: '9.5pt', mb: '4px' }}>
                       {line.fabric}
+                    </Box>
+                  )}
+                  {line.color && (
+                    <Box component="span" sx={{ display: 'inline-block', mb: '5px' }}>
+                      <Box component="span" sx={{
+                        display: 'inline-block', px: '6px', py: '2px',
+                        border: '1px solid #666', borderRadius: '3px',
+                        fontSize: '8.5pt', fontStyle: 'italic', fontWeight: 600,
+                        color: '#222', background: '#f0f0f0',
+                      }}>
+                        Colour: {line.color}
+                      </Box>
                     </Box>
                   )}
                   <Box component="span" sx={{ display: 'block', color: '#333', lineHeight: 1.5 }}>
@@ -342,6 +383,8 @@ export default function GeneratePIPage() {
           ['VALUE IN WORD',      amountInWords(totalAmt, po?.currency || 'USD')],
           ['DATE OF DISPATCH',   po?.ex_factory_date ? `${ordinalDate(po.ex_factory_date)} (EX-FACTORY DATE)` : ''],
           ['PAYMENT TERMS',      paymentTerms],
+          ['INCO TERMS',         incoTerms],
+          ['PORT OF LOADING',    portOfLoading],
           ['PORT OF DISCHARGE',  portOfDischarge],
         ].filter(([, v]) => v).map(([label, val]) => (
           <Box key={label} sx={{ display: 'flex', gap: 1, mb: 0.4, fontFamily: 'inherit' }}>
@@ -408,8 +451,9 @@ export default function GeneratePIPage() {
         )}
         {editing ? (
           <Button startIcon={<CheckCircle />} variant="contained" onClick={handleConfirm}
+            disabled={confirming}
             sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 3 }}>
-            Confirm &amp; Preview
+            {confirming ? 'Saving PI…' : 'Confirm & Save PI'}
           </Button>
         ) : (
           <Button startIcon={<Print />} variant="contained" onClick={handlePrint}
@@ -434,6 +478,12 @@ export default function GeneratePIPage() {
                 <TextField size="small" fullWidth label="PI Ref No."
                   value={piRef} onChange={(e) => setPiRef(e.target.value)}
                   placeholder="e.g. JBI/26-27/11" />
+                <TextField size="small" fullWidth label="Inco Terms"
+                  value={incoTerms} onChange={(e) => setIncoTerms(e.target.value)}
+                  placeholder="e.g. FOB NHAVA SHEVA" />
+                <TextField size="small" fullWidth label="Port of Loading"
+                  value={portOfLoading} onChange={(e) => setPortLoading(e.target.value)}
+                  placeholder="e.g. NHAVA SHEVA PORT" />
                 <TextField size="small" fullWidth label="Port of Discharge"
                   value={portOfDischarge} onChange={(e) => setPort(e.target.value)}
                   placeholder="e.g. KHIDIRPUR PORT" />

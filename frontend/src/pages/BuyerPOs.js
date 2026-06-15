@@ -48,7 +48,7 @@ const fmtMoney = (n, ccy = 'USD') =>
     : `${ccy} ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // ── Detail dialog (read-only) ─────────────────────────────────────────────────
-function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI }) {
+export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI }) {
   const theme = useTheme();
   const [po, setPo] = useState(null);
   const [showBuyer, setShowBuyer] = useState(false);
@@ -337,7 +337,7 @@ function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI }) {
           onClick={onGeneratePI}
           sx={{ fontWeight: 700, borderRadius: 1.5, bgcolor: '#0f766e', '&:hover': { bgcolor: '#0d6560' } }}
         >
-          Generate PI
+          {po?.pi_ref ? 'View PI' : 'Generate PI'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -353,6 +353,7 @@ export default function BuyerPOs() {
   const [loading,   setLoading]   = useState(true);
   const [search,    setSearch]    = useState('');
   const [detailId,  setDetailId]  = useState(null);
+  const [detailRow, setDetailRow] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -590,7 +591,7 @@ export default function BuyerPOs() {
       renderCell: (p) => cell('right',
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
           <Tooltip title="View details">
-            <IconButton size="small" onClick={() => setDetailId(p.row.id)}
+            <IconButton size="small" onClick={() => { setDetailId(p.row.id); setDetailRow(p.row); }}
               sx={{ color: slate[400], '&:hover': { color: theme.palette.primary.main, bgcolor: alpha(theme.palette.primary.main, 0.08) } }}>
               <Visibility sx={{ fontSize: 18 }} />
             </IconButton>
@@ -655,7 +656,7 @@ export default function BuyerPOs() {
           disableRowSelectionOnClick
           rowHeight={64}
           columnHeaderHeight={48}
-          onRowDoubleClick={(p) => setDetailId(p.row.id)}
+          onRowDoubleClick={(p) => { setDetailId(p.row.id); setDetailRow(p.row); }}
           sx={{ ...gridSx, height: '100%', border: 'none' }}
         />
       </DataGridShell>
@@ -666,7 +667,14 @@ export default function BuyerPOs() {
           poId={detailId}
           onClose={() => setDetailId(null)}
           onEdit={() => { setDetailId(null); navigate(`/buyer-pos/${detailId}`); }}
-          onGeneratePI={() => { setDetailId(null); navigate(`/buyer-pos/${detailId}/generate-pi`); }}
+          onGeneratePI={() => {
+            setDetailId(null);
+            if (detailRow?.pi_id) {
+              navigate(`/orders/pi/${detailRow.pi_id}/view`);
+            } else {
+              navigate(`/buyer-pos/${detailId}/generate-pi`);
+            }
+          }}
         />
       )}
     </Box>

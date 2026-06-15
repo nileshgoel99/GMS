@@ -22,7 +22,7 @@ from .serializers import (
 
 class ProformaInvoiceViewSet(viewsets.ModelViewSet):
     queryset = ProformaInvoice.objects.all().select_related('created_by', 'customer').prefetch_related(
-        'planning_sheet', 'intents', 'lines',
+        'planning_sheet', 'intents', 'lines', 'buyer_pos',
     )
     serializer_class = ProformaInvoiceSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -191,6 +191,81 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
         if po.po_document:
             po.po_document.delete(save=True)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'], url_path='create-pi')
+    def create_pi(self, request, pk=None):
+        """
+        Build and save a ProformaInvoice from the confirmed PI data.
+        Expects: { pi_ref, pi_date, port_of_discharge, payment_terms,
+                   our_bank_details, intermediary_bank_details,
+                   lines: [{item_name, material, color, size_breakdown,
+                             quantity_pcs, unit_price_usd, line_value_usd}] }
+        """
+        from .models import ProformaInvoice
+        from .serializers import ProformaInvoiceSerializer
+        from datetime import date
+
+        po = self.get_object()
+        data = request.data
+
+        pi_ref = data.get('pi_ref', '').strip()
+        if not pi_ref:
+            return Response({'detail': 'pi_ref is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # If a PI was already linked to this PO, delete it first so we regenerate cleanly
+        if po.pi_id:
+            try:
+                old_pi = ProformaInvoice.objects.get(pk=po.pi_id)
+                old_pi.delete()
+            except ProformaInvoice.DoesNotExist:
+                pass
+
+        lines_data = data.get('lines', [])
+        pi_date_str = data.get('pi_date') or date.today().isoformat()
+
+        payload = {
+            'pi_number':                   pi_ref,
+            'customer':                    po.customer_id,
+            'buyer_po_number':             po.po_number,
+            'client_name':                 po.buyer_name or '',
+            'client_address':              po.buyer_address or '',
+            'order_date':                  pi_date_str,
+            'delivery_date':               po.ex_factory_date.isoformat() if po.ex_factory_date else None,
+            'status':                      'CONFIRMED',
+            'payment_terms_display':       data.get('payment_terms', po.payment_terms or ''),
+            'port_of_discharge':           data.get('port_of_discharge', ''),
+            'port_of_loading':             data.get('port_of_loading', ''),
+            'inco_terms':                  data.get('inco_terms', po.delivery_terms or ''),
+            'our_bank_details':            data.get('our_bank_details', ''),
+            'intermediary_bank_details':   data.get('intermediary_bank_details', ''),
+            'date_of_dispatch_display':    data.get('date_of_dispatch_display', ''),
+            'lines': [
+                {
+                    'item_code':      l.get('item_code', ''),
+                    'item_name':      l.get('item_name', ''),
+                    'material':       l.get('fabric', '') or l.get('material', ''),
+                    'color':          l.get('color', ''),
+                    'size_breakdown': l.get('sizes', l.get('size_breakdown', [])),
+                    'quantity_pcs':   l.get('quantity', l.get('quantity_pcs', 0)),
+                    'unit_price_usd': l.get('unit_price', l.get('unit_price_usd')),
+                    'line_value_usd': l.get('line_amount', l.get('line_value_usd')),
+                }
+                for l in lines_data
+            ],
+        }
+
+        serializer = ProformaInvoiceSerializer(data=payload, context={'request': request})
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        pi = serializer.save(created_by=request.user)
+
+        # Link PI back to the BuyerPO
+        po.pi = pi
+        po.pi_ref = pi_ref
+        po.save(update_fields=['pi', 'pi_ref'])
+
+        return Response({'id': pi.id, 'pi_number': pi.pi_number}, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['get'], url_path='next-pi-ref')
     def next_pi_ref(self, request):

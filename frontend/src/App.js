@@ -9,7 +9,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Customers from './pages/Customers';
 import Orders from './pages/Orders';
-import PiEditorPage from './pages/PiEditorPage';
+import PIViewPage from './pages/PIViewPage';
 import Inventory from './pages/Inventory';
 import Procurement from './pages/Procurement';
 import Production from './pages/Production';
@@ -55,11 +55,11 @@ function App() {
               }
             />
             <Route
-              path="/orders/pi/:id"
+              path="/orders/pi/:id/view"
               element={
                 <PrivateRoute>
                   <Layout>
-                    <PiEditorPage />
+                    <PIViewPage />
                   </Layout>
                 </PrivateRoute>
               }

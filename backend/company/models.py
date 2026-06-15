@@ -43,6 +43,12 @@ class CompanyProfile(models.Model):
         help_text='Short prefix for PI reference numbers, e.g. JBI → JBI/26-27/1',
     )
 
+    our_bank_details = models.TextField(
+        blank=True,
+        default='',
+        help_text='Primary company bank — printed on all PIs (e.g. Punjab National Bank details)',
+    )
+
     watermark_text = models.CharField(
         max_length=64,
         blank=True,
@@ -79,3 +85,33 @@ class CompanyProfile(models.Model):
 
     def delete(self, *args, **kwargs):
         return  # singleton
+
+
+class CompanyCurrencyBank(models.Model):
+    """
+    Per-currency correspondent / intermediary bank.
+    One row per currency code (USD, EUR, GBP, …).
+    The primary OUR BANK stays on CompanyProfile; this model holds only the
+    intermediary bank details that differ by currency.
+    """
+    currency = models.CharField(
+        max_length=3,
+        unique=True,
+        db_index=True,
+        help_text='3-letter ISO currency code, e.g. USD',
+    )
+    intermediary_bank_details = models.TextField(
+        blank=True,
+        default='',
+        help_text='Correspondent / intermediary bank for this currency — printed on PI',
+    )
+    notes = models.CharField(max_length=255, blank=True, default='')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['currency']
+        verbose_name = 'Currency bank'
+        verbose_name_plural = 'Currency banks'
+
+    def __str__(self):
+        return f"{self.currency} — {self.intermediary_bank_details[:60]}"

@@ -114,7 +114,7 @@ const Layout = ({ children }) => {
 
   const header = useMemo(() => {
     if (location.pathname.startsWith('/orders/pi/')) {
-      return { title: 'Proforma invoice' };
+      return { title: 'Proforma Invoice' };
     }
     const meta = routeMeta[location.pathname] || { title: 'GMS' };
     return { title: meta.title };

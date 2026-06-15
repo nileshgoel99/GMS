@@ -32,6 +32,7 @@ class ProformaInvoiceLineSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'line_number',
+            'item_code',
             'item_name',
             'description',
             'material',
@@ -102,6 +103,7 @@ def _normalize_lines_payload(lines_data):
             desc = str(desc)
         out.append({
             'line_number': i,
+            'item_code': (row.get('item_code') or '')[:100],
             'item_name': item_name[:300],
             'description': desc[:8000],
             'material': mat[:5000],
@@ -246,13 +248,14 @@ class ProformaInvoiceListSerializer(serializers.ModelSerializer):
     lines_count = serializers.SerializerMethodField()
     customer_id = serializers.IntegerField(read_only=True, allow_null=True)
     customer_code = serializers.CharField(source='customer.customer_code', read_only=True, allow_null=True)
+    linked_po_id = serializers.SerializerMethodField()
 
     class Meta:
         model = ProformaInvoice
         fields = [
             'id', 'pi_number', 'buyer_po_number', 'customer_id', 'customer_code', 'client_name', 'order_date',
             'delivery_date', 'garment_type', 'quantity', 'total_amount', 'status', 'created_by_name',
-            'has_planning_sheet', 'intents_count', 'lines_count', 'created_at',
+            'has_planning_sheet', 'intents_count', 'lines_count', 'linked_po_id', 'created_at',
         ]
 
     def get_has_planning_sheet(self, obj):
@@ -263,6 +266,11 @@ class ProformaInvoiceListSerializer(serializers.ModelSerializer):
 
     def get_lines_count(self, obj):
         return obj.lines.count()
+
+    def get_linked_po_id(self, obj):
+        """Return the first linked BuyerPO id, if any."""
+        po = obj.buyer_pos.order_by('id').first()
+        return po.id if po else None
 
 
 class IntentAttachmentSerializer(serializers.ModelSerializer):
@@ -474,6 +482,7 @@ class BuyerPOLineSerializer(serializers.ModelSerializer):
 class BuyerPOListSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
     lines_count = serializers.SerializerMethodField()
+    pi_id = serializers.IntegerField(source='pi.id', read_only=True, allow_null=True)
 
     class Meta:
         model = BuyerPO
@@ -481,7 +490,7 @@ class BuyerPOListSerializer(serializers.ModelSerializer):
             'id', 'po_number', 'po_date', 'buyer_name', 'buyer_contact',
             'customer', 'customer_name', 'currency', 'status',
             'ex_factory_date', 'total_qty', 'total_value', 'lines_count',
-            'po_document', 'pi_ref', 'created_at',
+            'po_document', 'pi_ref', 'pi_id', 'created_at',
         ]
 
     def get_customer_name(self, obj):
@@ -506,6 +515,7 @@ class BuyerPOSerializer(serializers.ModelSerializer):
             'freight_terms', 'packaging_terms', 'ex_factory_date',
             'total_qty', 'total_value', 'status', 'notes', 'pi',
             'po_document', 'pi_ref',
+            'inco_terms', 'port_of_loading', 'port_of_discharge',
             'lines', 'created_by', 'created_by_name', 'created_at', 'updated_at',
         ]
         read_only_fields = ('id', 'created_by', 'created_at', 'updated_at')

@@ -14,12 +14,13 @@ import {
   Tooltip,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
-import { Add, Edit, Delete, Description } from '@mui/icons-material';
+import { Edit, Delete, Description, ReceiptLong, Visibility } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
 import { dataGridSx } from '../theme/appTheme';
 import { ordersAPI } from '../services/api';
+import { BuyerPoDetailDialog } from './BuyerPOs';
 
 const STATUS_COLORS = {
   DRAFT: 'default',
@@ -90,6 +91,7 @@ const Orders = () => {
   const [openPlanningDialog, setOpenPlanningDialog] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [planningData, setPlanningData] = useState(() => ({ ...EMPTY_PLANNING }));
+  const [viewPoId, setViewPoId] = useState(null);
 
   useEffect(() => {
     fetchOrders();
@@ -209,12 +211,26 @@ const Orders = () => {
       width: 200,
       sortable: false,
       renderCell: (params) => (
-        <Box sx={{ display: 'flex', gap: 0.25 }}>
-          <Tooltip title="Edit PI (full page)">
-            <IconButton size="small" color="primary" onClick={() => navigate(`/orders/pi/${params.row.id}`)}>
+        <Box sx={{ display: 'flex', gap: 0.25, alignItems: 'center' }}>
+          <Tooltip title="View / Print PI">
+            <IconButton size="small" color="primary" onClick={() => navigate(`/orders/pi/${params.row.id}/view`)}>
               <Edit fontSize="small" />
             </IconButton>
           </Tooltip>
+          {params.row.linked_po_id && (
+            <>
+              <Tooltip title="View linked Buyer PO">
+                <IconButton size="small" color="secondary" onClick={() => setViewPoId(params.row.linked_po_id)}>
+                  <Visibility fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Edit / Re-generate PI">
+                <IconButton size="small" sx={{ color: '#0f766e' }} onClick={() => navigate(`/buyer-pos/${params.row.linked_po_id}/generate-pi`)}>
+                  <ReceiptLong fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
           <Tooltip title="Planning sheet">
             <IconButton size="small" color="primary" onClick={() => handleOpenPlanning(params.row)}>
               <Description fontSize="small" />
@@ -234,13 +250,8 @@ const Orders = () => {
     <Box>
       <PageHeader
         kicker="Commercial"
-        title="Customer PI"
-        subtitle="Proforma invoices with line items, commercial terms, and PDF export. Open a PI in the full-page editor — planning sheet stays here."
-        actions={
-          <Button variant="contained" size="large" startIcon={<Add />} onClick={() => navigate('/orders/pi/new')}>
-            New PI
-          </Button>
-        }
+        title="Proforma Invoices"
+        subtitle="PIs generated from Buyer POs. Use the Buyer POs module to create and generate a new PI."
       />
 
       <DataGridShell sx={{ height: { xs: 560, md: 620 }, width: '100%' }}>
@@ -403,6 +414,16 @@ const Orders = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Buyer PO detail modal (view-only) */}
+      {viewPoId != null && (
+        <BuyerPoDetailDialog
+          poId={viewPoId}
+          onClose={() => setViewPoId(null)}
+          onEdit={() => { setViewPoId(null); navigate(`/buyer-pos/${viewPoId}`); }}
+          onGeneratePI={() => { setViewPoId(null); navigate(`/buyer-pos/${viewPoId}/generate-pi`); }}
+        />
+      )}
     </Box>
   );
 };
