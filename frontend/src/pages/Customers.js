@@ -163,21 +163,6 @@ function CustomerDetailDialog({ open, customer, onClose, onEdit }) {
               {!contacts.length && <Typography color="text.disabled">No contacts on file</Typography>}
             </Stack>
           </Grid>
-          <Grid item xs={12} md={6}>
-            <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1 }}>
-              Trade
-            </Typography>
-            <DetailField label="Tax / VAT ID" value={customer.tax_id_vat} />
-            <DetailField label="Incoterms" value={customer.incoterms_default} />
-            <DetailField label="Payment terms" value={customer.payment_terms_default} />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1 }}>
-              Banking & notes
-            </Typography>
-            <DetailField label="Bank details" value={customer.bank_details} />
-            <DetailField label="Internal notes" value={customer.notes} />
-          </Grid>
         </Grid>
       </DialogContent>
       <DialogActions sx={{ px: 2, py: 1.5 }}>
@@ -195,7 +180,6 @@ function CustomerDetailDialog({ open, customer, onClose, onEdit }) {
 const STEPS = [
   { label: 'Company', short: 'Code & legal entity' },
   { label: 'Address & contacts', short: 'Location & people' },
-  { label: 'Trade & banking', short: 'Terms & remittance' },
 ];
 
 const customerToForm = (c) => {
@@ -885,7 +869,7 @@ const Customers = () => {
           </Typography>
           {isNew && (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontWeight: 500 }}>
-              A quick 3-step setup—save time with compact fields you can complete in order.
+              A quick 2-step setup—save time with compact fields you can complete in order.
             </Typography>
           )}
         </DialogTitle>
@@ -934,7 +918,7 @@ const Customers = () => {
               color="primary"
               sx={{ display: 'block', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', mb: 1.5 }}
             >
-              Step {activeStep + 1} of 3 — {STEPS[activeStep].short}
+              Step {activeStep + 1} of {STEPS.length} — {STEPS[activeStep].short}
             </Typography>
 
             {activeStep === 0 && (
@@ -1216,71 +1200,6 @@ const Customers = () => {
               </Box>
             )}
 
-            {activeStep === 2 && (
-              <Grid container spacing={1.25}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    label="Tax / VAT ID"
-                    value={formData.tax_id_vat}
-                    onChange={(e) => setFormData({ ...formData, tax_id_vat: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    label="Default Incoterms"
-                    value={formData.incoterms_default}
-                    onChange={(e) => setFormData({ ...formData, incoterms_default: e.target.value })}
-                    placeholder="FOB, CIF…"
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    multiline
-                    minRows={2}
-                    maxRows={4}
-                    label="Payment terms"
-                    value={formData.payment_terms_default}
-                    onChange={(e) => setFormData({ ...formData, payment_terms_default: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    multiline
-                    minRows={2}
-                    maxRows={4}
-                    label="Bank details"
-                    value={formData.bank_details}
-                    onChange={(e) => setFormData({ ...formData, bank_details: e.target.value })}
-                    placeholder="Account, bank, IBAN, SWIFT…"
-                    sx={compactField}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    multiline
-                    minRows={1}
-                    maxRows={3}
-                    label="Internal notes"
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    sx={compactField}
-                  />
-                </Grid>
-              </Grid>
-            )}
           </Box>
         </DialogContent>
         <DialogActions
