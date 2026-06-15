@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Button, Typography, IconButton, CircularProgress, Chip } from '@mui/material';
+import { Box, Button, Typography, IconButton, CircularProgress, Chip, TextField, Grid, Paper, Divider } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { ArrowBack, Print, Edit } from '@mui/icons-material';
+import { ArrowBack, Print, Edit, Save, Close } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, companyAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
@@ -233,9 +233,12 @@ export default function PIViewPage() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  const [pi, setPi]         = useState(null);
-  const [company, setCompany] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [pi, setPi]               = useState(null);
+  const [company, setCompany]     = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [detailDraft, setDetailDraft]       = useState({});
+  const [savingDetails, setSavingDetails]   = useState(false);
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -253,8 +256,19 @@ export default function PIViewPage() {
           ordersAPI.getPI(id),
           companyAPI.getProfile(),
         ]);
-        setPi(piRes.data);
+        const piData = piRes.data;
+        setPi(piData);
         setCompany(coRes.data);
+        // Pre-populate the edit draft
+        setDetailDraft({
+          date_of_dispatch_display:  piData.date_of_dispatch_display || '',
+          payment_terms_display:     piData.payment_terms_display || '',
+          inco_terms:                piData.inco_terms || '',
+          port_of_loading:           piData.port_of_loading || '',
+          port_of_discharge:         piData.port_of_discharge || '',
+          our_bank_details:          piData.our_bank_details || coRes.data.our_bank_details || '',
+          intermediary_bank_details: piData.intermediary_bank_details || '',
+        });
       } catch (e) {
         console.error(e);
         navigate('/orders');
@@ -265,6 +279,20 @@ export default function PIViewPage() {
   }, [id, navigate]);
 
   const handlePrint = useCallback(() => window.print(), []);
+
+  const handleSaveDetails = async () => {
+    setSavingDetails(true);
+    try {
+      const res = await ordersAPI.patchPI(id, detailDraft);
+      setPi((prev) => ({ ...prev, ...res.data }));
+      setEditingDetails(false);
+    } catch (e) {
+      const msg = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+      alert('Save failed: ' + msg);
+    } finally {
+      setSavingDetails(false);
+    }
+  };
 
   const totalQty = (pi?.lines || []).reduce((s, l) => s + (l.quantity_pcs || 0), 0);
   const totalAmt = parseFloat(pi?.total_amount || 0);
@@ -306,6 +334,13 @@ export default function PIViewPage() {
             Re-generate PI
           </Button>
         )}
+        <Button startIcon={editingDetails ? <Close /> : <Edit />} variant="outlined" size="small"
+          onClick={() => setEditingDetails((v) => !v)}
+          sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5,
+            borderColor: editingDetails ? '#e53935' : undefined,
+            color: editingDetails ? '#e53935' : undefined }}>
+          {editingDetails ? 'Cancel Edit' : 'Edit PI Details'}
+        </Button>
         <Button startIcon={<Print />} variant="contained" onClick={handlePrint}
           sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 3 }}>
           Print / Download PDF
@@ -335,6 +370,77 @@ export default function PIViewPage() {
           </Typography>
         </Box>
       </Box>
+
+      {/* Edit PI Details panel */}
+      {editingDetails && (
+        <Paper elevation={0} sx={{ border: `2px solid #f59e0b`, borderRadius: 2, p: 3, mb: 0.5, bgcolor: '#fffbeb' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+            <Edit sx={{ color: '#f59e0b', fontSize: 20 }} />
+            <Typography sx={{ fontWeight: 800, fontSize: '0.9rem', color: '#92400e' }}>
+              Edit PI Footer Details
+            </Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: '#78716c', ml: 1 }}>
+              These fields update the saved PI document immediately.
+            </Typography>
+          </Box>
+          <Divider sx={{ mb: 2.5 }} />
+          <Grid container spacing={2.5}>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Date of Dispatch"
+                placeholder="e.g. 30th JUNE 2025 (EX-FACTORY DATE)"
+                value={detailDraft.date_of_dispatch_display}
+                onChange={(e) => setDetailDraft((d) => ({ ...d, date_of_dispatch_display: e.target.value }))} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Payment Terms"
+                placeholder="e.g. 30% ADVANCE, 70% AGAINST DOCUMENTS"
+                value={detailDraft.payment_terms_display}
+                onChange={(e) => setDetailDraft((d) => ({ ...d, payment_terms_display: e.target.value }))} />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth size="small" label="Inco Terms"
+                placeholder="e.g. FOB NHAVA SHEVA"
+                value={detailDraft.inco_terms}
+                onChange={(e) => setDetailDraft((d) => ({ ...d, inco_terms: e.target.value }))} />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth size="small" label="Port of Loading"
+                placeholder="e.g. NHAVA SHEVA PORT"
+                value={detailDraft.port_of_loading}
+                onChange={(e) => setDetailDraft((d) => ({ ...d, port_of_loading: e.target.value }))} />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth size="small" label="Port of Discharge"
+                placeholder="e.g. KHIDIRPUR PORT"
+                value={detailDraft.port_of_discharge}
+                onChange={(e) => setDetailDraft((d) => ({ ...d, port_of_discharge: e.target.value }))} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" multiline minRows={3} label="Our Bank"
+                placeholder="Bank name, account details…"
+                value={detailDraft.our_bank_details}
+                onChange={(e) => setDetailDraft((d) => ({ ...d, our_bank_details: e.target.value }))} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" multiline minRows={3} label="Intermediary Bank"
+                placeholder="Intermediary / correspondent bank details…"
+                value={detailDraft.intermediary_bank_details}
+                onChange={(e) => setDetailDraft((d) => ({ ...d, intermediary_bank_details: e.target.value }))} />
+            </Grid>
+          </Grid>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2.5, gap: 1.5 }}>
+            <Button variant="outlined" size="small" onClick={() => setEditingDetails(false)}
+              sx={{ fontWeight: 700, textTransform: 'none' }}>
+              Cancel
+            </Button>
+            <Button variant="contained" size="small" startIcon={savingDetails ? <CircularProgress size={14} color="inherit" /> : <Save />}
+              disabled={savingDetails} onClick={handleSaveDetails}
+              sx={{ fontWeight: 700, textTransform: 'none', bgcolor: '#f59e0b', '&:hover': { bgcolor: '#d97706' } }}>
+              {savingDetails ? 'Saving…' : 'Save Changes'}
+            </Button>
+          </Box>
+        </Paper>
+      )}
 
       {/* A4 document */}
       <Box sx={{ p: { xs: 2, sm: 4 }, bgcolor: '#f8fafc', borderRadius: '0 0 8px 8px', border: `1px solid ${slate[200]}`, borderTop: 'none' }}>

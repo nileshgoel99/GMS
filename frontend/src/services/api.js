@@ -117,6 +117,7 @@ export const ordersAPI = {
 
   getPIs: (params) => api.get('/orders/pi/', { params }),
   getPI: (id) => api.get(`/orders/pi/${id}/`),
+  patchPI: (id, data) => api.patch(`/orders/pi/${id}/`, data),
   deletePI: (id) => api.delete(`/orders/pi/${id}/`),
 };
 
