@@ -114,180 +114,110 @@ class ProformaInvoiceLine(models.Model):
         return f"{self.pi.pi_number} L{self.line_number}: {self.item_name}"
 
 
-class PlanningSheet(models.Model):
-    pi = models.OneToOneField(ProformaInvoice, on_delete=models.CASCADE, related_name='planning_sheet')
-    
-    buttons_required = models.PositiveIntegerField(default=0)
-    buttons_type = models.CharField(max_length=100, blank=True)
-    buttons_color = models.CharField(max_length=50, blank=True)
-    
-    thread_required = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    thread_color = models.CharField(max_length=50, blank=True)
-    thread_type = models.CharField(max_length=100, blank=True)
-    
-    zippers_required = models.PositiveIntegerField(default=0)
-    zippers_size = models.CharField(max_length=50, blank=True)
-    zippers_color = models.CharField(max_length=50, blank=True)
-    
-    tapes_required = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    tapes_type = models.CharField(max_length=100, blank=True)
-    tapes_color = models.CharField(max_length=50, blank=True)
-    
-    polybags_required = models.PositiveIntegerField(default=0)
-    polybags_size = models.CharField(max_length=50, blank=True)
-    
-    fabric_required = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    fabric_type = models.CharField(max_length=100, blank=True)
-    fabric_color = models.CharField(max_length=50, blank=True)
-    
-    labels_required = models.PositiveIntegerField(default=0)
-    labels_type = models.CharField(max_length=100, blank=True)
-    
-    other_materials = models.JSONField(default=list, blank=True)
-    
-    notes = models.TextField(blank=True, null=True)
-    
+class TrimMaster(models.Model):
+    """Master library of trim types used in indents."""
+    name = models.CharField(max_length=300, unique=True, help_text='e.g. 5 CM WIDE Reflective Tape D6101')
+    category = models.CharField(max_length=100, blank=True, default='', help_text='e.g. Tape, Button, Velcro, Label, Thread')
+    default_unit = models.CharField(max_length=20, default='PCS', help_text='e.g. MTR, PCS, CONE')
+    notes = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = 'Planning Sheet'
-        verbose_name_plural = 'Planning Sheets'
+        ordering = ['category', 'name']
+        verbose_name = 'Trim Master'
+        verbose_name_plural = 'Trims Library'
 
     def __str__(self):
-        return f"Planning Sheet for {self.pi.pi_number}"
+        return self.name
 
 
-class Intent(models.Model):
-    """
-    Indent / material requirement document raised against an internal PI.
-    One intent can include several labelled **sheets** (like Excel tabs), each with its own
-    size grid, description, and BOM. Header fields and sign-off live on the intent.
-    Party order → internal PI → Intent → sheets (BOM) → POs to suppliers.
-    """
+class Indent(models.Model):
     STATUS_CHOICES = [
         ('DRAFT', 'Draft'),
-        ('SUBMITTED', 'Submitted'),
-        ('APPROVED', 'Approved'),
-        ('CLOSED', 'Closed'),
+        ('CONFIRMED', 'Confirmed'),
     ]
 
-    pi = models.ForeignKey(
-        ProformaInvoice,
-        on_delete=models.CASCADE,
-        related_name='intents',
-    )
+    pi = models.ForeignKey(ProformaInvoice, on_delete=models.CASCADE, related_name='indents')
     indent_number = models.CharField(max_length=80, unique=True, db_index=True)
-    buyer_po_reference = models.CharField(max_length=120, blank=True, null=True)
-    intent_date = models.DateField()
-
-    garment_sheet_name = models.CharField(
-        max_length=200,
-        blank=True,
-        help_text='e.g. style / sheet tab name (Waterproof Trousers)',
-    )
-    item_description = models.TextField(blank=True)
-    total_garment_qty = models.PositiveIntegerField(default=0)
-
-    size_breakdown = models.JSONField(
-        default=list,
-        blank=True,
-        help_text='List of rows: color, per-size qty, totals (see PI/indent templates)',
-    )
-    packing_notes = models.TextField(blank=True, null=True)
-
+    indent_date = models.DateField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
-    prepared_by = models.CharField(max_length=120, blank=True, null=True)
-    received_by = models.CharField(max_length=120, blank=True, null=True)
-    approved_by = models.CharField(max_length=120, blank=True, null=True)
 
-    notes = models.TextField(blank=True, null=True)
+    pcs_per_carton = models.PositiveIntegerField(default=0, blank=True)
+    carton_ply = models.CharField(max_length=50, blank=True, default='', help_text='e.g. 5 PLY')
+    carton_dimensions = models.CharField(max_length=100, blank=True, default='', help_text='e.g. 24.5*14.5*9 (L*W*H)')
 
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_intents')
+    prepared_by = models.CharField(max_length=120, blank=True, default='')
+    received_by = models.CharField(max_length=120, blank=True, default='')
+    approved_by = models.CharField(max_length=120, blank=True, default='')
+    notes = models.TextField(blank=True, default='')
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_indents')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-created_at']
-        verbose_name = 'Intent (Indent)'
-        verbose_name_plural = 'Intents (Indents)'
+        verbose_name = 'Indent'
+        verbose_name_plural = 'Indents'
 
     def __str__(self):
         return f"{self.indent_number} → {self.pi.pi_number}"
 
 
-class IntentSheet(models.Model):
-    """
-    One "Excel tab" under an intent: its own size/colour block, item description, and BOM lines.
-    A single commercial indent (Intent) can contain several labelled sheets, matching your workbook.
-    """
-    intent = models.ForeignKey(Intent, on_delete=models.CASCADE, related_name='sheets')
-    label = models.CharField(max_length=200, help_text='Excel tab / sheet name, e.g. Waterproof Trousers')
-    sort_order = models.PositiveIntegerField(default=0, db_index=True)
-    item_description = models.TextField(blank=True, default='')
-    size_breakdown = models.JSONField(
-        default=list,
-        blank=True,
-        help_text='List of colour rows, per-size qty, totals (same format as one PI sheet in Excel).',
-    )
-    total_garment_qty = models.PositiveIntegerField(default=0)
+class IndentFabricLine(models.Model):
+    """One fabric consumption row on an indent (one row per fabric × colour)."""
+    indent = models.ForeignKey(Indent, on_delete=models.CASCADE, related_name='fabric_lines')
+    material = models.CharField(max_length=500)
+    color = models.CharField(max_length=120, blank=True, default='')
+    consumption_per_pc = models.DecimalField(max_digits=10, decimal_places=4, default=0)
+    unit = models.CharField(max_length=20, default='MTRS')
+    total_consumption = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    remarks = models.CharField(max_length=200, blank=True, default='')
+    sort_order = models.PositiveIntegerField(default=0)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        ordering = ['indent', 'sort_order', 'id']
+
+    def __str__(self):
+        return f"{self.indent.indent_number} fabric: {self.material} / {self.color}"
+
+
+class IndentTrimLine(models.Model):
+    """One trim / accessory consumption row on an indent."""
+    indent = models.ForeignKey(Indent, on_delete=models.CASCADE, related_name='trim_lines')
+    trim = models.ForeignKey(TrimMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name='indent_lines')
+    trim_name = models.CharField(max_length=300)
+    category = models.CharField(max_length=100, blank=True, default='')
+    color_variant = models.CharField(max_length=120, blank=True, default='', help_text='e.g. Orange, GREY, Hi Vis Yellow')
+    size_variant = models.CharField(max_length=100, blank=True, default='', help_text='e.g. 6.5 inch, 7 inch')
+    consumption_per_pc = models.DecimalField(max_digits=10, decimal_places=4, default=0)
+    unit = models.CharField(max_length=20, default='PCS')
+    total_consumption = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    total_unit = models.CharField(max_length=20, blank=True, default='')
+    remarks = models.CharField(max_length=200, blank=True, default='', help_text='e.g. in stock')
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['indent', 'sort_order', 'id']
+
+    def __str__(self):
+        return f"{self.indent.indent_number} trim: {self.trim_name} / {self.color_variant}"
+
+
+class ItemIndentTemplate(models.Model):
+    """Stores fabric + trim defaults for an item_name so future indents auto-fill."""
+    item_name = models.CharField(max_length=300, unique=True, db_index=True)
+    fabric_lines = models.JSONField(default=list, blank=True)
+    trim_lines = models.JSONField(default=list, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['intent', 'sort_order', 'id']
-        verbose_name = 'Intent sheet (Excel tab)'
+        verbose_name = 'Item Indent Template'
+        verbose_name_plural = 'Item Indent Templates'
 
     def __str__(self):
-        return f"{self.intent_id}: {self.label or '—'}"
-
-
-class IntentLine(models.Model):
-    """Single BOM / consumption line on a sheet (fabric, tape, thread, labels, etc.)."""
-
-    intent = models.ForeignKey(Intent, on_delete=models.CASCADE, related_name='lines')
-    sheet = models.ForeignKey(
-        IntentSheet,
-        on_delete=models.CASCADE,
-        related_name='lines',
-        help_text='BOM line belongs to one sheet (Excel tab).',
-    )
-    line_number = models.PositiveIntegerField(default=1)
-
-    material_description = models.CharField(max_length=500)
-    variant = models.CharField(max_length=200, blank=True, null=True)
-
-    consumption_per_unit = models.DecimalField(max_digits=14, decimal_places=4, default=0)
-    unit = models.CharField(max_length=20, default='PCS', help_text='MTRS, PCS, CONE, etc.')
-    total_required = models.DecimalField(max_digits=14, decimal_places=4, validators=[MinValueValidator(0)])
-
-    inventory_item = models.ForeignKey(
-        'inventory.InventoryItem',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='intent_lines',
-        help_text='Optional link to store SKU when raising POs',
-    )
-    remarks = models.TextField(blank=True, null=True)
-    extra = models.JSONField(default=dict, blank=True)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ['sheet', 'line_number']
-        unique_together = [('sheet', 'line_number')]
-
-    def save(self, *args, **kwargs):
-        if self.sheet_id:
-            # Keep denormalized intent in sync (procurement, admin).
-            self.intent_id = self.sheet.intent_id
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.intent.indent_number} {self.sheet.label} L{self.line_number}: {self.material_description}"
+        return f"Template: {self.item_name}"
 
 
 class BuyerPO(models.Model):
@@ -404,15 +334,3 @@ class BuyerPOLine(models.Model):
         return f"PO {self.po.po_number} L{self.line_number}: {self.item_name}"
 
 
-class IntentAttachment(models.Model):
-    intent = models.ForeignKey(Intent, on_delete=models.CASCADE, related_name='attachments')
-    file = models.FileField(upload_to='intent_attachments/%Y/%m/')
-    description = models.CharField(max_length=255, blank=True, null=True)
-    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['-uploaded_at']
-
-    def __str__(self):
-        return f"{self.intent.indent_number} — {self.file.name}"

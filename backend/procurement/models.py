@@ -17,14 +17,6 @@ class PurchaseOrder(models.Model):
     po_number = models.CharField(max_length=50, unique=True, db_index=True)
     pi = models.ForeignKey(ProformaInvoice, on_delete=models.SET_NULL,
                            null=True, blank=True, related_name='purchase_orders')
-    intent = models.ForeignKey(
-        'orders.Intent',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='purchase_orders',
-        help_text='Indent this PO fulfills (optional; can still set PI separately)',
-    )
     
     vendor_name = models.CharField(max_length=200)
     vendor_email = models.EmailField(blank=True, null=True)
@@ -57,8 +49,6 @@ class PurchaseOrder(models.Model):
         return f"{self.po_number} - {self.vendor_name}"
     
     def save(self, *args, **kwargs):
-        if self.intent_id and self.pi_id is None:
-            self.pi = self.intent.pi
         super().save(*args, **kwargs)
 
     def update_status(self):
@@ -81,15 +71,6 @@ class PurchaseOrder(models.Model):
 class PurchaseOrderItem(models.Model):
     po = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name='items')
     item = models.ForeignKey(InventoryItem, on_delete=models.CASCADE, related_name='po_items')
-    intent_line = models.ForeignKey(
-        'orders.IntentLine',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='po_items',
-        help_text='Links this PO line to an intent BOM line for split qty across suppliers',
-    )
-
     quantity_ordered = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     quantity_received = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)])
     

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Button, Typography, IconButton, CircularProgress, Chip, TextField, Grid, Paper, Divider } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { ArrowBack, Print, Edit, Save, Close } from '@mui/icons-material';
+import { ArrowBack, Print, Edit, Save, Close, Assignment } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, companyAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
@@ -334,6 +334,11 @@ export default function PIViewPage() {
             Re-generate PI
           </Button>
         )}
+        <Button startIcon={<Assignment />} variant="outlined" size="small"
+          onClick={() => navigate(`/indents/new?piId=${pi?.id}`)}
+          sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, borderColor: '#7c3aed', color: '#7c3aed', '&:hover': { borderColor: '#6d28d9', bgcolor: alpha('#7c3aed', 0.06) } }}>
+          Create Indent
+        </Button>
         <Button startIcon={editingDetails ? <Close /> : <Edit />} variant="outlined" size="small"
           onClick={() => setEditingDetails((v) => !v)}
           sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5,

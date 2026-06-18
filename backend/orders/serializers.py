@@ -9,138 +9,77 @@ from customers.serializers import CustomerListSerializer
 from .models import (
     ProformaInvoice,
     ProformaInvoiceLine,
-    PlanningSheet,
-    Intent,
-    IntentSheet,
-    IntentLine,
-    IntentAttachment,
+    TrimMaster,
+    Indent,
+    IndentFabricLine,
+    IndentTrimLine,
+    ItemIndentTemplate,
     BuyerPO,
     BuyerPOLine,
 )
 
 
-class PlanningSheetSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PlanningSheet
-        fields = '__all__'
-        read_only_fields = ('id', 'pi', 'created_at', 'updated_at')
-
+# ---------------------------------------------------------------------------
+# ProformaInvoice serializers
+# ---------------------------------------------------------------------------
 
 class ProformaInvoiceLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProformaInvoiceLine
         fields = [
-            'id',
-            'line_number',
-            'item_code',
-            'item_name',
-            'description',
-            'material',
-            'color',
-            'size_breakdown',
-            'quantity_pcs',
-            'unit_price_usd',
-            'line_value_usd',
-            'created_at',
-            'updated_at',
+            'id', 'line_number', 'item_code', 'item_name', 'description',
+            'material', 'color', 'size_breakdown', 'quantity_pcs',
+            'unit_price_usd', 'line_value_usd', 'created_at', 'updated_at',
         ]
-        read_only_fields = ('id', 'line_number', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'created_at', 'updated_at')
 
 
-def _rollup_header_from_lines(lines_normalized):
-    total_qty = sum(int(l['quantity_pcs'] or 0) for l in lines_normalized)
-    total_val = Decimal('0')
-    for l in lines_normalized:
-        v = l.get('line_value_usd')
-        if v is not None:
-            total_val += Decimal(str(v))
-    names = [l['item_name'] for l in lines_normalized if l.get('item_name')]
-    summary = ', '.join(names[:4])
-    if len(names) > 4:
-        summary += '…'
-    unit_avg = None
-    if total_qty and total_val > 0:
-        unit_avg = (total_val / Decimal(total_qty)).quantize(Decimal('0.01'))
+def _sync_client_fields_from_customer(customer):
+    if customer is None:
+        return {}
     return {
-        'quantity': total_qty,
-        'total_amount': total_val if total_val > 0 else None,
-        'garment_type': (summary or '')[:500],
-        'unit_price': unit_avg,
+        'client_name':    customer.company_legal_name or '',
+        'client_email':   customer.primary_email or '',
+        'client_phone':   customer.phone or '',
+        'client_address': '\n'.join(filter(None, [
+            customer.address_line1,
+            customer.address_line2,
+            customer.city,
+            customer.region_state,
+            customer.country,
+        ])),
     }
 
 
 def _normalize_lines_payload(lines_data):
     out = []
-    for i, raw in enumerate(lines_data, start=1):
-        row = {**raw}
-        row.pop('id', None)
-        row.pop('pi', None)
-        row.pop('created_at', None)
-        row.pop('updated_at', None)
-        item_name = (row.get('item_name') or '').strip()
-        if not item_name:
-            raise serializers.ValidationError({'lines': f'Line {i}: item name is required.'})
-        qty = int(row.get('quantity_pcs') or 0)
-        price_raw = row.get('unit_price_usd')
-        price = None
-        if price_raw is not None and str(price_raw).strip() != '':
-            price = Decimal(str(price_raw)).quantize(Decimal('0.01'))
-        line_val = row.get('line_value_usd')
-        if line_val is not None and str(line_val).strip() != '':
-            line_val = Decimal(str(line_val)).quantize(Decimal('0.01'))
-        elif price is not None:
-            line_val = (Decimal(qty) * price).quantize(Decimal('0.01'))
-        else:
-            line_val = None
-        sb = row.get('size_breakdown') or []
-        if not isinstance(sb, list):
-            sb = []
-        mat = row.get('material') or ''
-        if not isinstance(mat, str):
-            mat = str(mat)
-        desc = row.get('description') or ''
-        if not isinstance(desc, str):
-            desc = str(desc)
-        out.append({
-            'line_number': i,
-            'item_code': (row.get('item_code') or '')[:100],
-            'item_name': item_name[:300],
-            'description': desc[:8000],
-            'material': mat[:5000],
-            'color': (row.get('color') or '')[:120],
-            'size_breakdown': sb,
-            'quantity_pcs': qty,
-            'unit_price_usd': price,
-            'line_value_usd': line_val,
-        })
+    for i, row in enumerate(lines_data, start=1):
+        row = {**row}
+        row['line_number'] = i
+        row.setdefault('item_code', '')
+        row.setdefault('item_name', '')
+        row.setdefault('description', '')
+        row.setdefault('material', '')
+        row.setdefault('color', '')
+        row.setdefault('size_breakdown', [])
+        row.setdefault('quantity_pcs', 0)
+        row.setdefault('unit_price_usd', None)
+        row.setdefault('line_value_usd', None)
+        out.append(row)
     return out
 
 
-def _sync_client_fields_from_customer(customer):
-    """Populate PI client_* snapshot from Customer."""
-    if customer is None:
-        return {}
-    if isinstance(customer, int):
-        customer = Customer.objects.get(pk=customer)
-    address_parts = [
-        customer.address_line1,
-        customer.address_line2,
-        ' '.join(filter(None, [customer.postal_code or '', customer.city or ''])).strip(),
-        customer.region_state,
-        customer.country,
-    ]
-    address = '\n'.join(p for p in address_parts if p)
-    display = customer.display_name or customer.company_legal_name
-    return {
-        'client_name': (customer.company_legal_name or display or '')[:200],
-        'client_email': customer.primary_email or '',
-        'client_phone': (customer.phone or customer.mobile or '')[:20],
-        'client_address': address or '',
-    }
+def _rollup_header_from_lines(lines):
+    total_qty = sum(int(r.get('quantity_pcs', 0) or 0) for r in lines)
+    names = [r['item_name'] for r in lines if r.get('item_name')]
+    unique_names = list(dict.fromkeys(names))
+    garment_type = ', '.join(unique_names[:3])
+    if len(unique_names) > 3:
+        garment_type += f' +{len(unique_names) - 3} more'
+    return {'quantity': total_qty, 'garment_type': garment_type}
 
 
 class ProformaInvoiceSerializer(serializers.ModelSerializer):
-    planning_sheet = PlanningSheetSerializer(required=False, allow_null=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     customer_display = CustomerListSerializer(source='customer', read_only=True)
     lines = ProformaInvoiceLineSerializer(many=True, required=False)
@@ -152,12 +91,10 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             'created_by',
             'created_at',
             'updated_at',
-            # Bill-to snapshot — always derived from Customer in create()/update()
             'client_name',
             'client_email',
             'client_phone',
             'client_address',
-            # Header rollups from PI lines
             'quantity',
             'garment_type',
             'unit_price',
@@ -176,7 +113,6 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        planning_sheet_data = validated_data.pop('planning_sheet', None)
         lines_data = validated_data.pop('lines')
         cust = validated_data.get('customer')
         validated_data.update(_sync_client_fields_from_customer(cust))
@@ -187,6 +123,7 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             ProformaInvoiceLine.objects.create(
                 pi=pi,
                 line_number=row['line_number'],
+                item_code=row['item_code'],
                 item_name=row['item_name'],
                 description=row['description'],
                 material=row['material'],
@@ -196,12 +133,9 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
                 unit_price_usd=row['unit_price_usd'],
                 line_value_usd=row['line_value_usd'],
             )
-        if planning_sheet_data:
-            PlanningSheet.objects.create(pi=pi, **planning_sheet_data)
         return pi
 
     def update(self, instance, validated_data):
-        planning_sheet_data = validated_data.pop('planning_sheet', None)
         lines_data = validated_data.pop('lines', None)
 
         cust = validated_data.get('customer', instance.customer)
@@ -216,6 +150,7 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
                 ProformaInvoiceLine.objects.create(
                     pi=instance,
                     line_number=row['line_number'],
+                    item_code=row['item_code'],
                     item_name=row['item_name'],
                     description=row['description'],
                     material=row['material'],
@@ -229,22 +164,12 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-
-        if planning_sheet_data:
-            if hasattr(instance, 'planning_sheet'):
-                for attr, value in planning_sheet_data.items():
-                    setattr(instance.planning_sheet, attr, value)
-                instance.planning_sheet.save()
-            else:
-                PlanningSheet.objects.create(pi=instance, **planning_sheet_data)
-
         return instance
 
 
 class ProformaInvoiceListSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
-    has_planning_sheet = serializers.SerializerMethodField()
-    intents_count = serializers.SerializerMethodField()
+    indents_count = serializers.SerializerMethodField()
     lines_count = serializers.SerializerMethodField()
     customer_id = serializers.IntegerField(read_only=True, allow_null=True)
     customer_code = serializers.CharField(source='customer.customer_code', read_only=True, allow_null=True)
@@ -255,211 +180,180 @@ class ProformaInvoiceListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'pi_number', 'buyer_po_number', 'customer_id', 'customer_code', 'client_name', 'order_date',
             'delivery_date', 'garment_type', 'quantity', 'total_amount', 'status', 'created_by_name',
-            'has_planning_sheet', 'intents_count', 'lines_count', 'linked_po_id', 'created_at',
+            'indents_count', 'lines_count', 'linked_po_id', 'created_at',
         ]
 
-    def get_has_planning_sheet(self, obj):
-        return hasattr(obj, 'planning_sheet')
-
-    def get_intents_count(self, obj):
-        return obj.intents.count()
+    def get_indents_count(self, obj):
+        return obj.indents.count()
 
     def get_lines_count(self, obj):
         return obj.lines.count()
 
     def get_linked_po_id(self, obj):
-        """Return the first linked BuyerPO id, if any."""
         po = obj.buyer_pos.order_by('id').first()
         return po.id if po else None
 
 
-class IntentAttachmentSerializer(serializers.ModelSerializer):
-    uploaded_by_name = serializers.CharField(source='uploaded_by.username', read_only=True)
+# ---------------------------------------------------------------------------
+# Indent / TrimMaster serializers
+# ---------------------------------------------------------------------------
 
+class TrimMasterSerializer(serializers.ModelSerializer):
     class Meta:
-        model = IntentAttachment
+        model = TrimMaster
         fields = '__all__'
-        read_only_fields = ('uploaded_by', 'uploaded_at')
-
-
-class IntentLineSerializer(serializers.ModelSerializer):
-    qty_ordered_on_pos = serializers.SerializerMethodField()
-    qty_remaining_to_order = serializers.SerializerMethodField()
-
-    class Meta:
-        model = IntentLine
-        fields = '__all__'
-        read_only_fields = ('created_at', 'updated_at', 'intent', 'sheet')
-
-    def get_qty_ordered_on_pos(self, obj):
-        from procurement.models import PurchaseOrderItem
-
-        total = PurchaseOrderItem.objects.filter(intent_line=obj).aggregate(
-            s=Sum('quantity_ordered')
-        )['s']
-        return total or Decimal('0')
-
-    def get_qty_remaining_to_order(self, obj):
-        ordered = self.get_qty_ordered_on_pos(obj)
-        return max(Decimal('0'), obj.total_required - ordered)
-
-
-def _rollup_intent_header_from_sheets(intent):
-    """Copy sheet labels / totals to legacy header fields (lists, reporting)."""
-    if not intent.pk:
-        return
-    sheets = list(intent.sheets.all().order_by('sort_order', 'id'))
-    if not sheets:
-        intent.garment_sheet_name = ''
-        intent.total_garment_qty = 0
-        intent.size_breakdown = []
-    else:
-        labels = [s.label for s in sheets if (s.label or '').strip()]
-        text = ' · '.join(labels) if labels else ''
-        intent.garment_sheet_name = (text)[:200]
-        intent.total_garment_qty = sum((s.total_garment_qty or 0) for s in sheets)
-        intent.size_breakdown = []
-        if not (intent.item_description or '').strip() and (sheets[0].item_description or '').strip():
-            intent.item_description = sheets[0].item_description
-    intent.save(
-        update_fields=['garment_sheet_name', 'total_garment_qty', 'item_description', 'size_breakdown', 'updated_at']
-    )
-
-
-def _create_intent_line_from_dict(sheet, intent, line_data, default_num):
-    line_data = {**line_data}
-    line_data.pop('id', None)
-    line_data.pop('intent', None)
-    line_data.pop('sheet', None)
-    line_number = int(line_data.pop('line_number', default_num) or default_num)
-    inv = line_data.pop('inventory_item', None)
-    if inv is not None and not isinstance(inv, int):
-        try:
-            inv = int(inv) if inv != '' else None
-        except (TypeError, ValueError):
-            inv = None
-    return IntentLine.objects.create(
-        sheet=sheet,
-        intent=intent,
-        line_number=line_number,
-        material_description=line_data.get('material_description', '') or '',
-        variant=line_data.get('variant') or None,
-        consumption_per_unit=line_data.get('consumption_per_unit', 0) or 0,
-        unit=line_data.get('unit', 'PCS') or 'PCS',
-        total_required=line_data.get('total_required', 0) or 0,
-        inventory_item_id=inv,
-        remarks=line_data.get('remarks') or None,
-        extra=line_data.get('extra') if isinstance(line_data.get('extra'), dict) else {},
-    )
-
-
-class IntentSheetListSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = IntentSheet
-        fields = ['id', 'label', 'sort_order', 'total_garment_qty']
-
-
-class IntentSheetSerializer(serializers.ModelSerializer):
-    lines = IntentLineSerializer(many=True, required=False)
-
-    class Meta:
-        model = IntentSheet
-        fields = [
-            'id', 'label', 'sort_order', 'item_description', 'size_breakdown',
-            'total_garment_qty', 'lines', 'created_at', 'updated_at',
-        ]
         read_only_fields = ('id', 'created_at', 'updated_at')
 
 
-class IntentListSerializer(serializers.ModelSerializer):
+class IndentFabricLineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IndentFabricLine
+        fields = [
+            'id', 'material', 'color', 'consumption_per_pc', 'unit',
+            'total_consumption', 'remarks', 'sort_order',
+        ]
+        read_only_fields = ('id',)
+
+
+class IndentTrimLineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IndentTrimLine
+        fields = [
+            'id', 'trim', 'trim_name', 'category', 'color_variant', 'size_variant',
+            'consumption_per_pc', 'unit', 'total_consumption', 'total_unit', 'remarks', 'sort_order',
+        ]
+        read_only_fields = ('id',)
+
+
+class IndentSerializer(serializers.ModelSerializer):
+    fabric_lines = IndentFabricLineSerializer(many=True, required=False)
+    trim_lines = IndentTrimLineSerializer(many=True, required=False)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     pi_number = serializers.CharField(source='pi.pi_number', read_only=True)
-    lines_count = serializers.SerializerMethodField()
-    sheets = IntentSheetListSerializer(many=True, read_only=True)
+    pi_lines = serializers.SerializerMethodField()
 
     class Meta:
-        model = Intent
+        model = Indent
         fields = [
-            'id', 'indent_number', 'pi', 'pi_number', 'buyer_po_reference', 'intent_date',
-            'garment_sheet_name', 'status', 'total_garment_qty', 'sheets', 'lines_count',
-            'created_by_name', 'created_at',
+            'id', 'pi', 'pi_number', 'pi_lines',
+            'indent_number', 'indent_date', 'status',
+            'pcs_per_carton', 'carton_ply', 'carton_dimensions',
+            'prepared_by', 'received_by', 'approved_by', 'notes',
+            'fabric_lines', 'trim_lines',
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
         ]
+        read_only_fields = ('id', 'created_by', 'created_at', 'updated_at')
 
-    def get_lines_count(self, obj):
-        return obj.lines.count()
+    def get_pi_lines(self, obj):
+        return ProformaInvoiceLineSerializer(obj.pi.lines.all(), many=True).data
 
+    def _save_lines(self, indent, fabric_data, trim_data):
+        indent.fabric_lines.all().delete()
+        for i, row in enumerate(fabric_data or []):
+            row.pop('id', None)
+            IndentFabricLine.objects.create(indent=indent, sort_order=i, **row)
 
-class IntentSerializer(serializers.ModelSerializer):
-    sheets = IntentSheetSerializer(many=True)
-    attachments = IntentAttachmentSerializer(many=True, read_only=True)
-    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
-    pi_number = serializers.CharField(source='pi.pi_number', read_only=True)
+        indent.trim_lines.all().delete()
+        for i, row in enumerate(trim_data or []):
+            row.pop('id', None)
+            trim_fk = row.pop('trim', None)
+            if trim_fk and hasattr(trim_fk, 'pk'):
+                trim_fk = trim_fk.pk
+            IndentTrimLine.objects.create(indent=indent, trim_id=trim_fk, sort_order=i, **row)
 
-    class Meta:
-        model = Intent
-        fields = [
-            'id', 'pi', 'indent_number', 'buyer_po_reference', 'intent_date',
-            'garment_sheet_name', 'item_description', 'total_garment_qty', 'size_breakdown', 'packing_notes',
-            'status', 'prepared_by', 'received_by', 'approved_by', 'notes',
-            'sheets', 'attachments', 'created_by', 'created_by_name', 'pi_number', 'created_at', 'updated_at',
-        ]
-        read_only_fields = (
-            'created_by', 'created_at', 'updated_at', 'garment_sheet_name', 'total_garment_qty', 'size_breakdown', 'item_description',
+    def _upsert_templates(self, indent):
+        """Store fabric+trim defaults keyed by item_name for future auto-fill."""
+        item_names = list(
+            indent.pi.lines.values_list('item_name', flat=True).distinct()
         )
+        fabric_snapshot = [
+            {k: str(v) if hasattr(v, 'as_tuple') else v
+             for k, v in {
+                'material': fl.material, 'color': fl.color,
+                'consumption_per_pc': fl.consumption_per_pc,
+                'unit': fl.unit, 'remarks': fl.remarks,
+             }.items()}
+            for fl in indent.fabric_lines.all()
+        ]
+        trim_snapshot = [
+            {
+                'trim_name': tl.trim_name, 'category': tl.category,
+                'color_variant': tl.color_variant, 'size_variant': tl.size_variant,
+                'consumption_per_pc': str(tl.consumption_per_pc),
+                'unit': tl.unit, 'total_unit': tl.total_unit, 'remarks': tl.remarks,
+            }
+            for tl in indent.trim_lines.all()
+        ]
+        for name in item_names:
+            ItemIndentTemplate.objects.update_or_create(
+                item_name=name,
+                defaults={'fabric_lines': fabric_snapshot, 'trim_lines': trim_snapshot},
+            )
 
     def create(self, validated_data):
-        sheets_data = validated_data.pop('sheets', None)
-        if not sheets_data:
-            raise serializers.ValidationError({'sheets': 'At least one sheet (Excel tab) is required.'})
-        intent = Intent.objects.create(**validated_data)
-        for order, sheet_data in enumerate(sheets_data):
-            lines = sheet_data.pop('lines', None) or []
-            sheet_data.pop('id', None)
-            if 'label' in sheet_data and (sheet_data.get('label') or '') == '':
-                raise serializers.ValidationError({'sheets': f'Sheet {order + 1}: label is required.'})
-            sh = IntentSheet.objects.create(
-                intent=intent,
-                sort_order=order,
-                label=sheet_data.get('label', f'Sheet {order + 1}') or f'Sheet {order + 1}',
-                item_description=sheet_data.get('item_description', '') or '',
-                size_breakdown=sheet_data.get('size_breakdown') or [],
-                total_garment_qty=sheet_data.get('total_garment_qty', 0) or 0,
-            )
-            for j, line_data in enumerate(lines, start=1):
-                _create_intent_line_from_dict(sh, intent, line_data, j)
-        _rollup_intent_header_from_sheets(intent)
-        return intent
+        fabric_data = validated_data.pop('fabric_lines', [])
+        trim_data = validated_data.pop('trim_lines', [])
+        indent = Indent.objects.create(**validated_data)
+        self._save_lines(indent, fabric_data, trim_data)
+        self._upsert_templates(indent)
+        return indent
 
     def update(self, instance, validated_data):
-        from procurement.models import PurchaseOrderItem
-
-        sheets_data = validated_data.pop('sheets', None)
-
+        fabric_data = validated_data.pop('fabric_lines', None)
+        trim_data = validated_data.pop('trim_lines', None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-
-        if sheets_data is not None:
-            if PurchaseOrderItem.objects.filter(intent_line__intent=instance).exists():
-                raise serializers.ValidationError({
-                    'sheets': 'Cannot replace sheets or lines while purchase orders reference this intent.',
-                })
-            instance.sheets.all().delete()
-            for order, sheet_data in enumerate(sheets_data):
-                lines = sheet_data.pop('lines', None) or []
-                sheet_data.pop('id', None)
-                sh = IntentSheet.objects.create(
-                    intent=instance,
-                    sort_order=order,
-                    label=sheet_data.get('label', f'Sheet {order + 1}') or f'Sheet {order + 1}',
-                    item_description=sheet_data.get('item_description', '') or '',
-                    size_breakdown=sheet_data.get('size_breakdown') or [],
-                    total_garment_qty=sheet_data.get('total_garment_qty', 0) or 0,
-                )
-                for j, line_data in enumerate(lines, start=1):
-                    _create_intent_line_from_dict(sh, instance, line_data, j)
-            _rollup_intent_header_from_sheets(instance)
+        if fabric_data is not None or trim_data is not None:
+            self._save_lines(
+                instance,
+                fabric_data if fabric_data is not None else list(instance.fabric_lines.values()),
+                trim_data if trim_data is not None else list(instance.trim_lines.values()),
+            )
+            self._upsert_templates(instance)
         return instance
+
+
+class IndentListSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+    pi_number = serializers.CharField(source='pi.pi_number', read_only=True)
+    pi_ref = serializers.SerializerMethodField()
+    item_name = serializers.SerializerMethodField()
+    total_qty = serializers.SerializerMethodField()
+    fabric_count = serializers.SerializerMethodField()
+    trim_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Indent
+        fields = [
+            'id', 'indent_number', 'pi', 'pi_number', 'pi_ref',
+            'item_name', 'total_qty', 'status', 'indent_date',
+            'fabric_count', 'trim_count', 'created_by_name', 'created_at',
+        ]
+
+    def get_pi_ref(self, obj):
+        po = obj.pi.buyer_pos.order_by('id').first()
+        return po.po_number if po else None
+
+    def get_item_name(self, obj):
+        names = list(obj.pi.lines.values_list('item_name', flat=True).distinct())
+        return ', '.join(names[:2]) + (f' +{len(names)-2} more' if len(names) > 2 else '')
+
+    def get_total_qty(self, obj):
+        return obj.pi.lines.aggregate(s=Sum('quantity_pcs'))['s'] or 0
+
+    def get_fabric_count(self, obj):
+        return obj.fabric_lines.count()
+
+    def get_trim_count(self, obj):
+        return obj.trim_lines.count()
+
+
+class ItemIndentTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ItemIndentTemplate
+        fields = '__all__'
+        read_only_fields = ('id', 'updated_at')
 
 
 # ---------------------------------------------------------------------------
@@ -527,11 +421,9 @@ class BuyerPOSerializer(serializers.ModelSerializer):
         po.lines.all().delete()
         for i, line_data in enumerate(lines_data, start=1):
             line_data.pop('id', None)
-            # Auto-sum quantity from size_breakdown if provided
             sizes = line_data.get('size_breakdown') or []
             if sizes:
                 line_data['quantity'] = sum(s.get('qty', 0) for s in sizes)
-            # Auto-compute line_amount (apply discount if present)
             qty = line_data.get('quantity', 0)
             price = line_data.get('unit_price')
             disc = line_data.get('discount')
@@ -562,5 +454,5 @@ class BuyerPOSerializer(serializers.ModelSerializer):
         instance.save()
         if lines_data is not None:
             self._save_lines(instance, lines_data)
-        self._update_totals(instance)
+            self._update_totals(instance)
         return instance

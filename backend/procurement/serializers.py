@@ -4,55 +4,8 @@ from django.db.models import Sum
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
-from orders.models import IntentLine
-
 from .models import PurchaseOrder, PurchaseOrderItem, POReceipt, POReceiptItem
 from inventory.serializers import InventoryItemListSerializer
-
-
-def _aggregate_intent_line_quantities(items_data):
-    totals = {}
-    for row in items_data:
-        il = row.get('intent_line')
-        if il is None or il == '':
-            continue
-        il_id = il if not hasattr(il, 'pk') else il.pk
-        q = row.get('quantity_ordered')
-        if q is None:
-            continue
-        totals[il_id] = totals.get(il_id, Decimal('0')) + Decimal(str(q))
-    return totals
-
-
-def validate_intent_line_allocations(items_data, exclude_po=None):
-    """Ensure sum(PO qty per intent line, all suppliers) does not exceed indent requirement."""
-    line_qty = _aggregate_intent_line_quantities(items_data)
-    if not line_qty:
-        return
-
-    qs = PurchaseOrderItem.objects.filter(intent_line_id__in=list(line_qty.keys()))
-    if exclude_po is not None:
-        qs = qs.exclude(po=exclude_po)
-
-    existing = {
-        row['intent_line_id']: row['s'] or Decimal('0')
-        for row in qs.values('intent_line_id').annotate(s=Sum('quantity_ordered'))
-    }
-
-    for il_id, add_qty in line_qty.items():
-        try:
-            line = IntentLine.objects.get(pk=il_id)
-        except IntentLine.DoesNotExist as exc:
-            raise ValidationError({'items': f'Invalid intent line id: {il_id}'}) from exc
-
-        prev = existing.get(il_id, Decimal('0'))
-        if prev + add_qty > line.total_required:
-            raise ValidationError({
-                'items': (
-                    f'Quantity for intent line "{line.material_description}" would be '
-                    f'{prev + add_qty} but only {line.total_required} is required on the indent.'
-                ),
-            })
 
 
 class PurchaseOrderItemSerializer(serializers.ModelSerializer):
@@ -69,19 +22,11 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     items = PurchaseOrderItemSerializer(many=True, required=False)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     pi_number = serializers.CharField(source='pi.pi_number', read_only=True)
-    indent_number = serializers.CharField(source='intent.indent_number', read_only=True)
 
     class Meta:
         model = PurchaseOrder
         fields = '__all__'
         read_only_fields = ('created_by', 'created_at', 'updated_at')
-
-    def validate(self, attrs):
-        if hasattr(self, 'initial_data'):
-            items = self.initial_data.get('items')
-            if isinstance(items, list) and len(items) > 0:
-                validate_intent_line_allocations(items, exclude_po=self.instance)
-        return attrs
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
@@ -118,15 +63,13 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 class PurchaseOrderListSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     pi_number = serializers.CharField(source='pi.pi_number', read_only=True)
-    indent_number = serializers.CharField(source='intent.indent_number', read_only=True)
-    intent_id = serializers.IntegerField(read_only=True, allow_null=True)
     items_count = serializers.SerializerMethodField()
 
     class Meta:
         model = PurchaseOrder
         fields = [
             'id', 'po_number', 'vendor_name', 'order_date', 'expected_delivery_date',
-            'status', 'total_amount', 'pi_number', 'intent_id', 'indent_number',
+            'status', 'total_amount', 'pi_number',
             'created_by_name', 'items_count', 'created_at',
         ]
 

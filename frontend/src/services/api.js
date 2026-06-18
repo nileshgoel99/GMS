@@ -92,12 +92,6 @@ export const ordersAPI = {
   downloadPiPdf: (id) =>
     api.get(`/orders/pi/${id}/pdf/`, { responseType: 'blob' }).then((res) => res.data),
 
-  getIntents: (params) => api.get('/orders/intents/', { params }),
-  getIntent: (id) => api.get(`/orders/intents/${id}/`),
-  createIntent: (data) => api.post('/orders/intents/', data),
-  updateIntent: (id, data) => api.put(`/orders/intents/${id}/`, data),
-  deleteIntent: (id) => api.delete(`/orders/intents/${id}/`),
-  uploadIntentAttachment: (id, formData) => api.post(`/orders/intents/${id}/attachments/`, formData),
 
   getBuyerPOs: (params) => api.get('/orders/buyer-pos/', { params }),
   getBuyerPO: (id) => api.get(`/orders/buyer-pos/${id}/`),
@@ -119,6 +113,24 @@ export const ordersAPI = {
   getPI: (id) => api.get(`/orders/pi/${id}/`),
   patchPI: (id, data) => api.patch(`/orders/pi/${id}/`, data),
   deletePI: (id) => api.delete(`/orders/pi/${id}/`),
+
+  // Trims Library
+  getTrimsMaster: (params) => api.get('/orders/trims-master/', { params }),
+  createTrim: (data) => api.post('/orders/trims-master/', data),
+  updateTrim: (id, data) => api.patch(`/orders/trims-master/${id}/`, data),
+  deleteTrim: (id) => api.delete(`/orders/trims-master/${id}/`),
+
+  // Indents
+  getIndents: (params) => api.get('/orders/indents/', { params }),
+  getIndent: (id) => api.get(`/orders/indents/${id}/`),
+  createIndent: (data) => api.post('/orders/indents/', data),
+  updateIndent: (id, data) => api.patch(`/orders/indents/${id}/`, data),
+  deleteIndent: (id) => api.delete(`/orders/indents/${id}/`),
+  getNextIndentNumber: () => api.get('/orders/indents/next-number/'),
+  getIndentTemplate: (itemName) => api.get('/orders/indents/template/', { params: { item_name: itemName } }),
+
+  // Indent templates (read-only)
+  getIndentTemplates: (params) => api.get('/orders/indent-templates/', { params }),
 };
 
 export const inventoryAPI = {

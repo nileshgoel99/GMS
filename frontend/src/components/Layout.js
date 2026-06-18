@@ -60,13 +60,14 @@ const navGroups = [
   {
     id: 'planning',
     label: 'Planning',
-    items: [{ text: 'Intents & indents', icon: <ListAltIcon />, path: '/intents' }],
+    items: [{ text: 'Indents', icon: <ListAltIcon />, path: '/indents' }],
   },
   {
     id: 'supply',
     label: 'Materials & buying',
     items: [
       { text: 'Fabrics, trims & stock', icon: <InventoryIcon />, path: '/inventory' },
+      { text: 'Trims library', icon: <ListAltIcon />, path: '/trims' },
       { text: 'Mill & vendor POs', icon: <ShoppingCartIcon />, path: '/procurement' },
     ],
   },
@@ -86,7 +87,8 @@ const routeMeta = {
   '/': { title: 'Plant dashboard' },
   '/customers': { title: 'Buyers' },
   '/orders': { title: 'Proforma invoices' },
-  '/intents': { title: 'Intents' },
+  '/indents': { title: 'Indents' },
+  '/trims': { title: 'Trims Library' },
   '/inventory': { title: 'Inventory' },
   '/procurement': { title: 'Procurement' },
   '/production': { title: 'Production' },

@@ -13,8 +13,9 @@ import PIViewPage from './pages/PIViewPage';
 import Inventory from './pages/Inventory';
 import Procurement from './pages/Procurement';
 import Production from './pages/Production';
-import Intents from './pages/Intents';
-import IntentEditorPage from './pages/IntentEditorPage';
+import Indents from './pages/Indents';
+import IndentEditorPage from './pages/IndentEditorPage';
+import TrimsLibraryPage from './pages/TrimsLibraryPage';
 import CompanyPage from './pages/CompanyPage';
 import BuyerPOs from './pages/BuyerPOs';
 import BuyerPOEditorPage from './pages/BuyerPOEditorPage';
@@ -75,21 +76,31 @@ function App() {
               }
             />
             <Route
-              path="/intents"
+              path="/indents"
               element={
                 <PrivateRoute>
                   <Layout>
-                    <Intents />
+                    <Indents />
                   </Layout>
                 </PrivateRoute>
               }
             />
             <Route
-              path="/intents/:id"
+              path="/indents/:id"
               element={
                 <PrivateRoute>
                   <Layout>
-                    <IntentEditorPage />
+                    <IndentEditorPage />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/trims"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <TrimsLibraryPage />
                   </Layout>
                 </PrivateRoute>
               }

@@ -12,10 +12,10 @@ from .serializers import (
 
 
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
-    queryset = PurchaseOrder.objects.all().select_related('pi', 'intent', 'created_by').prefetch_related('items')
+    queryset = PurchaseOrder.objects.all().select_related('pi', 'created_by').prefetch_related('items')
     serializer_class = PurchaseOrderSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'vendor_name', 'order_date', 'pi', 'intent']
+    filterset_fields = ['status', 'vendor_name', 'order_date', 'pi']
     search_fields = ['po_number', 'vendor_name', 'vendor_email']
     ordering_fields = ['order_date', 'created_at', 'po_number']
     
