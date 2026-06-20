@@ -119,7 +119,20 @@ class TrimMaster(models.Model):
     name = models.CharField(max_length=300, unique=True, help_text='e.g. 5 CM WIDE Reflective Tape D6101')
     category = models.CharField(max_length=100, blank=True, default='', help_text='e.g. Tape, Button, Velcro, Label, Thread')
     default_unit = models.CharField(max_length=20, default='PCS', help_text='e.g. MTR, PCS, CONE')
+    properties = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Configurable properties: [{"name": "Width", "unit": "CM"}, {"name": "Color", "unit": ""}]',
+    )
     notes = models.TextField(blank=True, default='')
+    supplier = models.ForeignKey(
+        'suppliers.Supplier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='trims',
+        help_text='Preferred supplier for this trim',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -139,6 +152,11 @@ class Indent(models.Model):
     ]
 
     pi = models.ForeignKey(ProformaInvoice, on_delete=models.CASCADE, related_name='indents')
+    selected_pi_line_ids = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='PI line IDs included in this indent',
+    )
     indent_number = models.CharField(max_length=80, unique=True, db_index=True)
     indent_date = models.DateField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
@@ -170,6 +188,7 @@ class IndentFabricLine(models.Model):
     indent = models.ForeignKey(Indent, on_delete=models.CASCADE, related_name='fabric_lines')
     material = models.CharField(max_length=500)
     color = models.CharField(max_length=120, blank=True, default='')
+    roll_width = models.CharField(max_length=50, blank=True, default='', help_text='Optional width of the fabric roll, e.g. 58 inch')
     consumption_per_pc = models.DecimalField(max_digits=10, decimal_places=4, default=0)
     unit = models.CharField(max_length=20, default='MTRS')
     total_consumption = models.DecimalField(max_digits=14, decimal_places=4, default=0)
@@ -191,6 +210,11 @@ class IndentTrimLine(models.Model):
     category = models.CharField(max_length=100, blank=True, default='')
     color_variant = models.CharField(max_length=120, blank=True, default='', help_text='e.g. Orange, GREY, Hi Vis Yellow')
     size_variant = models.CharField(max_length=100, blank=True, default='', help_text='e.g. 6.5 inch, 7 inch')
+    property_values = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Values for trim properties, e.g. {"Width": "5", "Color": "Orange"}',
+    )
     consumption_per_pc = models.DecimalField(max_digits=10, decimal_places=4, default=0)
     unit = models.CharField(max_length=20, default='PCS')
     total_consumption = models.DecimalField(max_digits=14, decimal_places=4, default=0)

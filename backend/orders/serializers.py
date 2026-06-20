@@ -199,6 +199,9 @@ class ProformaInvoiceListSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 
 class TrimMasterSerializer(serializers.ModelSerializer):
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, default='')
+    supplier_country = serializers.CharField(source='supplier.country', read_only=True, default='')
+
     class Meta:
         model = TrimMaster
         fields = '__all__'
@@ -209,7 +212,7 @@ class IndentFabricLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = IndentFabricLine
         fields = [
-            'id', 'material', 'color', 'consumption_per_pc', 'unit',
+            'id', 'material', 'color', 'roll_width', 'consumption_per_pc', 'unit',
             'total_consumption', 'remarks', 'sort_order',
         ]
         read_only_fields = ('id',)
@@ -220,6 +223,7 @@ class IndentTrimLineSerializer(serializers.ModelSerializer):
         model = IndentTrimLine
         fields = [
             'id', 'trim', 'trim_name', 'category', 'color_variant', 'size_variant',
+            'property_values',
             'consumption_per_pc', 'unit', 'total_consumption', 'total_unit', 'remarks', 'sort_order',
         ]
         read_only_fields = ('id',)
@@ -235,7 +239,7 @@ class IndentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Indent
         fields = [
-            'id', 'pi', 'pi_number', 'pi_lines',
+            'id', 'pi', 'pi_number', 'pi_lines', 'selected_pi_line_ids',
             'indent_number', 'indent_date', 'status',
             'pcs_per_carton', 'carton_ply', 'carton_dimensions',
             'prepared_by', 'received_by', 'approved_by', 'notes',
@@ -263,13 +267,13 @@ class IndentSerializer(serializers.ModelSerializer):
 
     def _upsert_templates(self, indent):
         """Store fabric+trim defaults keyed by item_name for future auto-fill."""
-        item_names = list(
-            indent.pi.lines.values_list('item_name', flat=True).distinct()
-        )
+        line_ids = indent.selected_pi_line_ids or []
+        selected_lines = indent.pi.lines.filter(id__in=line_ids) if line_ids else indent.pi.lines.all()
+        item_names = list(selected_lines.values_list('item_name', flat=True).distinct())
         fabric_snapshot = [
             {k: str(v) if hasattr(v, 'as_tuple') else v
              for k, v in {
-                'material': fl.material, 'color': fl.color,
+                'material': fl.material, 'color': fl.color, 'roll_width': fl.roll_width,
                 'consumption_per_pc': fl.consumption_per_pc,
                 'unit': fl.unit, 'remarks': fl.remarks,
              }.items()}
@@ -277,8 +281,10 @@ class IndentSerializer(serializers.ModelSerializer):
         ]
         trim_snapshot = [
             {
+                'trim': tl.trim_id,
                 'trim_name': tl.trim_name, 'category': tl.category,
                 'color_variant': tl.color_variant, 'size_variant': tl.size_variant,
+                'property_values': tl.property_values or {},
                 'consumption_per_pc': str(tl.consumption_per_pc),
                 'unit': tl.unit, 'total_unit': tl.total_unit, 'remarks': tl.remarks,
             }

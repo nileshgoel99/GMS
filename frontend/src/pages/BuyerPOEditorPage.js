@@ -31,6 +31,7 @@ import {
   AttachFile,
   OpenInNew,
   ReceiptLong,
+  Assignment,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, customersAPI } from '../services/api';
@@ -1055,14 +1056,24 @@ export default function BuyerPOEditorPage() {
             )}
             {!isCreate && (
               formData.pi ? (
-                <Button
-                  variant="outlined"
-                  startIcon={<ReceiptLong />}
-                  onClick={() => navigate(`/orders/pi/${formData.pi}/view`)}
-                  sx={{ borderRadius: 2, px: 2.5, fontWeight: 700, textTransform: 'none', borderColor: '#0f766e', color: '#0f766e' }}
-                >
-                  View PI
-                </Button>
+                <>
+                  <Button
+                    variant="outlined"
+                    startIcon={<ReceiptLong />}
+                    onClick={() => navigate(`/orders/pi/${formData.pi}/view`)}
+                    sx={{ borderRadius: 2, px: 2.5, fontWeight: 700, textTransform: 'none', borderColor: '#0f766e', color: '#0f766e' }}
+                  >
+                    View PI
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<Assignment />}
+                    onClick={() => navigate(`/indents/new?piId=${formData.pi}`)}
+                    sx={{ borderRadius: 2, px: 2.5, fontWeight: 700, textTransform: 'none', borderColor: '#7c3aed', color: '#7c3aed' }}
+                  >
+                    Create Indent
+                  </Button>
+                </>
               ) : (
                 <Button
                   variant="outlined"
@@ -1515,20 +1526,36 @@ export default function BuyerPOEditorPage() {
           {saving ? 'Saving…' : isCreate ? 'Create PO' : 'Save Changes'}
         </Button>
         {!isCreate && formData.pi ? (
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={<ReceiptLong />}
-            onClick={() => navigate(`/orders/pi/${formData.pi}/view`)}
-            disabled={saving || loading}
-            sx={{
-              py: 1.5, px: 4, borderRadius: 2, fontWeight: 900, fontSize: '1rem', textTransform: 'none',
-              bgcolor: '#0f766e', boxShadow: `0 4px 20px ${alpha('#0f766e', 0.5)}`,
-              '&:hover': { bgcolor: '#0d6560', boxShadow: `0 6px 24px ${alpha('#0f766e', 0.6)}` },
-            }}
-          >
-            View PI
-          </Button>
+          <>
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={<ReceiptLong />}
+              onClick={() => navigate(`/orders/pi/${formData.pi}/view`)}
+              disabled={saving || loading}
+              sx={{
+                py: 1.5, px: 4, borderRadius: 2, fontWeight: 900, fontSize: '1rem', textTransform: 'none',
+                bgcolor: '#0f766e', boxShadow: `0 4px 20px ${alpha('#0f766e', 0.5)}`,
+                '&:hover': { bgcolor: '#0d6560', boxShadow: `0 6px 24px ${alpha('#0f766e', 0.6)}` },
+              }}
+            >
+              View PI
+            </Button>
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={<Assignment />}
+              onClick={() => navigate(`/indents/new?piId=${formData.pi}`)}
+              disabled={saving || loading}
+              sx={{
+                py: 1.5, px: 4, borderRadius: 2, fontWeight: 900, fontSize: '1rem', textTransform: 'none',
+                bgcolor: '#7c3aed', boxShadow: `0 4px 20px ${alpha('#7c3aed', 0.45)}`,
+                '&:hover': { bgcolor: '#6d28d9', boxShadow: `0 6px 24px ${alpha('#7c3aed', 0.55)}` },
+              }}
+            >
+              Create Indent
+            </Button>
+          </>
         ) : (
           <Button
             variant="contained"

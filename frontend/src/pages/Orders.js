@@ -13,12 +13,13 @@ import {
   Chip,
   Tooltip,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { DataGrid } from '@mui/x-data-grid';
-import { Edit, Delete, Description, ReceiptLong, Visibility } from '@mui/icons-material';
+import { Edit, Delete, Description, ReceiptLong, Visibility, Assignment } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
-import { dataGridSx } from '../theme/appTheme';
+import { dataGridSx, slate } from '../theme/appTheme';
 import { ordersAPI } from '../services/api';
 import { BuyerPoDetailDialog } from './BuyerPOs';
 
@@ -148,73 +149,169 @@ const Orders = () => {
     }
   };
 
+  const cell = (align = 'left', children) => (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
+        width: '100%',
+        height: '100%',
+        px: 0.5,
+      }}
+    >
+      {children}
+    </Box>
+  );
+
+  const piGridSx = {
+    ...dataGridSx,
+    width: '100%',
+    bgcolor: '#fff',
+    '& .MuiDataGrid-columnHeaders': {
+      ...(dataGridSx['& .MuiDataGrid-columnHeaders'] || {}),
+      bgcolor: slate[50],
+      borderBottom: `2px solid ${slate[200]}`,
+    },
+    '& .MuiDataGrid-columnHeaderTitle': {
+      fontWeight: 800,
+      fontSize: '0.72rem',
+      textTransform: 'uppercase',
+      letterSpacing: '0.06em',
+      color: slate[500],
+    },
+    '& .MuiDataGrid-cell': {
+      ...(dataGridSx['& .MuiDataGrid-cell'] || {}),
+      display: 'flex',
+      alignItems: 'center',
+      borderBottom: `1px solid ${slate[100]}`,
+    },
+    '& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus': { outline: 'none' },
+    '& .MuiDataGrid-row.pi-row--alt': {
+      bgcolor: `${alpha('#0f766e', 0.07)} !important`,
+    },
+    '& .MuiDataGrid-row.pi-row--alt:hover': {
+      bgcolor: `${alpha('#0f766e', 0.12)} !important`,
+    },
+  };
+
   const columns = [
-    { field: 'pi_number', headerName: 'PI number', width: 130 },
-    { field: 'buyer_po_number', headerName: 'Buyer PO', width: 120 },
-    { field: 'customer_code', headerName: 'Cust. code', width: 100 },
-    { field: 'client_name', headerName: 'Bill to', width: 160 },
-    { field: 'lines_count', headerName: 'Lines', width: 70, type: 'number' },
+    {
+      field: 'pi_number', headerName: 'PI Number', width: 140,
+      renderCell: (p) => cell('left',
+        <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', fontFamily: 'monospace', color: 'primary.main' }}>
+          {p.value}
+        </Typography>
+      ),
+    },
+    {
+      field: 'buyer_po_number', headerName: 'Buyer PO', width: 130,
+      renderCell: (p) => cell('left',
+        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{p.value || '—'}</Typography>
+      ),
+    },
+    {
+      field: 'customer_code', headerName: 'Cust. Code', width: 100,
+      renderCell: (p) => cell('left',
+        <Typography sx={{ fontSize: '0.82rem', fontFamily: 'monospace', color: 'text.secondary' }}>{p.value || '—'}</Typography>
+      ),
+    },
+    {
+      field: 'client_name', headerName: 'Bill To', flex: 1, minWidth: 160,
+      renderCell: (p) => cell('left',
+        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{p.value || '—'}</Typography>
+      ),
+    },
+    {
+      field: 'lines_count', headerName: 'Lines', width: 72, type: 'number', align: 'center', headerAlign: 'center',
+      renderCell: (p) => cell('center',
+        <Chip label={p.value ?? 0} size="small" variant="outlined" sx={{ fontWeight: 700, fontSize: '0.7rem' }} />
+      ),
+    },
     {
       field: 'garment_type',
-      headerName: 'Items summary',
+      headerName: 'Items Summary',
       flex: 1.2,
-      minWidth: 220,
+      minWidth: 200,
       sortable: false,
       renderCell: (params) => {
         const raw = params.value;
         const text = raw == null || String(raw).trim() === '' ? '—' : String(raw);
-        const cell = (
-          <Box
-            component="span"
+        const content = (
+          <Typography
             sx={{
-              display: 'block',
-              width: '100%',
-              whiteSpace: 'normal',
-              lineHeight: 1.45,
-              wordBreak: 'break-word',
-              py: 0.5,
-              pr: 0.5,
+              fontSize: '0.82rem',
+              lineHeight: 1.35,
               color: text === '—' ? 'text.disabled' : 'text.primary',
-              fontSize: '0.8125rem',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              wordBreak: 'break-word',
             }}
           >
             {text}
-          </Box>
+          </Typography>
         );
-        if (text === '—') {
-          return cell;
-        }
-        return (
-          <Tooltip title={text} placement="top-start" enterDelay={500} enterNextDelay={300}>
-            {cell}
+        return cell('left', text === '—' ? content : (
+          <Tooltip title={text} placement="top-start" enterDelay={400}>
+            {content}
           </Tooltip>
-        );
+        ));
       },
     },
-    { field: 'quantity', headerName: 'Total pcs', width: 90, type: 'number' },
-    { field: 'order_date', headerName: 'PI date', width: 110 },
+    {
+      field: 'quantity', headerName: 'Total Pcs', width: 100, type: 'number', align: 'right', headerAlign: 'right',
+      renderCell: (p) => cell('right',
+        <Typography sx={{ fontWeight: 700, fontSize: '0.82rem' }}>{p.value?.toLocaleString?.() ?? p.value ?? '—'}</Typography>
+      ),
+    },
+    {
+      field: 'order_date', headerName: 'PI Date', width: 110,
+      renderCell: (p) => cell('left',
+        <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{p.value || '—'}</Typography>
+      ),
+    },
     {
       field: 'status',
       headerName: 'Status',
       width: 130,
-      renderCell: (params) => (
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params) => cell('center',
         <Chip
           label={params.value ?? '—'}
           color={STATUS_COLORS[params.value] ?? 'default'}
           size="small"
+          sx={{ fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}
         />
       ),
     },
     {
       field: 'actions',
-      headerName: 'Actions',
-      width: 200,
+      headerName: '',
+      width: 220,
       sortable: false,
-      renderCell: (params) => (
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params) => cell('center',
         <Box sx={{ display: 'flex', gap: 0.25, alignItems: 'center' }}>
           <Tooltip title="View / Print PI">
             <IconButton size="small" color="primary" onClick={() => navigate(`/orders/pi/${params.row.id}/view`)}>
               <Edit fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={params.row.indents_count > 0 ? 'View indents for this PI' : 'Create indent from this PI'}>
+            <IconButton
+              size="small"
+              sx={{ color: '#7c3aed' }}
+              onClick={() => navigate(
+                params.row.indents_count > 0
+                  ? `/indents?piId=${params.row.id}`
+                  : `/indents/new?piId=${params.row.id}`,
+              )}
+            >
+              <Assignment fontSize="small" />
             </IconButton>
           </Tooltip>
           {params.row.linked_po_id && (
@@ -247,29 +344,26 @@ const Orders = () => {
   ];
 
   return (
-    <Box>
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
       <PageHeader
         kicker="Commercial"
         title="Proforma Invoices"
         subtitle="PIs generated from Buyer POs. Use the Buyer POs module to create and generate a new PI."
       />
 
-      <DataGridShell sx={{ height: { xs: 560, md: 620 }, width: '100%' }}>
+      <DataGridShell>
         <DataGrid
           rows={orders}
           columns={columns}
           getRowId={(row) => row.id}
-          getRowHeight={() => 'auto'}
+          getRowClassName={(p) => (orders.findIndex((r) => r.id === p.id) % 2 === 1 ? 'pi-row--alt' : '')}
+          rowHeight={64}
+          columnHeaderHeight={48}
           pageSizeOptions={[10, 25, 50]}
-          initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+          initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
           loading={loading}
           disableRowSelectionOnClick
-          sx={{
-            ...dataGridSx,
-            height: '100%',
-            '& .MuiDataGrid-cell': { alignItems: 'flex-start', py: 0.75 },
-            '& .MuiDataGrid-cell:focus': { outline: 'none' },
-          }}
+          sx={piGridSx}
         />
       </DataGridShell>
 

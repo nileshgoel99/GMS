@@ -56,7 +56,7 @@ class ProformaInvoiceViewSet(viewsets.ModelViewSet):
 
 
 class TrimMasterViewSet(viewsets.ModelViewSet):
-    queryset = TrimMaster.objects.all()
+    queryset = TrimMaster.objects.select_related('supplier').all()
     serializer_class = TrimMasterSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'category']

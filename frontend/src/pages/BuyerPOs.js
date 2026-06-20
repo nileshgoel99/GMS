@@ -21,7 +21,7 @@ import {
   Collapse,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
-import { Add, Edit, Delete, Visibility, ReceiptLong } from '@mui/icons-material';
+import { Add, Edit, Delete, Visibility, ReceiptLong, Assignment } from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
@@ -48,8 +48,9 @@ const fmtMoney = (n, ccy = 'USD') =>
     : `${ccy} ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // ── Detail dialog (read-only) ─────────────────────────────────────────────────
-export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI }) {
+export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCreateIndent }) {
   const theme = useTheme();
+  const navigate = useNavigate();
   const [po, setPo] = useState(null);
   const [showBuyer, setShowBuyer] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -331,6 +332,19 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI }) {
         <Button variant="outlined" onClick={onEdit} sx={{ fontWeight: 700, borderRadius: 1.5 }}>
           Edit PO
         </Button>
+        {po?.pi && (
+          <Button
+            variant="outlined"
+            startIcon={<Assignment />}
+            onClick={() => {
+              if (onCreateIndent) onCreateIndent(po.pi);
+              else { onClose(); navigate(`/indents/new?piId=${po.pi}`); }
+            }}
+            sx={{ fontWeight: 700, borderRadius: 1.5, borderColor: '#7c3aed', color: '#7c3aed' }}
+          >
+            Create Indent
+          </Button>
+        )}
         <Button
           variant="contained"
           startIcon={<ReceiptLong />}

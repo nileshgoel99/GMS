@@ -25,7 +25,6 @@ import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
   Assignment as AssignmentIcon,
-  Inventory as InventoryIcon,
   ShoppingCart as ShoppingCartIcon,
   Factory as ManufacturingIcon,
   ListAlt as ListAltIcon,
@@ -35,6 +34,7 @@ import {
   ChevronRight as ChevronRightIcon,
   Business as BusinessIcon,
   ReceiptLong as ReceiptLongIcon,
+  LocalShipping as LocalShippingIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -66,8 +66,8 @@ const navGroups = [
     id: 'supply',
     label: 'Materials & buying',
     items: [
-      { text: 'Fabrics, trims & stock', icon: <InventoryIcon />, path: '/inventory' },
       { text: 'Trims library', icon: <ListAltIcon />, path: '/trims' },
+      { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers' },
       { text: 'Mill & vendor POs', icon: <ShoppingCartIcon />, path: '/procurement' },
     ],
   },
@@ -88,7 +88,9 @@ const routeMeta = {
   '/customers': { title: 'Buyers' },
   '/orders': { title: 'Proforma invoices' },
   '/indents': { title: 'Indents' },
+  '/indents/new': { title: 'New Indent' },
   '/trims': { title: 'Trims Library' },
+  '/suppliers': { title: 'Suppliers' },
   '/inventory': { title: 'Inventory' },
   '/procurement': { title: 'Procurement' },
   '/production': { title: 'Production' },
@@ -98,6 +100,7 @@ const routeMeta = {
 const pathMatchesNav = (pathname, path) => {
   if (path === '/') return pathname === '/';
   if (path === '/orders') return pathname === '/orders' || pathname.startsWith('/orders/');
+  if (path === '/indents') return pathname === '/indents' || pathname.startsWith('/indents/');
   return pathname === path || pathname.startsWith(`${path}/`);
 };
 

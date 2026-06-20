@@ -16,6 +16,7 @@ import Production from './pages/Production';
 import Indents from './pages/Indents';
 import IndentEditorPage from './pages/IndentEditorPage';
 import TrimsLibraryPage from './pages/TrimsLibraryPage';
+import SuppliersPage from './pages/SuppliersPage';
 import CompanyPage from './pages/CompanyPage';
 import BuyerPOs from './pages/BuyerPOs';
 import BuyerPOEditorPage from './pages/BuyerPOEditorPage';
@@ -101,6 +102,16 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <TrimsLibraryPage />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/suppliers"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <SuppliersPage />
                   </Layout>
                 </PrivateRoute>
               }

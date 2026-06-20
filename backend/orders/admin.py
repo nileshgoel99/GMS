@@ -31,9 +31,10 @@ class IndentTrimLineInline(admin.TabularInline):
 
 @admin.register(TrimMaster)
 class TrimMasterAdmin(admin.ModelAdmin):
-    list_display = ['name', 'category', 'default_unit', 'created_at']
-    list_filter = ['category']
-    search_fields = ['name', 'category']
+    list_display = ['name', 'category', 'supplier', 'default_unit', 'created_at']
+    list_filter = ['category', 'supplier']
+    search_fields = ['name', 'category', 'supplier__name']
+    autocomplete_fields = ['supplier']
 
 
 @admin.register(Indent)
