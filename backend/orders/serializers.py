@@ -16,6 +16,8 @@ from .models import (
     ItemIndentTemplate,
     BuyerPO,
     BuyerPOLine,
+    SalesEntry,
+    SalesEntryLine,
 )
 
 
@@ -462,3 +464,135 @@ class BuyerPOSerializer(serializers.ModelSerializer):
             self._save_lines(instance, lines_data)
             self._update_totals(instance)
         return instance
+
+
+from .sales_numbering import next_sales_entry_ref
+from .sales_receivable import compute_sales_due_date
+
+
+class SalesEntryLineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SalesEntryLine
+        fields = '__all__'
+        read_only_fields = ('sales_entry', 'total_price')
+
+    def validate(self, attrs):
+        if not (attrs.get('item_name') or '').strip() and not (attrs.get('item_code') or '').strip():
+            raise serializers.ValidationError('Each line needs an item name or code.')
+        return attrs
+
+
+def _default_sales_due_date(validated_data):
+    if validated_data.get('due_date'):
+        return validated_data['due_date']
+    sale_date = validated_data.get('sale_date')
+    terms = validated_data.get('payment_terms') or ''
+    if sale_date and terms:
+        from datetime import timedelta
+        from procurement.payment_due import parse_payment_days
+        days = parse_payment_days(terms)
+        if days is not None:
+            return sale_date + timedelta(days=days)
+    buyer_po = validated_data.get('buyer_po')
+    if buyer_po and hasattr(buyer_po, 'ex_factory_date') and buyer_po.ex_factory_date:
+        return buyer_po.ex_factory_date
+    return sale_date
+
+
+class SalesEntrySerializer(serializers.ModelSerializer):
+    items = SalesEntryLineSerializer(many=True, required=False)
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+    buyer_po_number = serializers.CharField(source='buyer_po.po_number', read_only=True)
+    pi_number = serializers.CharField(source='pi.pi_number', read_only=True)
+    balance_due = serializers.SerializerMethodField()
+    collection_due_date = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SalesEntry
+        fields = '__all__'
+        read_only_fields = (
+            'created_by', 'created_at', 'updated_at', 'subtotal', 'total_amount',
+        )
+
+    def get_balance_due(self, obj):
+        return str(obj.balance_due)
+
+    def get_collection_due_date(self, obj):
+        due = compute_sales_due_date(obj)
+        return due.isoformat() if due else None
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+        customer = validated_data.get('customer')
+        if customer and not validated_data.get('customer_name'):
+            validated_data['customer_name'] = getattr(customer, 'company_legal_name', str(customer))
+        if not (validated_data.get('internal_ref') or '').strip():
+            validated_data['internal_ref'] = next_sales_entry_ref()['internal_ref']
+        validated_data['due_date'] = _default_sales_due_date(validated_data)
+        if validated_data.get('status') not in ('DRAFT', 'CANCELLED'):
+            validated_data['status'] = 'OPEN'
+        entry = SalesEntry.objects.create(**validated_data)
+        for idx, item_data in enumerate(items_data, start=1):
+            item_data.pop('id', None)
+            item_data.pop('sales_entry', None)
+            if not item_data.get('serial_no'):
+                item_data['serial_no'] = idx
+            SalesEntryLine.objects.create(sales_entry=entry, **item_data)
+        entry.recalculate_totals()
+        if entry.status != 'DRAFT':
+            entry.sync_collection_status()
+        return entry
+
+    def update(self, instance, validated_data):
+        items_data = validated_data.pop('items', None)
+        customer = validated_data.get('customer', instance.customer)
+        if customer and not validated_data.get('customer_name'):
+            validated_data['customer_name'] = getattr(customer, 'company_legal_name', instance.customer_name)
+        if 'due_date' not in validated_data or not validated_data.get('due_date'):
+            merged = {**{f.name: getattr(instance, f.name) for f in instance._meta.fields}, **validated_data}
+            validated_data['due_date'] = _default_sales_due_date(merged)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if items_data is not None:
+            instance.items.all().delete()
+            for idx, item_data in enumerate(items_data, start=1):
+                item_data.pop('id', None)
+                item_data.pop('sales_entry', None)
+                if not item_data.get('serial_no'):
+                    item_data['serial_no'] = idx
+                SalesEntryLine.objects.create(sales_entry=instance, **item_data)
+        instance.recalculate_totals()
+        if instance.status not in ('DRAFT', 'CANCELLED'):
+            instance.sync_collection_status()
+        return instance
+
+
+class SalesEntryListSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+    buyer_po_number = serializers.CharField(source='buyer_po.po_number', read_only=True)
+    pi_number = serializers.CharField(source='pi.pi_number', read_only=True)
+    balance_due = serializers.SerializerMethodField()
+    collection_due_date = serializers.SerializerMethodField()
+    items_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SalesEntry
+        fields = [
+            'id', 'internal_ref', 'invoice_number', 'customer', 'customer_name',
+            'buyer_po', 'buyer_po_number', 'pi', 'pi_number', 'currency',
+            'sale_date', 'due_date', 'collection_due_date', 'payment_terms', 'status',
+            'subtotal', 'total_amount', 'amount_received', 'balance_due',
+            'created_by_name', 'items_count', 'created_at',
+        ]
+
+    def get_balance_due(self, obj):
+        return str(obj.balance_due)
+
+    def get_collection_due_date(self, obj):
+        due = compute_sales_due_date(obj)
+        return due.isoformat() if due else None
+
+    def get_items_count(self, obj):
+        return obj.items.count()
+

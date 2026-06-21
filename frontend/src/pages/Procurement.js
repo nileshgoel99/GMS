@@ -4,7 +4,7 @@ import {
   Box, Button, Typography, IconButton, Chip, Tooltip,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { Add, Edit, Delete, LocalShipping, Visibility } from '@mui/icons-material';
+import { Add, Edit, Delete, LocalShipping, Visibility, ReceiptLong } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
@@ -182,9 +182,14 @@ export default function Procurement() {
       ),
     },
     {
-      field: 'actions', headerName: '', width: 130, sortable: false, align: 'center', headerAlign: 'center',
+      field: 'actions', headerName: '', width: 160, sortable: false, align: 'center', headerAlign: 'center',
       renderCell: (p) => cell('center',
         <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title="Record bill">
+            <IconButton size="small" color="secondary" onClick={() => navigate(`/purchase-bills/new?poId=${p.row.id}`)}>
+              <ReceiptLong fontSize="small" />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="View">
             <IconButton size="small" onClick={() => setViewId(p.row.id)}>
               <Visibility fontSize="small" />

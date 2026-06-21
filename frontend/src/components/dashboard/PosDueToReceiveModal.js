@@ -18,12 +18,6 @@ const STATUS_COLOR = {
   CANCELLED: 'error',
 };
 
-const formatMoney = (amount, prefix = '₹') => {
-  const num = Number(amount);
-  if (Number.isNaN(num)) return '—';
-  return `${prefix} ${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-
 const headSx = {
   fontWeight: 700,
   fontSize: '0.75rem',
@@ -50,7 +44,6 @@ export default function PosDueToReceiveModal({ open, onClose, monthLabel, summar
   const theme = useTheme();
   const accent = theme.palette.info.dark;
   const [detailId, setDetailId] = useState(null);
-  const totalAmount = items.reduce((sum, row) => sum + (Number(row.total_amount) || 0), 0);
 
   const handleClose = () => {
     setDetailId(null);
@@ -96,7 +89,7 @@ export default function PosDueToReceiveModal({ open, onClose, monthLabel, summar
               Supplier POs Due to Receive — {monthLabel || 'This Month'}
             </Typography>
             <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary', mt: 0.25 }}>
-              Expected deliveries in the current month (ORDERED / PARTIAL)
+              Expected material deliveries from suppliers this month
             </Typography>
           </Box>
           <IconButton size="small" onClick={handleClose}><Close /></IconButton>
@@ -107,36 +100,25 @@ export default function PosDueToReceiveModal({ open, onClose, monthLabel, summar
             sx={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
+              justifyContent: 'center',
               gap: 2,
               mb: 2,
-              p: 1.75,
+              p: 2,
               borderRadius: 1.5,
               bgcolor: alpha(theme.palette.info.main, 0.06),
               border: `1px solid ${alpha(theme.palette.info.main, 0.18)}`,
             }}
           >
-            <Box>
-              <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: accent }}>
-                Total Value Awaiting Receipt
-              </Typography>
-              <Typography
-                className="font-numeric"
-                sx={{ fontWeight: 800, fontSize: '1.35rem', color: accent, mt: 0.25, whiteSpace: 'nowrap' }}
-              >
-                {formatMoney(summary?.total_amount || totalAmount)}
-              </Typography>
-            </Box>
-            <Chip
-              label={`${summary?.count ?? items.length} PO(s)`}
-              size="small"
-              sx={{
-                fontWeight: 700,
-                bgcolor: alpha(theme.palette.info.main, 0.12),
-                color: accent,
-                border: `1px solid ${alpha(theme.palette.info.main, 0.25)}`,
-              }}
-            />
+            <Typography
+              variant="h3"
+              className="font-numeric"
+              sx={{ fontWeight: 700, color: accent, letterSpacing: '-0.03em' }}
+            >
+              {summary?.count ?? items.length}
+            </Typography>
+            <Typography sx={{ fontWeight: 600, color: accent }}>
+              PO(s) expected this month
+            </Typography>
           </Box>
 
           {items.length === 0 ? (
@@ -145,11 +127,11 @@ export default function PosDueToReceiveModal({ open, onClose, monthLabel, summar
             </Typography>
           ) : (
             <Box sx={{ overflowX: 'auto', border: `1px solid ${slate[200]}`, borderRadius: 1.5 }}>
-              <Table size="small" sx={{ minWidth: 720 }}>
+              <Table size="small" sx={{ minWidth: 640 }}>
                 <TableHead>
                   <TableRow>
-                    {['PO Number', 'Supplier', 'Expected Delivery', 'Reference', 'Amount', 'Status', ''].map((h) => (
-                      <TableCell key={h || 'actions'} sx={{ ...headSx, textAlign: h === 'Amount' ? 'right' : 'left' }}>
+                    {['PO Number', 'Supplier', 'Expected Delivery', 'Reference', 'Status', ''].map((h) => (
+                      <TableCell key={h || 'actions'} sx={headSx}>
                         {h}
                       </TableCell>
                     ))}
@@ -169,9 +151,6 @@ export default function PosDueToReceiveModal({ open, onClose, monthLabel, summar
                       <TableCell sx={cellSx()}>{row.vendor_name || row.supplier_name || '—'}</TableCell>
                       <TableCell sx={cellSx()}>{formatDateDisplay(row.expected_delivery_date)}</TableCell>
                       <TableCell sx={cellSx()}>{row.reference_number || row.buyer_po_number || '—'}</TableCell>
-                      <TableCell sx={{ ...cellSx('right'), fontWeight: 700 }} className="font-numeric">
-                        {formatMoney(row.total_amount)}
-                      </TableCell>
                       <TableCell sx={cellSx()}>
                         <Chip
                           label={row.status?.replaceAll('_', ' ') || '—'}

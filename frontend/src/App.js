@@ -13,6 +13,10 @@ import PIViewPage from './pages/PIViewPage';
 import Inventory from './pages/Inventory';
 import Procurement from './pages/Procurement';
 import SupplierPOEditorPage from './pages/SupplierPOEditorPage';
+import PurchaseBills from './pages/PurchaseBills';
+import PurchaseBillEditorPage from './pages/PurchaseBillEditorPage';
+import SalesEntries from './pages/SalesEntries';
+import SalesEntryEditorPage from './pages/SalesEntryEditorPage';
 import Production from './pages/Production';
 import Indents from './pages/Indents';
 import IndentEditorPage from './pages/IndentEditorPage';
@@ -123,6 +127,46 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <Inventory />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/sales/:id"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <SalesEntryEditorPage />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/sales"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <SalesEntries />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/purchase-bills/:id"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <PurchaseBillEditorPage />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/purchase-bills"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <PurchaseBills />
                   </Layout>
                 </PrivateRoute>
               }

@@ -8,13 +8,13 @@ import { Close, Payments, Visibility } from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { formatDateDisplay } from '../../utils/formatDate';
 import { slate } from '../../theme/appTheme';
-import SupplierPOViewModal from '../procurement/SupplierPOViewModal';
+import PurchaseBillViewModal from '../procurement/PurchaseBillViewModal';
 
 const STATUS_COLOR = {
   DRAFT: 'default',
-  ORDERED: 'info',
-  PARTIAL: 'warning',
-  COMPLETED: 'success',
+  OPEN: 'warning',
+  PARTIAL: 'info',
+  PAID: 'success',
   CANCELLED: 'error',
 };
 
@@ -50,7 +50,7 @@ export default function PayablesDueModal({ open, onClose, monthLabel, summary, i
   const theme = useTheme();
   const accent = theme.palette.error.dark;
   const [detailId, setDetailId] = useState(null);
-  const totalAmount = items.reduce((sum, row) => sum + (Number(row.total_amount) || 0), 0);
+  const totalAmount = items.reduce((sum, row) => sum + (Number(row.balance_due ?? row.total_amount) || 0), 0);
 
   const handleClose = () => {
     setDetailId(null);
@@ -96,7 +96,7 @@ export default function PayablesDueModal({ open, onClose, monthLabel, summary, i
               Payables Due — {monthLabel || 'This Month'}
             </Typography>
             <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary', mt: 0.25 }}>
-              Supplier POs with payment due this month (based on payment terms)
+              Purchase bills for material received — balance due this month
             </Typography>
           </Box>
           <IconButton size="small" onClick={handleClose}><Close /></IconButton>
@@ -128,7 +128,7 @@ export default function PayablesDueModal({ open, onClose, monthLabel, summary, i
               </Typography>
             </Box>
             <Chip
-              label={`${summary?.count ?? items.length} PO(s)`}
+              label={`${summary?.count ?? items.length} bill(s)`}
               size="small"
               sx={{
                 fontWeight: 700,
@@ -141,15 +141,15 @@ export default function PayablesDueModal({ open, onClose, monthLabel, summary, i
 
           {items.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-              No payables due this month.
+              No payables due this month. Record a purchase bill entry when material is received.
             </Typography>
           ) : (
             <Box sx={{ overflowX: 'auto', border: `1px solid ${slate[200]}`, borderRadius: 1.5 }}>
-              <Table size="small" sx={{ minWidth: 680 }}>
+              <Table size="small" sx={{ minWidth: 720 }}>
                 <TableHead>
                   <TableRow>
-                    {['PO Number', 'Supplier', 'Payment Due', 'Reference', 'Amount', 'Status', ''].map((h) => (
-                      <TableCell key={h || 'actions'} sx={{ ...headSx, textAlign: h === 'Amount' ? 'right' : 'left' }}>
+                    {['Bill Ref', 'Supplier Bill', 'Supplier', 'PO', 'Payment Due', 'Balance', 'Status', ''].map((h) => (
+                      <TableCell key={h || 'actions'} sx={{ ...headSx, textAlign: h === 'Balance' ? 'right' : 'left' }}>
                         {h}
                       </TableCell>
                     ))}
@@ -164,13 +164,14 @@ export default function PayablesDueModal({ open, onClose, monthLabel, summary, i
                       onClick={() => setDetailId(row.id)}
                     >
                       <TableCell sx={{ ...cellSx(), fontFamily: 'monospace', fontWeight: 700, color: 'primary.main' }}>
-                        {row.po_number}
+                        {row.internal_ref}
                       </TableCell>
-                      <TableCell sx={cellSx()}>{row.vendor_name || row.supplier_name || '—'}</TableCell>
-                      <TableCell sx={cellSx()}>{formatDateDisplay(row.payment_due_date || row.expected_delivery_date)}</TableCell>
-                      <TableCell sx={cellSx()}>{row.reference_number || row.buyer_po_number || '—'}</TableCell>
+                      <TableCell sx={cellSx()}>{row.bill_number}</TableCell>
+                      <TableCell sx={cellSx()}>{row.supplier_name || '—'}</TableCell>
+                      <TableCell sx={cellSx()}>{row.po_number || '—'}</TableCell>
+                      <TableCell sx={cellSx()}>{formatDateDisplay(row.payment_due_date || row.due_date)}</TableCell>
                       <TableCell sx={{ ...cellSx('right'), fontWeight: 700 }} className="font-numeric">
-                        {formatMoney(row.total_amount)}
+                        {formatMoney(row.balance_due ?? row.total_amount)}
                       </TableCell>
                       <TableCell sx={cellSx()}>
                         <Chip
@@ -199,9 +200,9 @@ export default function PayablesDueModal({ open, onClose, monthLabel, summary, i
         </DialogActions>
       </Dialog>
 
-      <SupplierPOViewModal
+      <PurchaseBillViewModal
         open={Boolean(detailId)}
-        poId={detailId}
+        billId={detailId}
         onClose={() => setDetailId(null)}
       />
     </>

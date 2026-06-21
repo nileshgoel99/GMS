@@ -9,7 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import ProformaInvoice, TrimMaster, Indent, ItemIndentTemplate, BuyerPO
+from .models import ProformaInvoice, TrimMaster, Indent, ItemIndentTemplate, BuyerPO, SalesEntry
 from .pdf import build_pi_pdf_bytes
 from .serializers import (
     ProformaInvoiceSerializer,
@@ -20,6 +20,8 @@ from .serializers import (
     ItemIndentTemplateSerializer,
     BuyerPOSerializer,
     BuyerPOListSerializer,
+    SalesEntrySerializer,
+    SalesEntryListSerializer,
 )
 
 
@@ -159,28 +161,15 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='payment-due-summary')
     def payment_due_summary(self, request):
-        """Buyer PO value due for collection this month (ex-factory in current month)."""
-        today = date.today()
-        month_start = today.replace(day=1)
-        if today.month == 12:
-            month_end = today.replace(year=today.year + 1, month=1, day=1)
-        else:
-            month_end = today.replace(month=today.month + 1, day=1)
-
-        qs = self.queryset.filter(
-            ex_factory_date__gte=month_start,
-            ex_factory_date__lt=month_end,
-        ).exclude(status__in=['CANCELLED', 'COMPLETED'])
-
-        agg = qs.aggregate(count=Count('id'), total=Sum('total_value'))
-        total = agg['total'] or Decimal('0')
-        items = BuyerPOListSerializer(qs.order_by('ex_factory_date', 'po_number'), many=True).data
-
+        """Sales entries receivable this month (goods dispatched / invoiced)."""
+        from .models import SalesEntry
+        from .sales_receivable import build_sales_receivables_payload
+        payload = build_sales_receivables_payload(SalesEntry.objects.all())
+        items = SalesEntryListSerializer(payload['payments_due_to_collect']['items'], many=True).data
         return Response({
-            'current_month': today.strftime('%B %Y'),
+            'current_month': payload['current_month'],
             'payments_due_to_collect': {
-                'count': agg['count'] or 0,
-                'total_amount': str(total),
+                **{k: v for k, v in payload['payments_due_to_collect'].items() if k != 'items'},
                 'items': items,
             },
         })
@@ -290,3 +279,75 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
         po.pi_ref = ref
         po.save(update_fields=['pi_ref'])
         return Response({'pi_ref': po.pi_ref})
+
+
+class SalesEntryViewSet(viewsets.ModelViewSet):
+    queryset = SalesEntry.objects.all().select_related(
+        'customer', 'buyer_po', 'pi', 'created_by',
+    ).prefetch_related('items')
+    serializer_class = SalesEntrySerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'customer', 'buyer_po', 'sale_date', 'currency']
+    search_fields = ['internal_ref', 'invoice_number', 'customer_name', 'buyer_po__po_number']
+    ordering_fields = ['sale_date', 'due_date', 'created_at', 'internal_ref']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return SalesEntryListSerializer
+        return SalesEntrySerializer
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='next-ref')
+    def next_ref(self, request):
+        from .sales_numbering import next_sales_entry_ref
+        return Response(next_sales_entry_ref())
+
+    @action(detail=False, methods=['get'], url_path='payment-due-summary')
+    def payment_due_summary(self, request):
+        from .sales_receivable import build_sales_receivables_payload
+        payload = build_sales_receivables_payload(SalesEntry.objects.all())
+        items = SalesEntryListSerializer(payload['payments_due_to_collect']['items'], many=True).data
+        return Response({
+            'current_month': payload['current_month'],
+            'payments_due_to_collect': {
+                **{k: v for k, v in payload['payments_due_to_collect'].items() if k != 'items'},
+                'items': items,
+            },
+        })
+
+    @action(detail=False, methods=['get'], url_path='prefill-from-buyer-po')
+    def prefill_from_buyer_po(self, request):
+        po_id = request.query_params.get('po_id')
+        if not po_id:
+            return Response({'detail': 'po_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            po = BuyerPO.objects.prefetch_related('lines').get(pk=po_id)
+        except BuyerPO.DoesNotExist:
+            return Response({'detail': 'Buyer PO not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        items = []
+        for idx, line in enumerate(po.lines.all(), start=1):
+            items.append({
+                'serial_no': idx,
+                'buyer_po_line': line.id,
+                'item_code': line.item_code,
+                'item_name': line.item_name,
+                'quantity': str(line.quantity or 0),
+                'unit': line.uom or 'PCS',
+                'unit_price': str(line.unit_price or 0),
+            })
+
+        return Response({
+            'buyer_po': po.id,
+            'po_number': po.po_number,
+            'customer': po.customer_id,
+            'customer_name': po.buyer_name or (po.customer.company_legal_name if po.customer_id else ''),
+            'pi': po.pi_id,
+            'pi_number': po.pi_ref or (po.pi.pi_number if po.pi_id else ''),
+            'currency': po.currency or 'USD',
+            'payment_terms': po.payment_terms or '',
+            'sale_date': po.ex_factory_date.isoformat() if po.ex_factory_date else None,
+            'items': items,
+        })

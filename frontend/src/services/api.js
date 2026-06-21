@@ -172,6 +172,28 @@ export const procurementAPI = {
   createReceipt: (data) => api.post('/procurement/receipts/', data),
 };
 
+export const purchaseBillAPI = {
+  getAll: (params) => api.get('/procurement/bills/', { params }),
+  getById: (id) => api.get(`/procurement/bills/${id}/`),
+  create: (data) => api.post('/procurement/bills/', data),
+  update: (id, data) => api.put(`/procurement/bills/${id}/`, data),
+  delete: (id) => api.delete(`/procurement/bills/${id}/`),
+  getNextRef: () => api.get('/procurement/bills/next-ref/'),
+  getPayablesDueSummary: () => api.get('/procurement/bills/payment-due-summary/'),
+  prefillFromPo: (poId) => api.get('/procurement/bills/prefill-from-po/', { params: { po_id: poId } }),
+};
+
+export const salesEntryAPI = {
+  getAll: (params) => api.get('/orders/sales/', { params }),
+  getById: (id) => api.get(`/orders/sales/${id}/`),
+  create: (data) => api.post('/orders/sales/', data),
+  update: (id, data) => api.put(`/orders/sales/${id}/`, data),
+  delete: (id) => api.delete(`/orders/sales/${id}/`),
+  getNextRef: () => api.get('/orders/sales/next-ref/'),
+  getReceivablesSummary: () => api.get('/orders/sales/payment-due-summary/'),
+  prefillFromBuyerPo: (poId) => api.get('/orders/sales/prefill-from-buyer-po/', { params: { po_id: poId } }),
+};
+
 export const productionAPI = {
   getAll: (params) => api.get('/production/issues/', { params }),
   getById: (id) => api.get(`/production/issues/${id}/`),

@@ -8,14 +8,13 @@ import { Close, AccountBalanceWallet, Visibility } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { formatDateDisplay } from '../../utils/formatDate';
 import { slate } from '../../theme/appTheme';
-import { BuyerPoDetailDialog } from '../../pages/BuyerPOs';
+import SalesEntryViewModal from '../sales/SalesEntryViewModal';
 
 const STATUS_COLOR = {
-  RECEIVED: 'default',
-  ACKNOWLEDGED: 'info',
-  IN_PRODUCTION: 'warning',
-  SHIPPED: 'secondary',
-  COMPLETED: 'success',
+  DRAFT: 'default',
+  OPEN: 'warning',
+  PARTIAL: 'info',
+  PAID: 'success',
   CANCELLED: 'error',
 };
 
@@ -49,7 +48,7 @@ const cellSx = (align = 'left') => ({
 
 export default function ReceivablesDueModal({ open, onClose, monthLabel, summary, items = [] }) {
   const [detailId, setDetailId] = useState(null);
-  const totalAmount = items.reduce((sum, row) => sum + (Number(row.total_value) || 0), 0);
+  const totalAmount = items.reduce((sum, row) => sum + (Number(row.balance_due ?? row.total_amount) || 0), 0);
 
   const handleClose = () => {
     setDetailId(null);
@@ -95,7 +94,7 @@ export default function ReceivablesDueModal({ open, onClose, monthLabel, summary
               Receivables Due — {monthLabel || 'This Month'}
             </Typography>
             <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary', mt: 0.25 }}>
-              Buyer purchase orders with ex-factory date in the current month
+              Sales entries with balance due for collection this month
             </Typography>
           </Box>
           <IconButton size="small" onClick={handleClose}><Close /></IconButton>
@@ -123,11 +122,11 @@ export default function ReceivablesDueModal({ open, onClose, monthLabel, summary
                 className="font-numeric"
                 sx={{ fontWeight: 800, fontSize: '1.35rem', color: '#047857', mt: 0.25, whiteSpace: 'nowrap' }}
               >
-                {formatMoney(summary?.total_amount || totalAmount, 'USD')}
+                {formatMoney(summary?.total_amount || totalAmount, items[0]?.currency || 'USD')}
               </Typography>
             </Box>
             <Chip
-              label={`${summary?.count ?? items.length} order(s)`}
+              label={`${summary?.count ?? items.length} sale(s)`}
               size="small"
               sx={{
                 fontWeight: 700,
@@ -140,15 +139,15 @@ export default function ReceivablesDueModal({ open, onClose, monthLabel, summary
 
           {items.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-              No receivables due for collection this month.
+              No receivables due this month. Record a sales entry when goods are dispatched / invoiced.
             </Typography>
           ) : (
             <Box sx={{ overflowX: 'auto', border: `1px solid ${slate[200]}`, borderRadius: 1.5 }}>
-              <Table size="small" sx={{ minWidth: 640 }}>
+              <Table size="small" sx={{ minWidth: 680 }}>
                 <TableHead>
                   <TableRow>
-                    {['PO Number', 'Buyer', 'Ex-Factory', 'Qty', 'Amount', 'Status', ''].map((h) => (
-                      <TableCell key={h || 'actions'} sx={{ ...headSx, textAlign: h === 'Amount' || h === 'Qty' ? 'right' : 'left' }}>
+                    {['Ref', 'Invoice', 'Buyer', 'Buyer PO', 'Collection Due', 'Balance', 'Status', ''].map((h) => (
+                      <TableCell key={h || 'actions'} sx={{ ...headSx, textAlign: h === 'Balance' ? 'right' : 'left' }}>
                         {h}
                       </TableCell>
                     ))}
@@ -163,15 +162,14 @@ export default function ReceivablesDueModal({ open, onClose, monthLabel, summary
                       onClick={() => setDetailId(row.id)}
                     >
                       <TableCell sx={{ ...cellSx(), fontFamily: 'monospace', fontWeight: 700, color: 'primary.main' }}>
-                        {row.po_number}
+                        {row.internal_ref}
                       </TableCell>
-                      <TableCell sx={cellSx()}>{row.buyer_name || row.customer_name || '—'}</TableCell>
-                      <TableCell sx={cellSx()}>{formatDateDisplay(row.ex_factory_date)}</TableCell>
-                      <TableCell sx={cellSx('right')} className="font-numeric">
-                        {row.total_qty != null ? Number(row.total_qty).toLocaleString() : '—'}
-                      </TableCell>
+                      <TableCell sx={cellSx()}>{row.invoice_number}</TableCell>
+                      <TableCell sx={cellSx()}>{row.customer_name || '—'}</TableCell>
+                      <TableCell sx={cellSx()}>{row.buyer_po_number || '—'}</TableCell>
+                      <TableCell sx={cellSx()}>{formatDateDisplay(row.collection_due_date || row.due_date)}</TableCell>
                       <TableCell sx={{ ...cellSx('right'), fontWeight: 700 }} className="font-numeric">
-                        {formatMoney(row.total_value, row.currency || 'USD')}
+                        {formatMoney(row.balance_due ?? row.total_amount, row.currency || 'USD')}
                       </TableCell>
                       <TableCell sx={cellSx()}>
                         <Chip
@@ -200,12 +198,11 @@ export default function ReceivablesDueModal({ open, onClose, monthLabel, summary
         </DialogActions>
       </Dialog>
 
-      {detailId && (
-        <BuyerPoDetailDialog
-          poId={detailId}
-          onClose={() => setDetailId(null)}
-        />
-      )}
+      <SalesEntryViewModal
+        open={Boolean(detailId)}
+        entryId={detailId}
+        onClose={() => setDetailId(null)}
+      />
     </>
   );
 }

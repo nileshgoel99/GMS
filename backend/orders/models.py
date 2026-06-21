@@ -359,3 +359,121 @@ class BuyerPOLine(models.Model):
         return f"PO {self.po.po_number} L{self.line_number}: {self.item_name}"
 
 
+class SalesEntry(models.Model):
+    """Sales / dispatch entry — goods shipped to buyer; drives receivables."""
+
+    STATUS_CHOICES = [
+        ('DRAFT', 'Draft'),
+        ('OPEN', 'Open'),
+        ('PARTIAL', 'Partially Received'),
+        ('PAID', 'Paid'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+
+    internal_ref = models.CharField(max_length=50, unique=True, db_index=True)
+    invoice_number = models.CharField(
+        max_length=80,
+        help_text='Sales / commercial invoice number',
+    )
+    customer = models.ForeignKey(
+        'customers.Customer',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sales_entries',
+    )
+    buyer_po = models.ForeignKey(
+        BuyerPO,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sales_entries',
+    )
+    pi = models.ForeignKey(
+        ProformaInvoice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sales_entries',
+    )
+    customer_name = models.CharField(max_length=200)
+    currency = models.CharField(max_length=3, default='USD')
+    sale_date = models.DateField(help_text='Dispatch / ex-factory / invoice date')
+    due_date = models.DateField(blank=True, null=True)
+    payment_terms = models.TextField(blank=True, default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
+
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    amount_received = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    notes = models.TextField(blank=True, default='')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_sales_entries')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-sale_date', '-created_at']
+        verbose_name = 'Sales Entry'
+        verbose_name_plural = 'Sales Entries'
+
+    def __str__(self):
+        return f"{self.internal_ref} — {self.invoice_number}"
+
+    @property
+    def balance_due(self):
+        return (self.total_amount - self.amount_received).quantize(Decimal('0.01'))
+
+    def recalculate_totals(self, save=True):
+        subtotal = Decimal('0')
+        for line in self.items.all():
+            qty = line.quantity or Decimal('0')
+            price = line.unit_price or Decimal('0')
+            line.total_price = (qty * price).quantize(Decimal('0.01'))
+            line.save(update_fields=['total_price'])
+            subtotal += line.total_price
+        self.subtotal = subtotal.quantize(Decimal('0.01'))
+        self.total_amount = self.subtotal
+        if save:
+            self.save(update_fields=['subtotal', 'total_amount', 'updated_at'])
+
+    def sync_collection_status(self, save=True):
+        received = self.amount_received or Decimal('0')
+        total = self.total_amount or Decimal('0')
+        if self.status == 'CANCELLED':
+            return
+        if received <= 0:
+            self.status = 'OPEN' if self.status != 'DRAFT' else 'DRAFT'
+        elif received >= total:
+            self.status = 'PAID'
+        else:
+            self.status = 'PARTIAL'
+        if save:
+            self.save(update_fields=['status', 'updated_at'])
+
+
+class SalesEntryLine(models.Model):
+    sales_entry = models.ForeignKey(SalesEntry, on_delete=models.CASCADE, related_name='items')
+    buyer_po_line = models.ForeignKey(
+        BuyerPOLine,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sales_lines',
+    )
+    serial_no = models.PositiveIntegerField(default=1)
+    item_code = models.CharField(max_length=100, blank=True, default='')
+    item_name = models.CharField(max_length=300, blank=True, default='')
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    unit = models.CharField(max_length=20, blank=True, default='PCS')
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_price = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['serial_no', 'id']
+        verbose_name = 'Sales Entry Line'
+        verbose_name_plural = 'Sales Entry Lines'
+
+    def __str__(self):
+        return f"{self.sales_entry.internal_ref} — {self.item_name or 'Line'}"
+

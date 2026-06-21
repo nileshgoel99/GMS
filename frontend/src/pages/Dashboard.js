@@ -11,7 +11,7 @@ import PayablesDueModal from '../components/dashboard/PayablesDueModal';
 import ActiveOrdersModal from '../components/dashboard/ActiveOrdersModal';
 import PurchaseOrdersModal from '../components/dashboard/PurchaseOrdersModal';
 import PosDueToReceiveModal from '../components/dashboard/PosDueToReceiveModal';
-import { ordersAPI, inventoryAPI, procurementAPI, productionAPI } from '../services/api';
+import { ordersAPI, inventoryAPI, procurementAPI, productionAPI, purchaseBillAPI, salesEntryAPI } from '../services/api';
 
 const statusLabel = (key) =>
   String(key || '')
@@ -269,8 +269,8 @@ const Dashboard = () => {
         inventoryAPI.getStatistics(),
         procurementAPI.getStatistics(),
         productionAPI.getStatistics(),
-        ordersAPI.getBuyerPOPaymentDueSummary(),
-        procurementAPI.getPayablesDueSummary(),
+        salesEntryAPI.getReceivablesSummary(),
+        purchaseBillAPI.getPayablesDueSummary(),
       ]);
 
       const pick = (res, fallback = {}) => (res.status === 'fulfilled' ? res.value.data : fallback);
@@ -409,7 +409,7 @@ const Dashboard = () => {
                 iconColor="#047857"
                 borderColor={alpha('#059669', 0.22)}
                 title="Receivables — To Be Collected"
-                description="Buyer POs with ex-factory date scheduled this month"
+                description="Sales entries with balance due for collection this month"
                 amount={formatCurrency(stats.paymentDue.payments_due_to_collect?.total_amount, 'USD')}
                 count={stats.paymentDue.payments_due_to_collect?.count || 0}
                 countLabel="order(s)"
@@ -421,10 +421,10 @@ const Dashboard = () => {
                 iconColor={theme.palette.error.dark}
                 borderColor={alpha(theme.palette.error.main, 0.22)}
                 title="Payables — To Be Paid"
-                description="Supplier POs with payment due this month (from payment terms)"
+                description="Purchase bills for material received — balance due this month"
                 amount={formatCurrency(payablesDue.payments_due_to_pay?.total_amount)}
                 count={payablesDue.payments_due_to_pay?.count || 0}
-                countLabel="PO(s)"
+                countLabel="bill(s)"
                 onClick={() => setPayablesOpen(true)}
               />
             </Stack>
@@ -498,13 +498,7 @@ const Dashboard = () => {
                     {stats.procurement.pos_due_to_receive?.count || 0}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontWeight: 400 }}>
-                    PO(s) awaiting receipt
-                  </Typography>
-                  <Typography
-                    className="font-numeric"
-                    sx={{ mt: 1, fontWeight: 700, fontSize: '1.05rem', color: 'text.primary', whiteSpace: 'nowrap' }}
-                  >
-                    {formatCurrency(stats.procurement.pos_due_to_receive?.total_amount)}
+                    supplier PO(s) expected for delivery this month
                   </Typography>
                 </Box>
               </Stack>

@@ -34,6 +34,7 @@ import {
   ChevronRight as ChevronRightIcon,
   Business as BusinessIcon,
   ReceiptLong as ReceiptLongIcon,
+  PointOfSale as PointOfSaleIcon,
   LocalShipping as LocalShippingIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -54,6 +55,7 @@ const navGroups = [
     items: [
       { text: 'Buyers', icon: <PublicIcon />, path: '/customers' },
       { text: 'Buyer POs', icon: <ReceiptLongIcon />, path: '/buyer-pos' },
+      { text: 'Sales entry', icon: <PointOfSaleIcon />, path: '/sales' },
       { text: 'Proforma invoices', icon: <AssignmentIcon />, path: '/orders' },
     ],
   },
@@ -69,6 +71,7 @@ const navGroups = [
       { text: 'Trims library', icon: <ListAltIcon />, path: '/trims' },
       { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers' },
       { text: 'Supplier POs', icon: <ShoppingCartIcon />, path: '/procurement' },
+      { text: 'Purchase bill entry', icon: <ReceiptLongIcon />, path: '/purchase-bills' },
     ],
   },
   {
@@ -94,6 +97,10 @@ const routeMeta = {
   '/inventory': { title: 'Inventory' },
     '/procurement': { title: 'Supplier purchase orders' },
     '/procurement/new': { title: 'Raise PO' },
+    '/purchase-bills': { title: 'Purchase bill entry' },
+    '/purchase-bills/new': { title: 'New purchase bill' },
+    '/sales': { title: 'Sales entry' },
+    '/sales/new': { title: 'New sales entry' },
   '/production': { title: 'Production' },
   '/company': { title: 'Company details' },
 };
@@ -102,6 +109,8 @@ const pathMatchesNav = (pathname, path) => {
   if (path === '/') return pathname === '/';
   if (path === '/orders') return pathname === '/orders' || pathname.startsWith('/orders/');
   if (path === '/indents') return pathname === '/indents' || pathname.startsWith('/indents/');
+  if (path === '/purchase-bills') return pathname === '/purchase-bills' || pathname.startsWith('/purchase-bills/');
+  if (path === '/sales') return pathname === '/sales' || pathname.startsWith('/sales/');
   return pathname === path || pathname.startsWith(`${path}/`);
 };
 
