@@ -22,6 +22,7 @@ import { Add, Edit, Delete, History, Warning } from '@mui/icons-material';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
 import { dataGridSx } from '../theme/appTheme';
+import { formatDateDisplay } from '../utils/formatDate';
 import { inventoryAPI } from '../services/api';
 
 const Inventory = () => {
@@ -404,7 +405,7 @@ const Inventory = () => {
                     <Typography color="textSecondary" variant="body2">Total Ordered</Typography>
                     <Typography variant="h5">{summary.total_ordered} {summary.unit}</Typography>
                     <Typography variant="caption">
-                      Last: {summary.last_order_date ? new Date(summary.last_order_date).toLocaleDateString() : 'N/A'}
+                      Last: {formatDateDisplay(summary.last_order_date) === '—' ? 'N/A' : formatDateDisplay(summary.last_order_date)}
                     </Typography>
                   </Paper>
                 </Grid>

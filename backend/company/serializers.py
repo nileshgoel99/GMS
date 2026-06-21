@@ -37,6 +37,8 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             'our_bank_details',
             'watermark_text',
             'pdf_footer_note',
+            'bill_to',
+            'ship_to',
             'updated_at',
         ]
         read_only_fields = ('id', 'logo_url', 'updated_at')

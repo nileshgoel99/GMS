@@ -38,6 +38,8 @@ const emptyForm = {
   pdf_footer_note: '',
   pi_ref_prefix: 'JBI',
   our_bank_details: '',
+  bill_to: '',
+  ship_to: '',
 };
 
 const CompanyPage = () => {
@@ -91,6 +93,8 @@ const CompanyPage = () => {
         pdf_footer_note: data.pdf_footer_note || '',
         pi_ref_prefix: data.pi_ref_prefix || 'JBI',
         our_bank_details: data.our_bank_details || '',
+        bill_to: data.bill_to || '',
+        ship_to: data.ship_to || '',
       });
       setLogoUrl(data.logo_url || null);
       setLogoFile(null);
@@ -303,6 +307,39 @@ const CompanyPage = () => {
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField fullWidth label="Country" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} />
+          </Grid>
+        </Grid>
+
+        <Divider sx={{ my: 3 }} />
+
+        <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+          Supplier PO defaults
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Bill To and Ship To blocks used when raising purchase orders to suppliers. Leave empty to use the registered address above.
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              label="Bill To (supplier POs)"
+              value={form.bill_to}
+              onChange={(e) => setForm({ ...form, bill_to: e.target.value })}
+              placeholder={'J.B. International\nRegistered office address…'}
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              label="Ship To (supplier POs)"
+              value={form.ship_to}
+              onChange={(e) => setForm({ ...form, ship_to: e.target.value })}
+              placeholder={'Factory / warehouse delivery address…'}
+            />
           </Grid>
         </Grid>
 

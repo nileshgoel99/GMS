@@ -6,6 +6,7 @@ import { Add, Edit, Delete, AttachFile } from '@mui/icons-material';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
 import { dataGridSx } from '../theme/appTheme';
+import { formatDateDisplay } from '../utils/formatDate';
 import { ordersAPI } from '../services/api';
 
 const STATUS_COLORS = {
@@ -87,7 +88,12 @@ const Intents = () => {
   const columns = [
     { field: 'indent_number', headerName: 'Indent no.', width: 180 },
     { field: 'pi_number', headerName: 'PI', width: 120 },
-    { field: 'intent_date', headerName: 'Date', width: 110 },
+    {
+      field: 'intent_date',
+      headerName: 'Date',
+      width: 110,
+      renderCell: (params) => formatDateDisplay(params.value),
+    },
     {
       field: 'sheets',
       headerName: 'Sheets',

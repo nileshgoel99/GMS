@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
 import { dataGridSx, slate } from '../theme/appTheme';
+import { formatDateDisplay } from '../utils/formatDate';
 import { ordersAPI } from '../services/api';
 import { BuyerPoDetailDialog } from './BuyerPOs';
 
@@ -269,7 +270,7 @@ const Orders = () => {
     {
       field: 'order_date', headerName: 'PI Date', width: 110,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{p.value || '—'}</Typography>
+        <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{formatDateDisplay(p.value)}</Typography>
       ),
     },
     {

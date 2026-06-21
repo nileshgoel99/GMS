@@ -1,0 +1,1306 @@
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  Box, Button, Typography, TextField, MenuItem, Grid, Paper,
+  IconButton, Autocomplete, CircularProgress, Table, TableHead,
+  TableBody, TableRow, TableCell, Divider, FormControlLabel, Radio, RadioGroup,
+  InputAdornment,
+} from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import {
+  ArrowBack, Save, Print, Add, Delete, LocalShipping, Sync,
+  Storefront, ReceiptLong, PinDrop,
+} from '@mui/icons-material';
+import { ordersAPI, procurementAPI, suppliersAPI, companyAPI } from '../services/api';
+import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
+import { formatDateDisplay } from '../utils/formatDate';
+import { isNumericTrimProperty } from '../components/trims/trimConstants';
+import SupplierPOPrintDocument, { SUPPLIER_PO_PRINT_STYLE } from '../components/procurement/SupplierPOPrintDocument';
+
+const DEFAULT_COMMENTS = `This purchase order is subject to seller's acceptance of the attached terms and conditions.
+Please sign below and return acknowledgement of this purchase order. Please notify us immediately if you are unable to supply.`;
+
+const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
+
+const emptyLine = (serial = 1) => ({
+  serial_no: serial,
+  trim: null,
+  particulars: '',
+  property_values: {},
+  property_label: '',
+  from_pi: false,
+  hsn_code: '',
+  quantity_ordered: '',
+  unit: 'PCS',
+  unit_price: '',
+  notes: '',
+});
+
+const initPropertyValues = (properties) => {
+  const vals = {};
+  (properties || []).forEach((p) => { if (p.name) vals[p.name] = ''; });
+  return vals;
+};
+
+const isPiSourcedLabel = (label) =>
+  Boolean(label && (label.includes('PI Qty:') || label.includes('Order Qty:') || label.includes('Cons./pc:')));
+
+const formatQty = (n) => {
+  const num = parseFloat(n);
+  if (Number.isNaN(num)) return '';
+  return num.toLocaleString(undefined, { maximumFractionDigits: 4 });
+};
+
+const formatPropertyEntry = (propName, value, trimMaster) => {
+  if (value == null || String(value).trim() === '') return null;
+  const schema = (trimMaster?.properties || []).find((p) => p.name === propName);
+  const unit = schema?.unit;
+  if (unit && !isNumericTrimProperty(propName)) {
+    return `${propName}: ${value} ${unit}`;
+  }
+  return `${propName}: ${value}`;
+};
+
+const formatPiTrimProperties = (line, trimMaster) => {
+  const pv = line?.property_values || {};
+  const schema = trimMaster?.properties || [];
+  const parts = [];
+
+  schema.forEach((prop) => {
+    const entry = formatPropertyEntry(prop.name, pv[prop.name], trimMaster);
+    if (entry) parts.push(entry);
+  });
+
+  Object.entries(pv).forEach(([k, v]) => {
+    if (!schema.some((p) => p.name === k)) {
+      const entry = formatPropertyEntry(k, v, trimMaster);
+      if (entry) parts.push(entry);
+    }
+  });
+
+  if (parts.length) return parts.join(' · ');
+  return [line?.color_variant, line?.size_variant].filter(Boolean).join(' / ');
+};
+
+const resolvePiTrimOrderQty = (line, piTotalPcs) => {
+  const total = parseFloat(line?.total_consumption);
+  if (!Number.isNaN(total) && total > 0) return String(total);
+  const cons = parseFloat(line?.consumption_per_pc);
+  const pcs = parseFloat(piTotalPcs);
+  if (!Number.isNaN(cons) && !Number.isNaN(pcs) && pcs > 0) {
+    return String(parseFloat((cons * pcs).toFixed(4)));
+  }
+  return '';
+};
+
+const formatPiTrimConsumption = (line, trimMaster, piTotalPcs) => {
+  const unit = line?.unit || trimMaster?.default_unit || '';
+  const parts = [];
+  if (line?.consumption_per_pc != null && String(line.consumption_per_pc).trim() !== '') {
+    parts.push(`Cons./pc: ${formatQty(line.consumption_per_pc)} ${unit}`.trim());
+  }
+  if (piTotalPcs > 0) {
+    parts.push(`PI Qty: ${formatQty(piTotalPcs)} pcs`);
+  }
+  const orderQty = resolvePiTrimOrderQty(line, piTotalPcs);
+  if (orderQty) {
+    parts.push(`Order Qty: ${formatQty(orderQty)} ${unit}`.trim());
+  }
+  return parts.join(' · ');
+};
+
+const buildPiTrimDisplay = (line, trimMaster) => {
+  const piTotalPcs = line?._piTotalPcs ?? 0;
+  const properties = formatPiTrimProperties(line, trimMaster);
+  const consumption = formatPiTrimConsumption(line, trimMaster, piTotalPcs);
+  const summary = [properties, consumption].filter(Boolean).join('\n');
+  return {
+    properties,
+    consumption,
+    summary,
+    orderQty: resolvePiTrimOrderQty(line, piTotalPcs),
+    unit: line?.unit || trimMaster?.default_unit || 'PCS',
+    piTotalPcs,
+  };
+};
+
+const formatPiTrimOptionLabel = (line, trimMaster) => {
+  const name = line?.trim_name || trimMaster?.name || 'Trim';
+  const props = formatPiTrimProperties(line, trimMaster);
+  return props ? `${name} — ${props}` : name;
+};
+
+function PiTrimOptionContent({ line, trimMaster }) {
+  const display = buildPiTrimDisplay(line, trimMaster);
+  const name = line.trim_name || trimMaster?.name || 'Trim';
+
+  return (
+    <Box sx={{ py: 0.5, width: '100%' }}>
+      <Typography sx={{ fontSize: '0.84rem', fontWeight: 800, color: slate[800], lineHeight: 1.3 }}>
+        {name}
+      </Typography>
+      {display.properties && (
+        <Typography sx={{ fontSize: '0.72rem', color: slate[700], mt: 0.5, lineHeight: 1.45, fontWeight: 600 }}>
+          {display.properties}
+        </Typography>
+      )}
+      {display.consumption && (
+        <Typography sx={{ fontSize: '0.68rem', color: '#0f766e', mt: 0.35, lineHeight: 1.4, fontWeight: 700 }}>
+          {display.consumption}
+        </Typography>
+      )}
+      {line._indentNumber && (
+        <Typography sx={{ fontSize: '0.62rem', color: slate[400], mt: 0.35 }}>
+          {line._indentNumber}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+function LibraryTrimOptionContent({ trim }) {
+  const propNames = (trim.properties || []).map((p) => p.name).filter(Boolean);
+  return (
+    <Box sx={{ py: 0.5, width: '100%' }}>
+      <Typography sx={{ fontSize: '0.84rem', fontWeight: 800, color: slate[800], lineHeight: 1.3 }}>
+        {trim.name}
+      </Typography>
+      <Typography sx={{ fontSize: '0.68rem', color: slate[500], mt: 0.35 }}>
+        Trim library{trim.category ? ` · ${trim.category}` : ''}
+        {propNames.length ? ` · enter ${propNames.join(', ')} after selecting` : ' · add specification after selecting'}
+      </Typography>
+    </Box>
+  );
+}
+
+function TrimPropertyFields({ row, trimMaster, onChange }) {
+  const props = trimMaster?.properties || [];
+  if (!props.length) {
+    return (
+      <TextField
+        size="small"
+        fullWidth
+        label="Specification"
+        placeholder="e.g. Color, size, variant…"
+        value={row.property_values?.Spec || ''}
+        onChange={(e) => onChange('Spec', e.target.value)}
+        sx={{ mt: 0.75, '& .MuiInputBase-root': { borderRadius: 1.5 } }}
+      />
+    );
+  }
+  return (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.75 }}>
+      {props.map((prop) => (
+        <TextField
+          key={prop.name}
+          size="small"
+          label={prop.unit ? `${prop.name} (${prop.unit})` : prop.name}
+          value={row.property_values?.[prop.name] || ''}
+          onChange={(e) => onChange(prop.name, e.target.value)}
+          type={isNumericTrimProperty(prop.name) ? 'number' : 'text'}
+          inputProps={isNumericTrimProperty(prop.name) ? { min: 0, step: '1' } : undefined}
+          sx={{ flex: '1 1 130px', minWidth: 110, '& .MuiInputBase-root': { borderRadius: 1.5 } }}
+        />
+      ))}
+    </Box>
+  );
+}
+
+const parseParticulars = (text) => {
+  const raw = (text || '').trim();
+  if (!raw) return { name: '', property_label: '' };
+  const nl = raw.indexOf('\n');
+  if (nl === -1) return { name: raw, property_label: '' };
+  return {
+    name: raw.slice(0, nl).trim(),
+    property_label: raw.slice(nl + 1).trim(),
+  };
+};
+
+const buildParticularsForSave = (row) => {
+  const name = (row.particulars || '').trim();
+  const props = (row.property_label || '').trim();
+  if (name && props) return `${name}\n${props}`;
+  return name || props;
+};
+
+const monoFieldSx = {
+  '& .MuiInputBase-input': {
+    fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
+    letterSpacing: '0.02em',
+  },
+};
+
+const clientFallbackPoNumber = () => {
+  const today = new Date();
+  const month = today.getMonth() + 1;
+  const year = today.getFullYear();
+  const fyStart = month >= 4 ? year : year - 1;
+  const fyEnd = fyStart + 1;
+  const fy = `${String(fyStart).slice(-2)}-${String(fyEnd).slice(-2)}`;
+  return `JBI/PO/${fy}/1`;
+};
+
+const emptyForm = () => ({
+  po_number: '',
+  supplier: null,
+  vendor_name: '',
+  vendor_address: '',
+  vendor_email: '',
+  vendor_phone: '',
+  attention: '',
+  bill_to: '',
+  ship_to: '',
+  pi: null,
+  buyer_po: null,
+  reference_number: '',
+  order_date: new Date().toISOString().split('T')[0],
+  expected_delivery_date: '',
+  payment_terms: '',
+  tax_mode: 'CGST_SGST',
+  cgst_percent: '9',
+  sgst_percent: '9',
+  igst_percent: '18',
+  po_comments: DEFAULT_COMMENTS,
+  order_placed_by: 'Shivangi Jain',
+  supplier_ack_name: '',
+  supplier_ack_date: '',
+  status: 'DRAFT',
+  notes: '',
+  items: [emptyLine(1)],
+});
+
+const fmtAddr = (c) => [c?.legal_name || c?.trading_name, c?.address_line1, c?.address_line2,
+  [c?.city, c?.region_state, c?.postal_code].filter(Boolean).join(', '),
+  c?.country, c?.phone ? `Phone: ${c.phone}` : '',
+  c?.tax_registration ? `GST: ${c.tax_registration}` : '',
+].filter(Boolean).join('\n');
+
+const resolveBillTo = (c) => (c?.bill_to?.trim() || fmtAddr(c));
+const resolveShipTo = (c) => (c?.ship_to?.trim() || fmtAddr(c));
+
+const supplierBlock = (f) => [
+  f.vendor_name,
+  f.vendor_address,
+  f.attention ? `Attn: ${f.attention}` : '',
+  f.vendor_phone ? `Phone: ${f.vendor_phone}` : '',
+].filter(Boolean).join('\n');
+
+const sectionLabelSx = {
+  fontWeight: 800,
+  fontSize: '0.68rem',
+  color: 'text.secondary',
+  textTransform: 'uppercase',
+  letterSpacing: '0.07em',
+  mb: 0.75,
+};
+
+const PARTY_CARD_HEIGHT = 220;
+
+const PARTY_THEMES = {
+  supplier: {
+    color: '#b45309',
+    light: '#f59e0b',
+    icon: Storefront,
+    empty: 'Select a supplier above to preview vendor details',
+  },
+  billTo: {
+    color: '#0f766e',
+    light: '#14b8a6',
+    icon: ReceiptLong,
+    empty: 'Bill-to address not configured — set in Company details',
+  },
+  shipTo: {
+    color: '#4338ca',
+    light: '#6366f1',
+    icon: PinDrop,
+    empty: 'Ship-to address not configured — set in Company details',
+  },
+};
+
+function PartyCard({ variant, title, text, hint }) {
+  const theme = PARTY_THEMES[variant];
+  const Icon = theme.icon;
+  const hasContent = Boolean(text?.trim());
+
+  return (
+    <Box
+      sx={{
+        borderRadius: 2,
+        border: `1px solid ${alpha(theme.color, 0.22)}`,
+        overflow: 'hidden',
+        height: PARTY_CARD_HEIGHT,
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        bgcolor: '#fff',
+        boxShadow: `0 2px 10px ${alpha(slate[900], 0.05)}`,
+        transition: 'box-shadow 0.2s ease, transform 0.2s ease',
+        '&:hover': {
+          boxShadow: `0 6px 20px ${alpha(theme.color, 0.12)}`,
+        },
+      }}
+    >
+      <Box
+        sx={{
+          px: 1.75,
+          py: 1.25,
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.25,
+          background: `linear-gradient(135deg, ${alpha(theme.light, 0.14)} 0%, ${alpha(theme.color, 0.06)} 100%)`,
+          borderBottom: `1px solid ${alpha(theme.color, 0.15)}`,
+        }}
+      >
+        <Box
+          sx={{
+            width: 34,
+            height: 34,
+            borderRadius: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: alpha(theme.color, 0.12),
+            color: theme.color,
+            border: `1px solid ${alpha(theme.color, 0.2)}`,
+          }}
+        >
+          <Icon sx={{ fontSize: 18 }} />
+        </Box>
+        <Typography sx={{ fontWeight: 800, fontSize: '0.8rem', color: theme.color, letterSpacing: '0.03em' }}>
+          {title}
+        </Typography>
+      </Box>
+      <Box
+        sx={{
+          p: 1.75,
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+        }}
+      >
+        {hasContent ? (
+          <Typography
+            sx={{
+              fontSize: '0.78rem',
+              lineHeight: 1.55,
+              whiteSpace: 'pre-line',
+              color: slate[700],
+              fontWeight: 500,
+            }}
+          >
+            {text}
+          </Typography>
+        ) : (
+          <Typography sx={{ fontSize: '0.75rem', color: slate[400], fontStyle: 'italic', lineHeight: 1.5 }}>
+            {theme.empty}
+          </Typography>
+        )}
+      </Box>
+      {hint && (
+        <Box
+          sx={{
+            px: 1.75,
+            py: 0.85,
+            flexShrink: 0,
+            bgcolor: alpha(theme.color, 0.04),
+            borderTop: `1px solid ${alpha(theme.color, 0.1)}`,
+          }}
+        >
+          <Typography sx={{ fontSize: '0.65rem', color: alpha(theme.color, 0.85), fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            {hint}
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+const lineTotal = (row) => {
+  const q = parseFloat(row.quantity_ordered);
+  const p = parseFloat(row.unit_price);
+  if (Number.isNaN(q) || Number.isNaN(p)) return 0;
+  return q * p;
+};
+
+const calcPreview = (form) => {
+  const subtotal = form.items.reduce((s, r) => s + lineTotal(r), 0);
+  const sub = Math.round(subtotal * 100) / 100;
+  if (form.tax_mode === 'IGST') {
+    const pct = parseFloat(form.igst_percent) || 0;
+    const igst = Math.round(sub * pct) / 100;
+    return { subtotal: sub, cgst: 0, sgst: 0, igst, total: sub + igst };
+  }
+  const cgstPct = parseFloat(form.cgst_percent) || 0;
+  const sgstPct = parseFloat(form.sgst_percent) || 0;
+  const cgst = Math.round(sub * cgstPct) / 100;
+  const sgst = Math.round(sub * sgstPct) / 100;
+  return { subtotal: sub, cgst, sgst, igst: 0, total: sub + cgst + sgst };
+};
+
+export default function SupplierPOEditorPage() {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const isNew = id === 'new';
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(emptyForm());
+  const [suppliers, setSuppliers] = useState([]);
+  const [trims, setTrims] = useState([]);
+  const [piList, setPiList] = useState([]);
+  const [buyerPoList, setBuyerPoList] = useState([]);
+  const [company, setCompany] = useState(null);
+  const [piTrimOptions, setPiTrimOptions] = useState([]);
+  const [piTrimsLoading, setPiTrimsLoading] = useState(false);
+  const [piTotalPcs, setPiTotalPcs] = useState(0);
+  const [poNumberLoading, setPoNumberLoading] = useState(false);
+
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.id = 'supplier-po-print-style';
+    style.textContent = SUPPLIER_PO_PRINT_STYLE;
+    document.head.appendChild(style);
+    return () => style.remove();
+  }, []);
+
+  const trimsMap = useMemo(() => {
+    const m = {};
+    trims.forEach((t) => { m[t.id] = t; });
+    return m;
+  }, [trims]);
+
+  const loadPiTrims = useCallback(async (piId) => {
+    if (!piId) {
+      setPiTrimOptions([]);
+      setPiTotalPcs(0);
+      return;
+    }
+    setPiTrimsLoading(true);
+    try {
+      const [indentsRes, piRes] = await Promise.all([
+        ordersAPI.getIndents({ pi: piId }),
+        ordersAPI.getById(piId),
+      ]);
+      const indents = asList(indentsRes.data);
+      const piLines = piRes.data?.lines || [];
+      const totalPcs = piLines.reduce((s, l) => s + (Number(l.quantity_pcs) || 0), 0);
+      setPiTotalPcs(totalPcs);
+
+      if (!indents.length) {
+        setPiTrimOptions([]);
+        return;
+      }
+
+      const detailRes = await Promise.all(indents.map((ind) => ordersAPI.getIndent(ind.id)));
+      const trimMasterById = {};
+      trims.forEach((t) => { trimMasterById[t.id] = t; });
+
+      const lines = [];
+      detailRes.forEach((res) => {
+        const indent = res.data;
+        (indent.trim_lines || []).forEach((tl, idx) => {
+          const trimMaster = tl.trim ? trimMasterById[tl.trim] : null;
+          lines.push({
+            ...tl,
+            _optionKey: `pi-${indent.id}-${tl.id || idx}`,
+            _indentNumber: indent.indent_number,
+            _label: tl.trim_name || 'Trim',
+            _trimMaster: trimMaster,
+            _piTotalPcs: totalPcs,
+          });
+        });
+      });
+      setPiTrimOptions(lines);
+    } catch (e) {
+      console.error(e);
+      setPiTrimOptions([]);
+      setPiTotalPcs(0);
+    } finally {
+      setPiTrimsLoading(false);
+    }
+  }, [trims]);
+
+  useEffect(() => {
+    loadPiTrims(form.pi);
+  }, [form.pi, loadPiTrims]);
+
+  const hasPiTrims = piTrimOptions.length > 0;
+  const trimOptions = useMemo(() => {
+    const library = trims.map((t) => ({ ...t, _source: 'library' }));
+    if (hasPiTrims) return [...piTrimOptions, ...library];
+    return library;
+  }, [piTrimOptions, trims, hasPiTrims]);
+
+  const trimOptionGroup = (option) => {
+    if (option._optionKey) return 'From PI indent';
+    return 'Trim library (additional items)';
+  };
+
+  const totals = useMemo(() => calcPreview(form), [form]);
+
+  const fetchNextPoNumber = useCallback(async () => {
+    setPoNumberLoading(true);
+    try {
+      const res = await procurementAPI.getNextPoNumber();
+      return res.data?.po_number || clientFallbackPoNumber();
+    } catch (e) {
+      console.error(e);
+      return clientFallbackPoNumber();
+    } finally {
+      setPoNumberLoading(false);
+    }
+  }, []);
+
+  const loadMasters = useCallback(async () => {
+    const [supRes, trimRes, piRes, bpoRes, coRes] = await Promise.all([
+      suppliersAPI.getAll({ is_active: true }),
+      ordersAPI.getTrimsMaster(),
+      ordersAPI.getAll(),
+      ordersAPI.getBuyerPOs(),
+      companyAPI.getProfile(),
+    ]);
+    setSuppliers(asList(supRes.data));
+    setTrims(asList(trimRes.data));
+    setPiList(asList(piRes.data));
+    setBuyerPoList(asList(bpoRes.data));
+    setCompany(coRes.data);
+    return coRes.data;
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const co = await loadMasters();
+        if (isNew) {
+          const nextPoNumber = await fetchNextPoNumber();
+          setForm((f) => ({
+            ...f,
+            bill_to: resolveBillTo(co),
+            ship_to: resolveShipTo(co),
+            po_number: nextPoNumber,
+          }));
+        } else {
+          const res = await procurementAPI.getById(id);
+          const d = res.data;
+          setForm({
+            po_number: d.po_number,
+            supplier: d.supplier,
+            vendor_name: d.vendor_name || '',
+            vendor_address: d.vendor_address || '',
+            vendor_email: d.vendor_email || '',
+            vendor_phone: d.vendor_phone || '',
+            attention: d.attention || '',
+            bill_to: d.bill_to || resolveBillTo(co),
+            ship_to: d.ship_to || resolveShipTo(co),
+            pi: d.pi,
+            buyer_po: d.buyer_po,
+            reference_number: d.reference_number || '',
+            order_date: d.order_date,
+            expected_delivery_date: d.expected_delivery_date || '',
+            payment_terms: d.payment_terms || '',
+            tax_mode: d.tax_mode || 'CGST_SGST',
+            cgst_percent: String(d.cgst_percent ?? 9),
+            sgst_percent: String(d.sgst_percent ?? 9),
+            igst_percent: String(d.igst_percent ?? 18),
+            po_comments: d.po_comments || DEFAULT_COMMENTS,
+            order_placed_by: d.order_placed_by || 'Shivangi Jain',
+            supplier_ack_name: d.supplier_ack_name || '',
+            supplier_ack_date: d.supplier_ack_date || '',
+            status: d.status || 'DRAFT',
+            notes: d.notes || '',
+            items: d.items?.length
+              ? d.items.map((row, i) => {
+                const parsed = parseParticulars(row.particulars);
+                return {
+                  serial_no: row.serial_no || i + 1,
+                  trim: row.trim,
+                  particulars: parsed.name,
+                  property_values: {},
+                  property_label: parsed.property_label,
+                  from_pi: isPiSourcedLabel(parsed.property_label),
+                  hsn_code: row.hsn_code || '',
+                  quantity_ordered: row.quantity_ordered,
+                  unit: row.unit || 'PCS',
+                  unit_price: row.unit_price ?? '',
+                  notes: row.notes || '',
+                };
+              })
+              : [emptyLine(1)],
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [id, isNew, loadMasters, fetchNextPoNumber]);
+
+  const refreshPoNumber = async () => {
+    const nextPoNumber = await fetchNextPoNumber();
+    if (nextPoNumber) {
+      setForm((f) => ({ ...f, po_number: nextPoNumber }));
+    }
+  };
+
+  const selectSupplier = (supplier) => {
+    if (!supplier) {
+      setForm((f) => ({ ...f, supplier: null }));
+      return;
+    }
+    const addr = [supplier.address, supplier.city, supplier.state_province, supplier.postal_code, supplier.country].filter(Boolean).join('\n');
+    setForm((f) => ({
+      ...f,
+      supplier: supplier.id,
+      vendor_name: supplier.name,
+      vendor_address: addr,
+      vendor_email: supplier.email || '',
+      vendor_phone: supplier.phone || '',
+      attention: supplier.contact_person || f.attention,
+    }));
+  };
+
+  const resolveBuyerPoForPi = (pi) => {
+    if (!pi) return null;
+    if (pi.linked_po_id) {
+      return buyerPoList.find((b) => b.id === pi.linked_po_id) || null;
+    }
+    return buyerPoList.find((b) => b.pi_id === pi.id) || null;
+  };
+
+  const resolvePiForBuyerPo = (buyerPo) => {
+    if (!buyerPo) return null;
+    if (buyerPo.pi_id) {
+      return piList.find((p) => p.id === buyerPo.pi_id) || null;
+    }
+    return piList.find((p) => p.linked_po_id === buyerPo.id) || null;
+  };
+
+  const updateRef = (pi, buyerPo) => {
+    setForm((f) => ({
+      ...f,
+      pi: pi?.id || null,
+      buyer_po: buyerPo?.id || null,
+      reference_number: buyerPo?.po_number || '',
+    }));
+  };
+
+  const setLine = (idx, field, value) => {
+    setForm((f) => {
+      const items = [...f.items];
+      items[idx] = { ...items[idx], [field]: value };
+      return { ...f, items };
+    });
+  };
+
+  const selectTrim = (idx, trim) => {
+    if (!trim) return;
+    setForm((f) => {
+      const items = [...f.items];
+      items[idx] = {
+        ...items[idx],
+        trim: trim.id,
+        particulars: trim.name,
+        property_values: initPropertyValues(trim.properties),
+        property_label: '',
+        from_pi: false,
+        hsn_code: (trim.hsn_code || '').trim(),
+        unit: trim.default_unit || items[idx].unit,
+      };
+      return { ...f, items };
+    });
+  };
+
+  const setLineProperty = (idx, propName, value) => {
+    setForm((f) => {
+      const items = [...f.items];
+      const row = items[idx];
+      const trimMaster = row.trim ? trimsMap[row.trim] : null;
+      const property_values = { ...(row.property_values || {}), [propName]: value };
+      const property_label = formatPiTrimProperties({ property_values }, trimMaster);
+      items[idx] = { ...row, property_values, property_label, from_pi: false };
+      return { ...f, items };
+    });
+  };
+
+  const selectPiTrimLine = (idx, line) => {
+    const trimMaster = line._trimMaster || (line.trim ? trimsMap[line.trim] : null);
+    const display = buildPiTrimDisplay(line, trimMaster);
+    setForm((f) => {
+      const items = [...f.items];
+      items[idx] = {
+        ...items[idx],
+        trim: line.trim || null,
+        particulars: line.trim_name || trimMaster?.name || '',
+        property_values: { ...(line.property_values || {}) },
+        property_label: display.summary,
+        from_pi: true,
+        hsn_code: (trimMaster?.hsn_code || '').trim(),
+        unit: display.unit,
+        quantity_ordered: display.orderQty || items[idx].quantity_ordered,
+      };
+      return { ...f, items };
+    });
+  };
+
+  const clearLineTrim = (idx) => {
+    setForm((f) => {
+      const items = [...f.items];
+      items[idx] = {
+        ...items[idx],
+        trim: null,
+        hsn_code: '',
+        property_values: {},
+        property_label: '',
+        from_pi: false,
+      };
+      return { ...f, items };
+    });
+  };
+
+  const addLine = () => setForm((f) => ({ ...f, items: [...f.items, emptyLine(f.items.length + 1)] }));
+  const removeLine = (idx) => setForm((f) => ({
+    ...f,
+    items: f.items.filter((_, i) => i !== idx).map((row, i) => ({ ...row, serial_no: i + 1 })),
+  }));
+
+  const handleSave = async () => {
+    const poNumber = form.po_number.trim();
+    if (!poNumber) { alert('PO number is required.'); return; }
+    if (!form.supplier && !form.vendor_name.trim()) { alert('Select a supplier.'); return; }
+    const items = form.items.filter((r) => r.particulars?.trim() || r.trim);
+    if (!items.length) { alert('Add at least one line item.'); return; }
+
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        po_number: poNumber,
+        supplier: form.supplier,
+        pi: form.pi,
+        buyer_po: form.buyer_po,
+        cgst_percent: parseFloat(form.cgst_percent) || 0,
+        sgst_percent: parseFloat(form.sgst_percent) || 0,
+        igst_percent: parseFloat(form.igst_percent) || 0,
+        supplier_ack_date: form.supplier_ack_date || null,
+        status: 'ORDERED',
+        items: items.map((row, i) => ({
+          serial_no: row.serial_no || i + 1,
+          trim: row.trim,
+          particulars: buildParticularsForSave(row),
+          hsn_code: row.hsn_code.trim(),
+          quantity_ordered: parseFloat(row.quantity_ordered) || 0,
+          unit: row.unit || 'PCS',
+          unit_price: parseFloat(row.unit_price) || 0,
+          notes: row.notes || '',
+        })),
+      };
+      if (isNew) {
+        await procurementAPI.create(payload);
+      } else {
+        await procurementAPI.update(id, payload);
+      }
+      navigate('/procurement');
+    } catch (e) {
+      alert('Save failed: ' + (e.response?.data ? JSON.stringify(e.response.data) : e.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const refreshCompanyAddresses = () => {
+    if (!company) return;
+    setForm((f) => ({
+      ...f,
+      bill_to: resolveBillTo(company),
+      ship_to: resolveShipTo(company),
+    }));
+  };
+
+  const supplierText = useMemo(() => supplierBlock(form), [form]);
+  const printPo = useMemo(() => ({ ...form, items: form.items }), [form]);
+
+  const sxInput = { '& .MuiInputBase-root': { borderRadius: 1.5 } };
+
+  if (loading) {
+    return (
+      <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ p: { xs: 1.5, sm: 2.5 } }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, flexWrap: 'wrap' }}>
+        <IconButton onClick={() => navigate('/procurement')} size="small"><ArrowBack /></IconButton>
+        <LocalShipping sx={{ color: 'primary.main' }} />
+        <Typography sx={{ fontWeight: 800, fontSize: '1.15rem', flex: 1 }}>
+          {isNew ? 'Raise Purchase Order' : `PO: ${form.po_number}`}
+        </Typography>
+        {form.po_number && (
+          <Button startIcon={<Print />} variant="outlined" size="small" onClick={() => window.print()}
+            sx={{ fontWeight: 700, textTransform: 'none' }}>Print</Button>
+        )}
+        <Button variant="contained" size="small" startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <Save />}
+          disabled={saving} onClick={handleSave}
+          sx={{ fontWeight: 800, textTransform: 'none', px: 3 }}>
+          {saving ? 'Saving…' : 'Place Order'}
+        </Button>
+      </Box>
+
+      {/* Order details */}
+      <Paper elevation={0} sx={sectionPaperSxByIndex(0)}>
+        <Typography sx={{ ...sectionLabelSx, mb: 1.5, fontSize: '0.75rem' }}>Order Details</Typography>
+        <Grid container spacing={1.5}>
+          <Grid item xs={12} sm={6} md={4}>
+            <TextField
+              fullWidth
+              size="small"
+              label="PO Number *"
+              value={form.po_number}
+              onChange={(e) => setForm((f) => ({ ...f, po_number: e.target.value }))}
+              InputProps={{
+                endAdornment: isNew ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={refreshPoNumber}
+                      disabled={poNumberLoading}
+                      title="Get next PO number"
+                    >
+                      {poNumberLoading ? <CircularProgress size={16} /> : <Sync sx={{ fontSize: 16 }} />}
+                    </IconButton>
+                  </InputAdornment>
+                ) : undefined,
+              }}
+              sx={{
+                ...sxInput,
+                ...monoFieldSx,
+                '& .MuiInputBase-input': {
+                  ...monoFieldSx['& .MuiInputBase-input'],
+                  fontSize: '0.82rem',
+                },
+              }}
+            />
+          </Grid>
+          <Grid item xs={6} sm={3} md={2}>
+            <TextField fullWidth size="small" label="Order Date" type="date" value={form.order_date}
+              onChange={(e) => setForm((f) => ({ ...f, order_date: e.target.value }))}
+              InputLabelProps={{ shrink: true }} sx={sxInput} />
+          </Grid>
+          <Grid item xs={6} sm={3} md={2}>
+            <TextField fullWidth size="small" label="Delivery Date" type="date" value={form.expected_delivery_date}
+              onChange={(e) => setForm((f) => ({ ...f, expected_delivery_date: e.target.value }))}
+              InputLabelProps={{ shrink: true }} sx={sxInput} />
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+            <Autocomplete
+              options={suppliers}
+              getOptionLabel={(o) => o.name || ''}
+              value={suppliers.find((s) => s.id === form.supplier) || null}
+              onChange={(_, v) => selectSupplier(v)}
+              renderInput={(params) => <TextField {...params} size="small" fullWidth label="Supplier *" sx={sxInput} />}
+            />
+          </Grid>
+          <Grid item xs={6} sm={3} md={2}>
+            <TextField fullWidth size="small" label="Attention" value={form.attention}
+              onChange={(e) => setForm((f) => ({ ...f, attention: e.target.value }))} sx={sxInput} />
+          </Grid>
+          <Grid item xs={6} sm={3} md={2}>
+            <TextField fullWidth size="small" label="Phone No." value={form.vendor_phone}
+              onChange={(e) => setForm((f) => ({ ...f, vendor_phone: e.target.value }))} sx={sxInput} />
+          </Grid>
+          <Grid item xs={12} sm={4} md={3}>
+            <Autocomplete
+              options={piList}
+              getOptionLabel={(o) => `${o.pi_number} — ${o.client_name || ''}`}
+              value={piList.find((p) => p.id === form.pi) || null}
+              onChange={(_, v) => {
+                if (!v) updateRef(null, null);
+                else updateRef(v, resolveBuyerPoForPi(v));
+              }}
+              renderInput={(params) => <TextField {...params} size="small" fullWidth label="Reference PI" sx={sxInput} />}
+            />
+          </Grid>
+          <Grid item xs={12} sm={4} md={3}>
+            <Autocomplete
+              options={buyerPoList}
+              getOptionLabel={(o) => `${o.po_number} — ${o.buyer_name || ''}`}
+              value={buyerPoList.find((b) => b.id === form.buyer_po) || null}
+              onChange={(_, v) => {
+                if (!v) updateRef(null, null);
+                else updateRef(resolvePiForBuyerPo(v), v);
+              }}
+              renderInput={(params) => <TextField {...params} size="small" fullWidth label="Reference Buyer PO" sx={sxInput} />}
+            />
+          </Grid>
+          <Grid item xs={12} sm={4} md={3}>
+            <TextField fullWidth size="small" label="Reference No. (Buyer PO)" value={form.reference_number}
+              onChange={(e) => setForm((f) => ({ ...f, reference_number: e.target.value }))} sx={sxInput} />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField fullWidth size="small" label="Payment Terms" value={form.payment_terms}
+              onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))} sx={sxInput} />
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* Parties */}
+      <Paper elevation={0} sx={sectionPaperSxByIndex(1)}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            mb: 2,
+            pb: 1.5,
+            borderBottom: `1px solid ${slate[200]}`,
+          }}
+        >
+          <Box
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: alpha('#0f766e', 0.1),
+              color: '#0f766e',
+            }}
+          >
+            <LocalShipping sx={{ fontSize: 20 }} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: '0.9rem', color: slate[800], letterSpacing: '-0.01em' }}>
+              Parties
+            </Typography>
+            <Typography sx={{ fontSize: '0.72rem', color: slate[500], mt: 0.25 }}>
+              Supplier, billing, and shipping addresses for this purchase order
+            </Typography>
+          </Box>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<Sync sx={{ fontSize: 14 }} />}
+            onClick={refreshCompanyAddresses}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '0.72rem',
+              borderColor: alpha('#0f766e', 0.35),
+              color: '#0f766e',
+              '&:hover': { borderColor: '#0f766e', bgcolor: alpha('#0f766e', 0.06) },
+            }}
+          >
+            Refresh Bill / Ship
+          </Button>
+        </Box>
+        <Grid container spacing={2} alignItems="stretch">
+          <Grid item xs={12} md={4} sx={{ display: 'flex' }}>
+            <PartyCard variant="supplier" title="Supplier" text={supplierText} hint="Vendor master" />
+          </Grid>
+          <Grid item xs={12} md={4} sx={{ display: 'flex' }}>
+            <PartyCard variant="billTo" title="Bill To" text={form.bill_to} hint="Company profile" />
+          </Grid>
+          <Grid item xs={12} md={4} sx={{ display: 'flex' }}>
+            <PartyCard variant="shipTo" title="Ship To" text={form.ship_to} hint="Company profile" />
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* Line items */}
+      <Paper elevation={0} sx={sectionPaperSxByIndex(2)}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.25, flexWrap: 'wrap', gap: 1 }}>
+          <Typography sx={{ fontWeight: 800, fontSize: '0.8rem', flex: 1 }}>Line Items</Typography>
+          {form.pi && (
+            <Typography sx={{ fontSize: '0.68rem', color: slate[500], fontWeight: 600 }}>
+              {piTrimsLoading
+                ? 'Loading trims from PI…'
+                : hasPiTrims
+                  ? `${piTrimOptions.length} PI variant(s) · ${trims.length} library trim(s) · PI total ${formatQty(piTotalPcs)} pcs`
+                  : `No PI indents — ${trims.length} library trim(s) available`}
+            </Typography>
+          )}
+          {!form.pi && (
+            <Typography sx={{ fontSize: '0.68rem', color: slate[500], fontWeight: 600 }}>
+              {trims.length} trim(s) from library — select a PI to include indent variants
+            </Typography>
+          )}
+          <Button size="small" startIcon={<Add />} onClick={addLine} sx={{ textTransform: 'none', fontWeight: 700 }}>Add Row</Button>
+        </Box>
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small" sx={{ minWidth: 1180, border: `1px solid ${slate[200]}`, tableLayout: 'fixed' }}>
+            <TableHead>
+              <TableRow sx={{ bgcolor: alpha(slate[900], 0.04) }}>
+                {[
+                  { h: 'S.No', w: 52 },
+                  { h: 'Particulars (Trim)', w: 340 },
+                  { h: 'HSN Code', w: 128 },
+                  { h: 'Qty', w: 132 },
+                  { h: 'Unit Price', w: 110 },
+                  { h: 'Total', w: 110 },
+                  { h: '', w: 48 },
+                ].map(({ h, w }) => (
+                  <TableCell key={h || 'actions'} sx={{ fontWeight: 700, fontSize: '0.75rem', width: w, minWidth: w }}>
+                    {h}
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {form.items.map((row, i) => {
+                const hsnMissing = Boolean(row.trim && !row.hsn_code?.trim());
+                return (
+                <TableRow key={i}>
+                  <TableCell sx={{ width: 52, verticalAlign: 'top', pt: 1.5 }}>{i + 1}</TableCell>
+                  <TableCell sx={{ minWidth: 340, verticalAlign: 'top' }}>
+                    <Autocomplete
+                      freeSolo
+                      options={trimOptions}
+                      loading={piTrimsLoading}
+                      groupBy={trimOptionGroup}
+                      componentsProps={{
+                        paper: { sx: { minWidth: hasPiTrims ? 440 : 320 } },
+                      }}
+                      getOptionLabel={(o) => {
+                        if (typeof o === 'string') return o;
+                        if (o._optionKey) {
+                          return formatPiTrimOptionLabel(o, o._trimMaster || trimsMap[o.trim]);
+                        }
+                        return o.name || '';
+                      }}
+                      isOptionEqualToValue={(o, v) => {
+                        if (typeof v === 'string') return false;
+                        if (o._optionKey || v._optionKey) {
+                          return o._optionKey === v._optionKey;
+                        }
+                        return o.id === v.id;
+                      }}
+                      inputValue={row.particulars}
+                      onInputChange={(_, v, reason) => {
+                        setLine(i, 'particulars', v);
+                        if (reason === 'input') {
+                          setForm((f) => {
+                            const items = [...f.items];
+                            items[i] = {
+                              ...items[i],
+                              trim: null,
+                              property_values: {},
+                              property_label: '',
+                              from_pi: false,
+                            };
+                            return { ...f, items };
+                          });
+                        }
+                      }}
+                      onChange={(_, v) => {
+                        if (v && typeof v === 'object') {
+                          if (v._optionKey) selectPiTrimLine(i, v);
+                          else selectTrim(i, v);
+                        } else if (!v) clearLineTrim(i);
+                      }}
+                      renderOption={(props, option) => {
+                        const isPiLine = Boolean(option._optionKey);
+                        if (!isPiLine) {
+                          return (
+                            <Box component="li" {...props} key={`lib-${option.id}`}>
+                              <LibraryTrimOptionContent trim={option} />
+                            </Box>
+                          );
+                        }
+                        const trimMaster = option._trimMaster || trimsMap[option.trim];
+                        return (
+                          <Box component="li" {...props} key={option._optionKey}>
+                            <PiTrimOptionContent line={option} trimMaster={trimMaster} />
+                          </Box>
+                        );
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          size="small"
+                          fullWidth
+                          placeholder={hasPiTrims ? 'PI variant or library trim…' : 'Select trim from library'}
+                        />
+                      )}
+                    />
+                    {row.from_pi && row.property_label && (
+                      <Box
+                        sx={{
+                          mt: 0.75,
+                          px: 0.75,
+                          py: 0.65,
+                          borderRadius: 1,
+                          bgcolor: alpha('#0f766e', 0.06),
+                          border: `1px solid ${alpha('#0f766e', 0.12)}`,
+                        }}
+                      >
+                        {row.property_label.split('\n').filter(Boolean).map((line) => (
+                          <Typography
+                            key={line}
+                            sx={{
+                              fontSize: line.includes('Order Qty:') ? '0.68rem' : '0.72rem',
+                              color: line.includes('Order Qty:') ? '#0f766e' : slate[600],
+                              lineHeight: 1.45,
+                              fontWeight: line.includes('Order Qty:') ? 700 : 600,
+                            }}
+                          >
+                            {line}
+                          </Typography>
+                        ))}
+                      </Box>
+                    )}
+                    {row.trim && !row.from_pi && (
+                      <TrimPropertyFields
+                        row={row}
+                        trimMaster={trimsMap[row.trim]}
+                        onChange={(propName, value) => setLineProperty(i, propName, value)}
+                      />
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ width: 128, minWidth: 128, verticalAlign: 'top', pt: 1.25 }}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      value={row.hsn_code}
+                      placeholder={hsnMissing ? 'Enter HSN' : '6–8 digits'}
+                      inputProps={{ maxLength: 8, style: { textAlign: 'center' } }}
+                      onChange={(e) => setLine(i, 'hsn_code', e.target.value.replace(/\D/g, '').slice(0, 8))}
+                      helperText={hsnMissing ? 'HSN not available in system' : ''}
+                      FormHelperTextProps={{
+                        sx: {
+                          mx: 0,
+                          mt: 0.5,
+                          fontSize: '0.62rem',
+                          lineHeight: 1.3,
+                          color: '#b45309',
+                          fontWeight: 600,
+                          whiteSpace: 'normal',
+                        },
+                      }}
+                      sx={{
+                        ...monoFieldSx,
+                        '& .MuiOutlinedInput-root': {
+                          bgcolor: hsnMissing ? alpha('#f59e0b', 0.06) : alpha(slate[50], 0.8),
+                        },
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ width: 132, minWidth: 132, verticalAlign: 'top', pt: 1.25 }}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      type="number"
+                      value={row.quantity_ordered}
+                      placeholder="0"
+                      inputProps={{ min: 0, step: 'any', style: { textAlign: 'right' } }}
+                      onChange={(e) => setLine(i, 'quantity_ordered', e.target.value)}
+                      sx={{
+                        ...monoFieldSx,
+                        '& .MuiOutlinedInput-root': { bgcolor: alpha(slate[50], 0.8) },
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ width: 100 }}>
+                    <TextField size="small" fullWidth type="number" value={row.unit_price}
+                      onChange={(e) => setLine(i, 'unit_price', e.target.value)} inputProps={{ step: '0.01' }} />
+                  </TableCell>
+                  <TableCell sx={{ width: 100, fontWeight: 700, textAlign: 'right' }}>
+                    {lineTotal(row).toFixed(2)}
+                  </TableCell>
+                  <TableCell sx={{ width: 48 }}>
+                    <IconButton size="small" color="error" onClick={() => removeLine(i)} disabled={form.items.length <= 1}>
+                      <Delete fontSize="small" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Box>
+
+        {/* Tax summary */}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5 }}>
+          <Box sx={{ width: { xs: '100%', sm: 320 } }}>
+            <RadioGroup row value={form.tax_mode} onChange={(e) => setForm((f) => ({ ...f, tax_mode: e.target.value }))} sx={{ mb: 0.75 }}>
+              <FormControlLabel value="CGST_SGST" control={<Radio size="small" />} label={<Typography variant="body2">CGST + SGST</Typography>} />
+              <FormControlLabel value="IGST" control={<Radio size="small" />} label={<Typography variant="body2">IGST</Typography>} />
+            </RadioGroup>
+            <Grid container spacing={1} sx={{ mb: 0.75 }}>
+              {form.tax_mode === 'IGST' ? (
+                <Grid item xs={6}>
+                  <TextField size="small" fullWidth label="IGST %" value={form.igst_percent}
+                    onChange={(e) => setForm((f) => ({ ...f, igst_percent: e.target.value }))} />
+                </Grid>
+              ) : (
+                <>
+                  <Grid item xs={6}>
+                    <TextField size="small" fullWidth label="CGST %" value={form.cgst_percent}
+                      onChange={(e) => setForm((f) => ({ ...f, cgst_percent: e.target.value }))} />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField size="small" fullWidth label="SGST %" value={form.sgst_percent}
+                      onChange={(e) => setForm((f) => ({ ...f, sgst_percent: e.target.value }))} />
+                  </Grid>
+                </>
+              )}
+            </Grid>
+            <Box sx={{ p: 1.5, bgcolor: alpha('#0f766e', 0.06), borderRadius: 1.5, border: `1px solid ${slate[200]}` }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}><Typography variant="body2">Sub Total</Typography><Typography variant="body2" fontWeight={700}>{totals.subtotal.toFixed(2)}</Typography></Box>
+              {form.tax_mode === 'IGST' ? (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}><Typography variant="body2">IGST</Typography><Typography variant="body2">{totals.igst.toFixed(2)}</Typography></Box>
+              ) : (
+                <>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}><Typography variant="body2">CGST</Typography><Typography variant="body2">{totals.cgst.toFixed(2)}</Typography></Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}><Typography variant="body2">SGST</Typography><Typography variant="body2">{totals.sgst.toFixed(2)}</Typography></Box>
+                </>
+              )}
+              <Divider sx={{ my: 1 }} />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography fontWeight={800}>Total</Typography><Typography fontWeight={800}>{totals.total.toFixed(2)}</Typography></Box>
+            </Box>
+          </Box>
+        </Box>
+      </Paper>
+
+      {/* Footer — compact */}
+      <Paper elevation={0} sx={sectionPaperSxByIndex(3)}>
+        <Typography sx={{ ...sectionLabelSx, mb: 1 }}>Footer & Acknowledgement</Typography>
+        <Grid container spacing={1.5}>
+          <Grid item xs={12}>
+            <TextField fullWidth size="small" multiline minRows={2} label="Purchase Order Comments"
+              value={form.po_comments} onChange={(e) => setForm((f) => ({ ...f, po_comments: e.target.value }))} sx={sxInput} />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField fullWidth size="small" label="Order Placed By" value={form.order_placed_by}
+              onChange={(e) => setForm((f) => ({ ...f, order_placed_by: e.target.value }))} sx={sxInput} />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField fullWidth size="small" label="Supplier Ack. Name" value={form.supplier_ack_name}
+              onChange={(e) => setForm((f) => ({ ...f, supplier_ack_name: e.target.value }))} sx={sxInput} />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField fullWidth size="small" label="Supplier Ack. Date" type="date" value={form.supplier_ack_date}
+              onChange={(e) => setForm((f) => ({ ...f, supplier_ack_date: e.target.value }))}
+              InputLabelProps={{ shrink: true }} sx={sxInput} />
+          </Grid>
+        </Grid>
+        <Typography sx={{ fontSize: '0.68rem', color: 'text.secondary', mt: 1.25, lineHeight: 1.4 }}>
+          Print view includes signature blocks for company and supplier acknowledgement.
+        </Typography>
+      </Paper>
+
+      <Box id="supplier-po-print-root">
+        <SupplierPOPrintDocument po={printPo} company={company} trimsMap={trimsMap} />
+      </Box>
+    </Box>
+  );
+}

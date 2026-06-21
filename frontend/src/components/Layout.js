@@ -68,7 +68,7 @@ const navGroups = [
     items: [
       { text: 'Trims library', icon: <ListAltIcon />, path: '/trims' },
       { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers' },
-      { text: 'Mill & vendor POs', icon: <ShoppingCartIcon />, path: '/procurement' },
+      { text: 'Supplier POs', icon: <ShoppingCartIcon />, path: '/procurement' },
     ],
   },
   {
@@ -92,7 +92,8 @@ const routeMeta = {
   '/trims': { title: 'Trims Library' },
   '/suppliers': { title: 'Suppliers' },
   '/inventory': { title: 'Inventory' },
-  '/procurement': { title: 'Procurement' },
+    '/procurement': { title: 'Supplier purchase orders' },
+    '/procurement/new': { title: 'Raise PO' },
   '/production': { title: 'Production' },
   '/company': { title: 'Company details' },
 };

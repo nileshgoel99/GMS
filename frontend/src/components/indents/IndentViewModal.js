@@ -8,6 +8,7 @@ import { Close, Assignment } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { ordersAPI } from '../../services/api';
 import { slate } from '../../theme/appTheme';
+import { formatDateDisplay } from '../../utils/formatDate';
 
 const STATUS_COLOR = { DRAFT: 'default', CONFIRMED: 'success' };
 
@@ -129,7 +130,7 @@ export default function IndentViewModal({ open, indentId, onClose }) {
           </Typography>
           {indent && (
             <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
-              PI {indent.pi_number} · {indent.indent_date}
+              PI {indent.pi_number} · {formatDateDisplay(indent.indent_date)}
             </Typography>
           )}
         </Box>
@@ -153,7 +154,7 @@ export default function IndentViewModal({ open, indentId, onClose }) {
             {/* Summary */}
             <Grid container spacing={2}>
               <Grid item xs={6} sm={3}><InfoItem label="Indent No" value={indent.indent_number} /></Grid>
-              <Grid item xs={6} sm={3}><InfoItem label="Date" value={indent.indent_date} /></Grid>
+              <Grid item xs={6} sm={3}><InfoItem label="Date" value={formatDateDisplay(indent.indent_date)} /></Grid>
               <Grid item xs={6} sm={3}><InfoItem label="PI Reference" value={indent.pi_number} /></Grid>
               <Grid item xs={6} sm={3}><InfoItem label="Created By" value={indent.created_by_name} /></Grid>
             </Grid>

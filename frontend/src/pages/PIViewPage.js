@@ -5,6 +5,7 @@ import { ArrowBack, Print, Edit, Save, Close, Assignment } from '@mui/icons-mate
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, companyAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
+import { formatDateDMY } from '../utils/formatDate';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
@@ -60,11 +61,7 @@ function PIDocument({ pi, company }) {
   const totalAmt = parseFloat(pi.total_amount || 0);
 
   // Format date as DD-MM-YYYY
-  const fmtDate = (d) => {
-    if (!d) return '';
-    const dt = new Date(d);
-    return dt.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
-  };
+  const fmtDate = (d) => formatDateDMY(d);
 
   const currency = (pi.lines?.[0]?.currency) || 'USD';
 

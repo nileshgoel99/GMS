@@ -13,6 +13,7 @@ import {
 } from '@mui/icons-material';
 import { ordersAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
+import { formatDateDisplay } from '../utils/formatDate';
 import AddTrimModal from '../components/trims/AddTrimModal';
 import { isNumericTrimProperty, formatTrimPropertyLabel } from '../components/trims/trimConstants';
 
@@ -371,7 +372,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
             INDENT NO:- {indent?.indent_number || '___'}
           </Typography>
           <Typography sx={{ fontWeight: 700, fontFamily: 'inherit', fontSize: '9.5pt' }}>
-            DATE - {indent?.indent_date || '___'}
+            DATE - {formatDateDisplay(indent?.indent_date) === '—' ? '___' : formatDateDisplay(indent?.indent_date)}
           </Typography>
         </Box>
       </Box>

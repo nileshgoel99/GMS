@@ -7,6 +7,7 @@ import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
 import IndentViewModal from '../components/indents/IndentViewModal';
 import { dataGridSx, slate } from '../theme/appTheme';
+import { formatDateDisplay } from '../utils/formatDate';
 import { ordersAPI } from '../services/api';
 
 const STATUS_COLOR = { DRAFT: 'default', CONFIRMED: 'success' };
@@ -123,7 +124,7 @@ export default function Indents() {
     },
     {
       field: 'indent_date', headerName: 'Date', width: 110,
-      renderCell: (p) => cell('left', <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{p.value}</Typography>),
+      renderCell: (p) => cell('left', <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{formatDateDisplay(p.value)}</Typography>),
     },
     {
       field: 'actions', headerName: '', width: 110, sortable: false, align: 'center', headerAlign: 'center',

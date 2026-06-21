@@ -470,6 +470,44 @@ export const appTheme = createTheme({
         },
       },
     },
+    MuiAutocomplete: {
+      styleOverrides: {
+        paper: {
+          borderRadius: rMd,
+          marginTop: 4,
+          border: `1px solid ${slate[300]}`,
+          boxShadow: softElevation[4],
+          bgcolor: '#ffffff',
+          color: slate[800],
+        },
+        listbox: {
+          padding: '4px 0',
+          maxHeight: 280,
+          bgcolor: '#ffffff',
+        },
+        option: {
+          fontSize: '0.875rem',
+          minHeight: 40,
+          color: slate[800],
+          '&[aria-selected="true"]': {
+            bgcolor: alpha(brand.main, 0.1),
+            fontWeight: 600,
+          },
+          '&.Mui-focused': {
+            bgcolor: alpha(brand.main, 0.08),
+          },
+        },
+        noOptions: {
+          fontSize: '0.875rem',
+          color: slate[600],
+          padding: '10px 16px',
+        },
+        loading: {
+          fontSize: '0.875rem',
+          color: slate[600],
+        },
+      },
+    },
     MuiSwitch: {
       styleOverrides: {
         root: {
@@ -608,6 +646,44 @@ export const appTheme = createTheme({
     },
   },
 });
+
+/** Alternating section panels — subtle linen + dot texture on alt blocks */
+export const sectionPaperSx = (variant = 'plain', overrides = {}) => {
+  const base = {
+    p: 2,
+    mb: 1.5,
+    border: `1px solid ${slate[200]}`,
+    borderRadius: 2,
+    position: 'relative',
+    overflow: 'hidden',
+  };
+
+  if (variant === 'alt') {
+    return {
+      ...base,
+      ...overrides,
+      bgcolor: warm[50],
+      backgroundImage: `
+        radial-gradient(ellipse 85% 65% at 4% 0%, ${alpha(brand.main, 0.05)}, transparent 58%),
+        radial-gradient(ellipse 75% 55% at 96% 100%, ${alpha('#b45309', 0.035)}, transparent 52%),
+        ${linenTexture},
+        ${dotGrid}
+      `,
+      backgroundSize: 'auto, auto, auto, 20px 20px',
+      boxShadow: `inset 0 1px 0 ${alpha('#fff', 0.85)}`,
+    };
+  }
+
+  return {
+    ...base,
+    ...overrides,
+    bgcolor: warm.paper,
+    boxShadow: `0 1px 2px ${alpha(slate[900], 0.03)}`,
+  };
+};
+
+export const sectionPaperSxByIndex = (index, overrides = {}) =>
+  sectionPaperSx(index % 2 === 1 ? 'alt' : 'plain', overrides);
 
 export const layoutDrawerWidth = 300;
 

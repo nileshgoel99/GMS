@@ -62,6 +62,17 @@ class CompanyProfile(models.Model):
         help_text='Footer line on every PDF (e.g. registered office, jurisdiction)',
     )
 
+    bill_to = models.TextField(
+        blank=True,
+        default='',
+        help_text='Default Bill To block on supplier purchase orders',
+    )
+    ship_to = models.TextField(
+        blank=True,
+        default='',
+        help_text='Default Ship To block on supplier purchase orders',
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

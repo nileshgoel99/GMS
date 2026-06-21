@@ -27,6 +27,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
 import { dataGridSx, slate, warm } from '../theme/appTheme';
+import { formatDateDisplay } from '../utils/formatDate';
 import { ordersAPI } from '../services/api';
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -128,8 +129,8 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
             {/* ── PO Identity row ── */}
             <Box sx={{ bgcolor: '#fff', px: 3, py: 2.5, borderBottom: `1px solid ${slate[100]}` }}>
               <Grid container spacing={3}>
-                <Grid item xs={6} sm={3}><F label="PO Date"         value={po.po_date} /></Grid>
-                <Grid item xs={6} sm={3}><F label="Ex-Factory Date" value={po.ex_factory_date} /></Grid>
+                <Grid item xs={6} sm={3}><F label="PO Date"         value={formatDateDisplay(po.po_date)} /></Grid>
+                <Grid item xs={6} sm={3}><F label="Ex-Factory Date" value={formatDateDisplay(po.ex_factory_date)} /></Grid>
                 <Grid item xs={6} sm={3}><F label="Currency"        value={po.currency} /></Grid>
                 <Grid item xs={6} sm={3}><F label="Supplier Code"   value={po.supplier_code} mono /></Grid>
               </Grid>
@@ -491,7 +492,7 @@ export default function BuyerPOs() {
       headerAlign: 'center',
       renderCell: (p) => cell('center',
         <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: slate[700] }}>
-          {p.value || '—'}
+          {formatDateDisplay(p.value)}
         </Typography>
       ),
     },
@@ -574,7 +575,7 @@ export default function BuyerPOs() {
       headerAlign: 'center',
       renderCell: (p) => cell('center',
         <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: p.value ? slate[700] : slate[300] }}>
-          {p.value || '—'}
+          {formatDateDisplay(p.value)}
         </Typography>
       ),
     },

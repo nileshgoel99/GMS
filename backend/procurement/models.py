@@ -1,7 +1,9 @@
+from decimal import Decimal
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
-from orders.models import ProformaInvoice
+from orders.models import ProformaInvoice, BuyerPO, TrimMaster
 from inventory.models import InventoryItem
 
 
@@ -13,29 +15,68 @@ class PurchaseOrder(models.Model):
         ('COMPLETED', 'Completed'),
         ('CANCELLED', 'Cancelled'),
     ]
-    
+
+    TAX_MODE_CHOICES = [
+        ('CGST_SGST', 'CGST + SGST'),
+        ('IGST', 'IGST'),
+    ]
+
     po_number = models.CharField(max_length=50, unique=True, db_index=True)
-    pi = models.ForeignKey(ProformaInvoice, on_delete=models.SET_NULL,
-                           null=True, blank=True, related_name='purchase_orders')
-    
+    supplier = models.ForeignKey(
+        'suppliers.Supplier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='purchase_orders',
+    )
+    pi = models.ForeignKey(
+        ProformaInvoice, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='purchase_orders',
+    )
+    buyer_po = models.ForeignKey(
+        BuyerPO, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='supplier_purchase_orders',
+        help_text='Buyer PO this supplier order references',
+    )
+    reference_number = models.CharField(
+        max_length=120, blank=True, default='',
+        help_text='Buyer PO reference number for display',
+    )
+
     vendor_name = models.CharField(max_length=200)
     vendor_email = models.EmailField(blank=True, null=True)
-    vendor_phone = models.CharField(max_length=20, blank=True, null=True)
+    vendor_phone = models.CharField(max_length=40, blank=True, null=True)
     vendor_address = models.TextField(blank=True, null=True)
-    
+    attention = models.CharField(max_length=200, blank=True, default='')
+
+    bill_to = models.TextField(blank=True, default='')
+    ship_to = models.TextField(blank=True, default='')
+
     order_date = models.DateField()
     expected_delivery_date = models.DateField(blank=True, null=True)
     actual_delivery_date = models.DateField(blank=True, null=True)
-    
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
-    
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
-    
-    payment_terms = models.CharField(max_length=200, blank=True, null=True)
+
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    tax_mode = models.CharField(max_length=12, choices=TAX_MODE_CHOICES, default='CGST_SGST')
+    cgst_percent = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    sgst_percent = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    igst_percent = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    cgst_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    sgst_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    igst_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total_amount = models.DecimalField(max_digits=14, decimal_places=2, blank=True, null=True)
+
+    payment_terms = models.CharField(max_length=500, blank=True, null=True)
     delivery_terms = models.CharField(max_length=200, blank=True, null=True)
-    
+
+    po_comments = models.TextField(blank=True, default='')
+    order_placed_by = models.CharField(max_length=120, blank=True, default='Shivangi Jain')
+    supplier_ack_name = models.CharField(max_length=120, blank=True, default='')
+    supplier_ack_date = models.DateField(blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
-    
+
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_pos')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -47,12 +88,38 @@ class PurchaseOrder(models.Model):
 
     def __str__(self):
         return f"{self.po_number} - {self.vendor_name}"
-    
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
+
+    def recalculate_totals(self, save=True):
+        subtotal = Decimal('0')
+        for line in self.items.all():
+            qty = line.quantity_ordered or Decimal('0')
+            price = line.unit_price or Decimal('0')
+            line.total_price = (qty * price).quantize(Decimal('0.01'))
+            line.save(update_fields=['total_price', 'updated_at'])
+            subtotal += line.total_price
+
+        self.subtotal = subtotal.quantize(Decimal('0.01'))
+        cgst_pct = self.cgst_percent or Decimal('0')
+        sgst_pct = self.sgst_percent or Decimal('0')
+        igst_pct = self.igst_percent or Decimal('0')
+
+        if self.tax_mode == 'IGST':
+            self.cgst_amount = Decimal('0')
+            self.sgst_amount = Decimal('0')
+            self.igst_amount = (subtotal * igst_pct / Decimal('100')).quantize(Decimal('0.01'))
+        else:
+            self.cgst_amount = (subtotal * cgst_pct / Decimal('100')).quantize(Decimal('0.01'))
+            self.sgst_amount = (subtotal * sgst_pct / Decimal('100')).quantize(Decimal('0.01'))
+            self.igst_amount = Decimal('0')
+
+        self.total_amount = (self.subtotal + self.cgst_amount + self.sgst_amount + self.igst_amount).quantize(Decimal('0.01'))
+        if save:
+            self.save(update_fields=[
+                'subtotal', 'cgst_amount', 'sgst_amount', 'igst_amount', 'total_amount', 'updated_at',
+            ])
 
     def update_status(self):
-        items = self.items.all()
+        items = self.items.filter(item__isnull=False)
         if not items.exists():
             return
 
@@ -65,30 +132,40 @@ class PurchaseOrder(models.Model):
             self.status = 'PARTIAL'
         else:
             self.status = 'COMPLETED'
-        self.save(update_fields=['status'])
+        self.save(update_fields=['status', 'updated_at'])
 
 
 class PurchaseOrderItem(models.Model):
     po = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name='items')
-    item = models.ForeignKey(InventoryItem, on_delete=models.CASCADE, related_name='po_items')
+    serial_no = models.PositiveIntegerField(default=1)
+    trim = models.ForeignKey(
+        TrimMaster, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='po_lines',
+    )
+    particulars = models.CharField(max_length=500, blank=True, default='')
+    hsn_code = models.CharField(max_length=20, blank=True, default='')
+    item = models.ForeignKey(
+        InventoryItem, on_delete=models.CASCADE,
+        null=True, blank=True, related_name='po_items',
+    )
     quantity_ordered = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     quantity_received = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)])
-    
+    unit = models.CharField(max_length=20, blank=True, default='PCS')
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     total_price = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
-    
     notes = models.TextField(blank=True, null=True)
-    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = 'Purchase Order Item'
         verbose_name_plural = 'Purchase Order Items'
+        ordering = ['serial_no', 'id']
 
     def __str__(self):
-        return f"{self.po.po_number} - {self.item.name}"
-    
+        label = self.particulars or (self.trim.name if self.trim_id else (self.item.name if self.item_id else 'Line'))
+        return f"{self.po.po_number} - {label}"
+
     @property
     def quantity_pending(self):
         return self.quantity_ordered - self.quantity_received
@@ -97,11 +174,8 @@ class PurchaseOrderItem(models.Model):
 class POReceipt(models.Model):
     po = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name='receipts')
     receipt_number = models.CharField(max_length=50, unique=True)
-    
     receipt_date = models.DateField()
-    
     notes = models.TextField(blank=True, null=True)
-    
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -117,11 +191,8 @@ class POReceipt(models.Model):
 class POReceiptItem(models.Model):
     receipt = models.ForeignKey(POReceipt, on_delete=models.CASCADE, related_name='items')
     po_item = models.ForeignKey(PurchaseOrderItem, on_delete=models.CASCADE, related_name='receipt_items')
-    
     quantity_received = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
-    
     remarks = models.TextField(blank=True, null=True)
-    
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -129,4 +200,4 @@ class POReceiptItem(models.Model):
         verbose_name_plural = 'PO Receipt Items'
 
     def __str__(self):
-        return f"{self.receipt.receipt_number} - {self.po_item.item.name}"
+        return f"{self.receipt.receipt_number} - {self.po_item}"

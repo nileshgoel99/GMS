@@ -20,6 +20,7 @@ import { Add, Edit, Delete, Send } from '@mui/icons-material';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
 import { dataGridSx } from '../theme/appTheme';
+import { formatDateDisplay } from '../utils/formatDate';
 import { productionAPI, ordersAPI, inventoryAPI } from '../services/api';
 import { format } from 'date-fns';
 
@@ -181,7 +182,12 @@ const Production = () => {
     { field: 'issue_number', headerName: 'Issue Number', width: 130 },
     { field: 'pi_number', headerName: 'PI Number', width: 120 },
     { field: 'client_name', headerName: 'Client', width: 150 },
-    { field: 'issue_date', headerName: 'Issue Date', width: 120 },
+    {
+      field: 'issue_date',
+      headerName: 'Issue Date',
+      width: 120,
+      renderCell: (params) => formatDateDisplay(params.value),
+    },
     { field: 'production_team', headerName: 'Team', width: 150 },
     {
       field: 'status',

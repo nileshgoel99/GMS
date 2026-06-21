@@ -97,6 +97,7 @@ export const ordersAPI = {
   getPlanningSheet: (id) => api.get(`/orders/pi/${id}/planning_sheet/`),
   updatePlanningSheet: (id, data) => api.post(`/orders/pi/${id}/planning_sheet/`, data),
   getStatistics: () => api.get('/orders/pi/statistics/'),
+  getBuyerPOPaymentDueSummary: () => api.get('/orders/buyer-pos/payment-due-summary/'),
   downloadPiPdf: (id) =>
     api.get(`/orders/pi/${id}/pdf/`, { responseType: 'blob' }).then((res) => res.data),
 
@@ -164,6 +165,8 @@ export const procurementAPI = {
   addItem: (id, data) => api.post(`/procurement/po/${id}/add_item/`, data),
   getPending: () => api.get('/procurement/po/pending/'),
   getStatistics: () => api.get('/procurement/po/statistics/'),
+  getPayablesDueSummary: () => api.get('/procurement/po/payment-due-summary/'),
+  getNextPoNumber: () => api.get('/procurement/po/next-po-number/'),
   
   getReceipts: (params) => api.get('/procurement/receipts/', { params }),
   createReceipt: (data) => api.post('/procurement/receipts/', data),

@@ -125,6 +125,7 @@ class TrimMaster(models.Model):
         help_text='Configurable properties: [{"name": "Width", "unit": "CM"}, {"name": "Color", "unit": ""}]',
     )
     notes = models.TextField(blank=True, default='')
+    hsn_code = models.CharField(max_length=20, blank=True, default='', help_text='Default HSN/SAC for PO lines')
     supplier = models.ForeignKey(
         'suppliers.Supplier',
         on_delete=models.SET_NULL,

@@ -1,3 +1,7 @@
+from datetime import date
+from decimal import Decimal
+
+from django.db.models import Count, Sum
 from django.http import HttpResponse
 
 from rest_framework import viewsets, filters, status, parsers
@@ -152,6 +156,34 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
             .order_by('item_code')
         )
         return Response(list(items))
+
+    @action(detail=False, methods=['get'], url_path='payment-due-summary')
+    def payment_due_summary(self, request):
+        """Buyer PO value due for collection this month (ex-factory in current month)."""
+        today = date.today()
+        month_start = today.replace(day=1)
+        if today.month == 12:
+            month_end = today.replace(year=today.year + 1, month=1, day=1)
+        else:
+            month_end = today.replace(month=today.month + 1, day=1)
+
+        qs = self.queryset.filter(
+            ex_factory_date__gte=month_start,
+            ex_factory_date__lt=month_end,
+        ).exclude(status__in=['CANCELLED', 'COMPLETED'])
+
+        agg = qs.aggregate(count=Count('id'), total=Sum('total_value'))
+        total = agg['total'] or Decimal('0')
+        items = BuyerPOListSerializer(qs.order_by('ex_factory_date', 'po_number'), many=True).data
+
+        return Response({
+            'current_month': today.strftime('%B %Y'),
+            'payments_due_to_collect': {
+                'count': agg['count'] or 0,
+                'total_amount': str(total),
+                'items': items,
+            },
+        })
 
     @action(
         detail=True,

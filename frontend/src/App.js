@@ -12,6 +12,7 @@ import Orders from './pages/Orders';
 import PIViewPage from './pages/PIViewPage';
 import Inventory from './pages/Inventory';
 import Procurement from './pages/Procurement';
+import SupplierPOEditorPage from './pages/SupplierPOEditorPage';
 import Production from './pages/Production';
 import Indents from './pages/Indents';
 import IndentEditorPage from './pages/IndentEditorPage';
@@ -122,6 +123,16 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <Inventory />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/procurement/:id"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <SupplierPOEditorPage />
                   </Layout>
                 </PrivateRoute>
               }
