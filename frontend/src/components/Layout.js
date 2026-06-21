@@ -349,20 +349,20 @@ const Layout = ({ children }) => {
         <Box
           sx={{
             borderRadius: '12px',
-            border: `1px solid ${sidebarBorder}`,
-            bgcolor: alpha(theme.palette.background.paper, 0.72),
+            border: `1px solid ${alpha('#fff', 0.14)}`,
+            bgcolor: alpha('#000', 0.22),
             backdropFilter: 'blur(12px) saturate(150%)',
             WebkitBackdropFilter: 'blur(12px) saturate(150%)',
             p: compactNav ? 1 : 1.75,
           }}
         >
           {!compactNav ? (
-            <Typography variant="caption" sx={{ color: alpha('#ffffff', 0.72), fontWeight: 700, letterSpacing: '0.08em' }}>
+            <Typography variant="caption" sx={{ color: navChrome.textMuted, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Signed in
             </Typography>
           ) : null}
           {!compactNav ? (
-            <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 700, mt: 0.5 }} noWrap title={user?.username}>
+            <Typography variant="body2" sx={{ color: '#fff', fontWeight: 700, mt: 0.5 }} noWrap title={user?.username}>
               {user?.username || 'User'}
             </Typography>
           ) : (
@@ -391,11 +391,15 @@ const Layout = ({ children }) => {
             }}
             sx={{
               mt: 1.35,
-              borderColor: sidebarBorder,
-              color: '#ffffff',
+              borderColor: alpha('#fff', 0.28),
+              color: '#fff',
+              fontWeight: 600,
+              textTransform: 'none',
+              '& .MuiButton-startIcon': { color: alpha('#fff', 0.85) },
               '&:hover': {
-                borderColor: alpha(theme.palette.primary.main, 0.45),
-                bgcolor: alpha(theme.palette.primary.main, 0.06),
+                borderColor: alpha(theme.palette.primary.light, 0.65),
+                bgcolor: alpha(theme.palette.primary.main, 0.18),
+                color: '#fff',
               },
             }}
           >
