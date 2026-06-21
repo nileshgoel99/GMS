@@ -140,7 +140,7 @@ class PurchaseOrderListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'po_number', 'vendor_name', 'supplier', 'supplier_name',
             'order_date', 'expected_delivery_date', 'payment_due_date', 'payment_terms',
-            'status', 'subtotal', 'total_amount', 'reference_number',
+            'transport_paid_by', 'status', 'subtotal', 'total_amount', 'reference_number',
             'pi', 'pi_number', 'buyer_po', 'buyer_po_number',
             'created_by_name', 'items_count', 'created_at',
         ]

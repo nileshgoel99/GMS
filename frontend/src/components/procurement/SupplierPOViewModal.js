@@ -201,6 +201,18 @@ export default function SupplierPOViewModal({ open, poId, onClose, onEdit }) {
               <Grid item xs={12} sm={6}>
                 <InfoItem label="Delivery Terms" value={po.delivery_terms} />
               </Grid>
+              <Grid item xs={12} sm={6}>
+                <InfoItem
+                  label="Transport"
+                  value={
+                    po.transport_paid_by === 'SUPPLIER'
+                      ? 'To be paid by Supplier'
+                      : po.transport_paid_by === 'BUYER'
+                        ? 'To be paid by Buyer'
+                        : null
+                  }
+                />
+              </Grid>
             </Grid>
 
             <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>

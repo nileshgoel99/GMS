@@ -260,6 +260,8 @@ const emptyForm = () => ({
   order_date: new Date().toISOString().split('T')[0],
   expected_delivery_date: '',
   payment_terms: '',
+  delivery_terms: '',
+  transport_paid_by: '',
   tax_mode: 'CGST_SGST',
   cgst_percent: '9',
   sgst_percent: '9',
@@ -604,6 +606,8 @@ export default function SupplierPOEditorPage() {
             order_date: d.order_date,
             expected_delivery_date: d.expected_delivery_date || '',
             payment_terms: d.payment_terms || '',
+            delivery_terms: d.delivery_terms || '',
+            transport_paid_by: d.transport_paid_by || '',
             tax_mode: d.tax_mode || 'CGST_SGST',
             cgst_percent: String(d.cgst_percent ?? 9),
             sgst_percent: String(d.sgst_percent ?? 9),
@@ -949,6 +953,29 @@ export default function SupplierPOEditorPage() {
             <TextField fullWidth size="small" label="Payment Terms" value={form.payment_terms}
               onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))} sx={sxInput} />
           </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField fullWidth size="small" label="Delivery Terms" value={form.delivery_terms}
+              onChange={(e) => setForm((f) => ({ ...f, delivery_terms: e.target.value }))} sx={sxInput} />
+          </Grid>
+          <Grid item xs={12}>
+            <Typography sx={{ ...sectionLabelSx, mb: 0.75, fontSize: '0.65rem' }}>Transport</Typography>
+            <RadioGroup
+              row
+              value={form.transport_paid_by || ''}
+              onChange={(e) => setForm((f) => ({ ...f, transport_paid_by: e.target.value }))}
+            >
+              <FormControlLabel
+                value="SUPPLIER"
+                control={<Radio size="small" />}
+                label={<Typography variant="body2">Transport to be paid by Supplier</Typography>}
+              />
+              <FormControlLabel
+                value="BUYER"
+                control={<Radio size="small" />}
+                label={<Typography variant="body2">Transport to be paid by Buyer</Typography>}
+              />
+            </RadioGroup>
+          </Grid>
         </Grid>
       </Paper>
 
@@ -1037,9 +1064,18 @@ export default function SupplierPOEditorPage() {
           <Button size="small" startIcon={<Add />} onClick={addLine} sx={{ textTransform: 'none', fontWeight: 700 }}>Add Row</Button>
         </Box>
         <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small" sx={{ minWidth: 1180, border: `1px solid ${slate[200]}`, tableLayout: 'fixed' }}>
+          <Table size="small" sx={{
+            minWidth: 1180,
+            border: `1px solid ${slate[200]}`,
+            tableLayout: 'fixed',
+            borderCollapse: 'collapse',
+            '& .MuiTableCell-root': {
+              borderBottom: `1px solid ${slate[200]}`,
+            },
+          }}
+          >
             <TableHead>
-              <TableRow sx={{ bgcolor: alpha(slate[900], 0.04) }}>
+              <TableRow sx={{ bgcolor: alpha(slate[900], 0.05) }}>
                 {[
                   { h: 'S.No', w: 52 },
                   { h: 'Particulars (Trim)', w: 340 },
@@ -1059,8 +1095,14 @@ export default function SupplierPOEditorPage() {
               {form.items.map((row, i) => {
                 const hsnMissing = Boolean(row.trim && !row.hsn_code?.trim());
                 return (
-                <TableRow key={i}>
-                  <TableCell sx={{ width: 52, verticalAlign: 'top', pt: 1.5 }}>{i + 1}</TableCell>
+                <TableRow
+                  key={i}
+                  sx={{
+                    bgcolor: i % 2 === 1 ? alpha('#1E3A5F', 0.05) : '#ffffff',
+                    '&:last-child td': { borderBottom: 'none' },
+                  }}
+                >
+                  <TableCell sx={{ width: 52, verticalAlign: 'top', pt: 1.25 }}>{i + 1}</TableCell>
                   <TableCell sx={{ minWidth: 340, verticalAlign: 'top' }}>
                     <Autocomplete
                       freeSolo
@@ -1209,14 +1251,27 @@ export default function SupplierPOEditorPage() {
                       }}
                     />
                   </TableCell>
-                  <TableCell sx={{ width: 100 }}>
-                    <TextField size="small" fullWidth type="number" value={row.unit_price}
-                      onChange={(e) => setLine(i, 'unit_price', e.target.value)} inputProps={{ step: '0.01' }} />
+                  <TableCell sx={{ width: 110, minWidth: 110, verticalAlign: 'top', pt: 1.25 }}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      type="number"
+                      value={row.unit_price}
+                      placeholder="0.00"
+                      onChange={(e) => setLine(i, 'unit_price', e.target.value)}
+                      inputProps={{ step: '0.01', min: 0, style: { textAlign: 'right' } }}
+                      sx={{
+                        ...monoFieldSx,
+                        '& .MuiOutlinedInput-root': { bgcolor: alpha(slate[50], 0.8) },
+                      }}
+                    />
                   </TableCell>
-                  <TableCell sx={{ width: 100, fontWeight: 700, textAlign: 'right' }}>
-                    {lineTotal(row).toFixed(2)}
+                  <TableCell sx={{ width: 110, minWidth: 110, verticalAlign: 'top', pt: 1.25, fontWeight: 700, textAlign: 'right' }}>
+                    <Typography className="font-numeric" sx={{ fontWeight: 700, fontSize: '0.875rem', pt: 0.75, pr: 0.5 }}>
+                      {lineTotal(row).toFixed(2)}
+                    </Typography>
                   </TableCell>
-                  <TableCell sx={{ width: 48 }}>
+                  <TableCell sx={{ width: 48, verticalAlign: 'top', pt: 1 }}>
                     <IconButton size="small" color="error" onClick={() => removeLine(i)} disabled={form.items.length <= 1}>
                       <Delete fontSize="small" />
                     </IconButton>

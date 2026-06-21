@@ -4,26 +4,26 @@ import { formatDateDisplay } from '../../utils/formatDate';
 /** Brand palette — Gold #F3E21A · Rich Black #000000 · Navy #1E3A5F */
 const BRAND = {
   gold: '#F3E21A',
-  goldLight: 'rgba(243, 226, 26, 0.12)',
   black: '#000000',
   navy: '#1E3A5F',
   navyDark: '#152a45',
   navyLight: 'rgba(30, 58, 95, 0.06)',
   white: '#ffffff',
-  border: 'rgba(30, 58, 95, 0.2)',
+  border: 'rgba(30, 58, 95, 0.18)',
   textMuted: '#475569',
   pageBg: '#ffffff',
 };
 
 const FONT = {
-  display: '"Lora", "Georgia", "Times New Roman", serif',
-  body: '"Inter", "Helvetica Neue", Arial, sans-serif',
+  display: '"Libre Baskerville", "Georgia", "Times New Roman", serif',
+  body: '"Source Sans 3", "Segoe UI", system-ui, sans-serif',
 };
 
+const SECTION_GAP = 14;
 const ITEMS_FIRST_PAGE = 5;
 
 export const SUPPLIER_PO_PRINT_STYLE = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
 
 @media print {
   html, body {
@@ -58,7 +58,7 @@ export const SUPPLIER_PO_PRINT_STYLE = `
   .po-print-no-break { page-break-inside: avoid !important; break-inside: avoid !important; }
   @page {
     size: A4 portrait;
-    margin: 6mm 7mm;
+    margin: 8mm 9mm;
   }
 }
 @media screen {
@@ -68,17 +68,23 @@ export const SUPPLIER_PO_PRINT_STYLE = `
 
 const pageStyle = {
   fontFamily: FONT.body,
-  fontSize: '8pt',
-  lineHeight: 1.35,
+  fontSize: '8.5pt',
+  lineHeight: 1.45,
   color: BRAND.black,
   width: '100%',
-  maxWidth: '196mm',
+  maxWidth: '192mm',
   margin: '0 auto',
   padding: '0',
   boxSizing: 'border-box',
   backgroundColor: BRAND.pageBg,
   position: 'relative',
   overflow: 'hidden',
+};
+
+const contentWrap = {
+  position: 'relative',
+  zIndex: 1,
+  padding: '2mm 1mm',
 };
 
 const tabular = { fontVariantNumeric: 'tabular-nums' };
@@ -123,14 +129,25 @@ const calcTotals = (po) => {
   return { subtotal: sub, cgst, sgst, igst: 0, total: sub + cgst + sgst };
 };
 
+function PrintSection({ children, last = false }) {
+  return (
+    <div
+      className="po-print-no-break"
+      style={{ marginBottom: last ? 0 : SECTION_GAP }}
+    >
+      {children}
+    </div>
+  );
+}
+
 const thStyle = (align = 'left') => ({
   border: `1px solid ${BRAND.navyDark}`,
-  padding: '7px 8px',
+  padding: '8px 10px',
   fontWeight: 600,
   fontSize: '7.5pt',
   fontFamily: FONT.body,
   textAlign: align,
-  letterSpacing: '0.05em',
+  letterSpacing: '0.06em',
   textTransform: 'uppercase',
   backgroundColor: BRAND.navy,
   color: BRAND.white,
@@ -138,22 +155,22 @@ const thStyle = (align = 'left') => ({
 
 const tdStyle = (align = 'left', alt = false) => ({
   border: `1px solid ${BRAND.border}`,
-  padding: '6px 8px',
+  padding: '7px 10px',
   fontSize: '8pt',
   fontFamily: FONT.body,
   textAlign: align,
   verticalAlign: 'middle',
   color: BRAND.black,
   backgroundColor: alt ? BRAND.navyLight : BRAND.white,
-  lineHeight: 1.4,
+  lineHeight: 1.45,
 });
 
 const SectionHead = ({ title }) => (
   <div style={{
     background: BRAND.navy,
     color: BRAND.white,
-    padding: '4px 8px',
-    fontSize: '7pt',
+    padding: '6px 12px',
+    fontSize: '7.5pt',
     fontWeight: 600,
     fontFamily: FONT.body,
     letterSpacing: '0.1em',
@@ -165,31 +182,34 @@ const SectionHead = ({ title }) => (
 );
 
 const PartyCell = ({ title, children }) => (
-  <div className="po-print-no-break" style={{ border: `1px solid ${BRAND.border}`, borderRadius: 4, overflow: 'hidden' }}>
+  <div style={{ border: `1px solid ${BRAND.border}`, borderRadius: 6, overflow: 'hidden', height: '100%' }}>
     <SectionHead title={title} />
-    <div style={{ padding: '6px 8px', background: BRAND.white, fontSize: '7.5pt', lineHeight: 1.35, fontFamily: FONT.body }}>{children}</div>
+    <div style={{ padding: '10px 12px', background: BRAND.white, fontSize: '8pt', lineHeight: 1.45, fontFamily: FONT.body }}>
+      {children}
+    </div>
   </div>
 );
 
 const MetaChip = ({ label, value }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, padding: '2px 0' }}>
     <span style={{
       fontSize: '6.5pt',
       color: BRAND.navy,
       fontWeight: 600,
       fontFamily: FONT.body,
       textTransform: 'uppercase',
-      letterSpacing: '0.04em',
+      letterSpacing: '0.05em',
     }}
     >
       {label}
     </span>
     <span style={{
-      fontSize: '7.5pt',
+      fontSize: '8pt',
       fontWeight: 500,
       color: BRAND.black,
       fontFamily: FONT.body,
       wordBreak: 'break-word',
+      lineHeight: 1.35,
     }}
     >
       {value || '—'}
@@ -206,16 +226,15 @@ const getItemLabel = (row, trimsMap) => {
 
 function PoHeader({ po, company, companyName, addrLine, contactLine }) {
   return (
-    <div className="po-print-no-break" style={{
+    <div style={{
       display: 'grid',
-      gridTemplateColumns: company?.logo_url ? '50px 1fr auto' : '1fr auto',
-      gap: 8,
+      gridTemplateColumns: company?.logo_url ? '54px 1fr auto' : '1fr auto',
+      gap: 12,
       alignItems: 'center',
-      padding: '8px 10px',
-      marginBottom: 6,
+      padding: '14px 16px',
       background: BRAND.navy,
-      borderRadius: 4,
-      borderBottom: `2px solid ${BRAND.gold}`,
+      borderRadius: 6,
+      borderBottom: `3px solid ${BRAND.gold}`,
       color: BRAND.white,
     }}
     >
@@ -223,28 +242,28 @@ function PoHeader({ po, company, companyName, addrLine, contactLine }) {
         <img
           src={company.logo_url}
           alt=""
-          style={{ width: 46, height: 46, objectFit: 'contain', background: '#fff', borderRadius: 3, padding: 2 }}
+          style={{ width: 50, height: 50, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 3 }}
         />
       )}
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: '11pt', lineHeight: 1.15, color: BRAND.white }}>
+        <div style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: '12pt', lineHeight: 1.2, color: BRAND.white }}>
           {companyName}
         </div>
         {company?.tagline && (
-          <div style={{ fontSize: '7pt', color: 'rgba(255,255,255,0.85)', marginTop: 1, fontFamily: FONT.body }}>
+          <div style={{ fontSize: '7.5pt', color: 'rgba(255,255,255,0.88)', marginTop: 3, fontFamily: FONT.body }}>
             {company.tagline}
           </div>
         )}
-        {addrLine && <div style={{ fontSize: '7pt', opacity: 0.85, marginTop: 2, fontFamily: FONT.body }}>{addrLine}</div>}
-        <div style={{ fontSize: '7pt', opacity: 0.85, fontFamily: FONT.body }}>
+        {addrLine && <div style={{ fontSize: '7.5pt', opacity: 0.88, marginTop: 4, fontFamily: FONT.body, lineHeight: 1.4 }}>{addrLine}</div>}
+        <div style={{ fontSize: '7.5pt', opacity: 0.88, marginTop: 2, fontFamily: FONT.body }}>
           {[contactLine, company?.tax_registration && `GSTIN: ${company.tax_registration}`].filter(Boolean).join(' · ')}
         </div>
       </div>
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: '7pt', fontWeight: 600, letterSpacing: '0.14em', color: BRAND.white, fontFamily: FONT.body, opacity: 0.9 }}>
+      <div style={{ textAlign: 'right', flexShrink: 0, paddingLeft: 8 }}>
+        <div style={{ fontSize: '7.5pt', fontWeight: 600, letterSpacing: '0.16em', color: BRAND.white, fontFamily: FONT.body, opacity: 0.92 }}>
           PURCHASE ORDER
         </div>
-        <div style={{ fontFamily: FONT.body, fontWeight: 700, fontSize: '10pt', marginTop: 2, color: BRAND.white, ...tabular }}>
+        <div style={{ fontFamily: FONT.body, fontWeight: 700, fontSize: '11pt', marginTop: 4, color: BRAND.white, ...tabular }}>
           {po.po_number}
         </div>
       </div>
@@ -254,15 +273,14 @@ function PoHeader({ po, company, companyName, addrLine, contactLine }) {
 
 function PoMeta({ po, paymentDue, piLabel }) {
   return (
-    <div className="po-print-no-break" style={{
+    <div style={{
       display: 'grid',
       gridTemplateColumns: 'repeat(4, 1fr)',
-      gap: 6,
-      padding: '6px 8px',
-      marginBottom: 6,
+      gap: '10px 14px',
+      padding: '12px 14px',
       background: BRAND.navyLight,
       border: `1px solid ${BRAND.border}`,
-      borderRadius: 4,
+      borderRadius: 6,
     }}
     >
       <MetaChip label="Order Date" value={formatDateDisplay(po.order_date)} />
@@ -272,6 +290,12 @@ function PoMeta({ po, paymentDue, piLabel }) {
       <MetaChip label="Buyer PO Ref" value={po.reference_number} />
       {piLabel && <MetaChip label="PI Ref" value={piLabel} />}
       {po.delivery_terms && <MetaChip label="Delivery Terms" value={po.delivery_terms} />}
+      {po.transport_paid_by && (
+        <MetaChip
+          label="Transport"
+          value={po.transport_paid_by === 'SUPPLIER' ? 'Paid by Supplier' : 'Paid by Buyer'}
+        />
+      )}
       <MetaChip label="Tax Mode" value={po.tax_mode === 'IGST' ? 'IGST' : 'CGST + SGST'} />
     </div>
   );
@@ -279,18 +303,17 @@ function PoMeta({ po, paymentDue, piLabel }) {
 
 function PoParties({ po }) {
   return (
-    <div className="po-print-no-break" style={{
+    <div style={{
       display: 'grid',
       gridTemplateColumns: '1fr 1fr 1fr',
-      gap: 6,
-      marginBottom: 8,
+      gap: 10,
     }}
     >
       <PartyCell title="Supplier">
-        <strong style={{ fontSize: '7.5pt', fontFamily: FONT.body, color: BRAND.black }}>{po.vendor_name || '—'}</strong>
-        {po.vendor_address && <div style={{ whiteSpace: 'pre-line', marginTop: 2, color: BRAND.textMuted }}>{po.vendor_address}</div>}
+        <strong style={{ fontSize: '8pt', fontFamily: FONT.body, color: BRAND.black }}>{po.vendor_name || '—'}</strong>
+        {po.vendor_address && <div style={{ whiteSpace: 'pre-line', marginTop: 4, color: BRAND.textMuted }}>{po.vendor_address}</div>}
         {[po.attention && `Attn: ${po.attention}`, po.vendor_phone, po.vendor_email].filter(Boolean).map((t) => (
-          <div key={t} style={{ color: BRAND.textMuted, marginTop: 1 }}>{t}</div>
+          <div key={t} style={{ color: BRAND.textMuted, marginTop: 2 }}>{t}</div>
         ))}
       </PartyCell>
       <PartyCell title="Bill To">
@@ -305,15 +328,15 @@ function PoParties({ po }) {
 
 function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = false, poNumber }) {
   return (
-    <div style={{ marginBottom: 8 }}>
+    <div>
       {showContinuation && (
         <div style={{
-          padding: '6px 10px',
-          marginBottom: 6,
+          padding: '10px 14px',
+          marginBottom: 10,
           background: BRAND.navy,
           color: BRAND.white,
-          borderRadius: 4,
-          fontSize: '8pt',
+          borderRadius: 6,
+          fontSize: '8.5pt',
           fontWeight: 600,
           fontFamily: FONT.body,
           letterSpacing: '0.04em',
@@ -322,7 +345,7 @@ function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = fals
           Purchase Order {poNumber} — Line Items (continued)
         </div>
       )}
-      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontFamily: FONT.body }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontFamily: FONT.body, borderRadius: 6, overflow: 'hidden' }}>
         <thead>
           <tr>
             <th style={{ ...thStyle('center'), width: '4%' }}>#</th>
@@ -337,7 +360,7 @@ function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = fals
         <tbody>
           {items.length === 0 ? (
             <tr>
-              <td colSpan={7} style={{ ...tdStyle('center'), color: '#94a3b8', padding: 12 }}>No line items</td>
+              <td colSpan={7} style={{ ...tdStyle('center'), color: '#94a3b8', padding: 14 }}>No line items</td>
             </tr>
           ) : (
             items.map((row, i) => {
@@ -365,124 +388,142 @@ function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = fals
 function PoFooter({ po, totals, companyName, company }) {
   return (
     <>
-      <div className="po-print-no-break" style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 200px',
-        gap: 8,
-        marginBottom: 8,
-        alignItems: 'start',
-      }}
-      >
+      <PrintSection>
         <div style={{
-          padding: '6px 8px',
-          border: `1px solid ${BRAND.border}`,
-          borderLeft: `3px solid ${BRAND.navy}`,
-          borderRadius: 4,
-          background: BRAND.white,
+          display: 'grid',
+          gridTemplateColumns: '1fr 210px',
+          gap: 14,
+          alignItems: 'start',
         }}
         >
           <div style={{
-            fontSize: '7pt',
-            fontWeight: 600,
-            color: BRAND.navy,
-            fontFamily: FONT.body,
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            marginBottom: 4,
+            padding: '12px 14px',
+            border: `1px solid ${BRAND.border}`,
+            borderLeft: `4px solid ${BRAND.navy}`,
+            borderRadius: 6,
+            background: BRAND.white,
+            minHeight: 52,
           }}
           >
-            Terms & Comments
-          </div>
-          <div style={{ fontSize: '7pt', color: BRAND.textMuted, whiteSpace: 'pre-line', lineHeight: 1.4, fontFamily: FONT.body }}>
-            {po.po_comments || '—'}
-          </div>
-        </div>
-        <div style={{ border: `1px solid ${BRAND.navy}`, borderRadius: 4, overflow: 'hidden' }}>
-          {[
-            ['Subtotal', totals.subtotal],
-            ...(po.tax_mode === 'IGST'
-              ? [[`IGST ${po.igst_percent || 0}%`, totals.igst]]
-              : [[`CGST ${po.cgst_percent || 0}%`, totals.cgst], [`SGST ${po.sgst_percent || 0}%`, totals.sgst]]),
-          ].map(([label, amt]) => (
-            <div key={label} style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              padding: '4px 8px',
+            <div style={{
               fontSize: '7.5pt',
+              fontWeight: 600,
+              color: BRAND.navy,
               fontFamily: FONT.body,
-              borderBottom: `1px solid ${BRAND.border}`,
-              background: BRAND.white,
-              color: BRAND.black,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              marginBottom: 6,
             }}
             >
-              <span>{label}</span>
-              <span style={{ fontWeight: 600, ...tabular }}>₹ {fmtMoney(amt)}</span>
+              Terms & Comments
             </div>
-          ))}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            padding: '6px 8px',
-            background: BRAND.navy,
-            color: BRAND.white,
-            fontWeight: 700,
-            fontSize: '8.5pt',
-            fontFamily: FONT.body,
-          }}
-          >
-            <span>Grand Total</span>
-            <span style={{ ...tabular }}>₹ {fmtMoney(totals.total)}</span>
+            <div style={{ fontSize: '7.5pt', color: BRAND.textMuted, whiteSpace: 'pre-line', lineHeight: 1.5, fontFamily: FONT.body }}>
+              {po.po_comments || '—'}
+            </div>
+          </div>
+          <div style={{ border: `1px solid ${BRAND.navy}`, borderRadius: 6, overflow: 'hidden' }}>
+            {[
+              ['Subtotal', totals.subtotal],
+              ...(po.tax_mode === 'IGST'
+                ? [[`IGST ${po.igst_percent || 0}%`, totals.igst]]
+                : [[`CGST ${po.cgst_percent || 0}%`, totals.cgst], [`SGST ${po.sgst_percent || 0}%`, totals.sgst]]),
+            ].map(([label, amt]) => (
+              <div key={label} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '6px 12px',
+                fontSize: '8pt',
+                fontFamily: FONT.body,
+                borderBottom: `1px solid ${BRAND.border}`,
+                background: BRAND.white,
+                color: BRAND.black,
+              }}
+              >
+                <span>{label}</span>
+                <span style={{ fontWeight: 600, ...tabular }}>₹ {fmtMoney(amt)}</span>
+              </div>
+            ))}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              padding: '8px 12px',
+              background: BRAND.navy,
+              color: BRAND.white,
+              fontWeight: 700,
+              fontSize: '9pt',
+              fontFamily: FONT.body,
+            }}
+            >
+              <span>Grand Total</span>
+              <span style={{ ...tabular }}>₹ {fmtMoney(totals.total)}</span>
+            </div>
           </div>
         </div>
-      </div>
+      </PrintSection>
 
-      <div className="po-print-no-break" style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 8,
-        paddingTop: 4,
-        borderTop: `1px solid ${BRAND.border}`,
-      }}
-      >
-        <div style={{ padding: '6px 8px', border: `1px solid ${BRAND.border}`, borderTop: `2px solid ${BRAND.navy}`, borderRadius: 4, background: BRAND.white }}>
-          <div style={{ fontSize: '7.5pt', fontWeight: 700, color: BRAND.navy, fontFamily: FONT.display, marginBottom: 4 }}>
-            For {companyName}
-          </div>
-          <div style={{ fontSize: '7pt', marginBottom: 6, fontFamily: FONT.body, color: BRAND.black }}>
-            Placed by: {po.order_placed_by || '—'}
-          </div>
-          <div style={{ fontSize: '7pt', marginTop: 8, fontFamily: FONT.body, color: BRAND.black }}>
-            Sign: _________________ &nbsp; Name: _________________ &nbsp; Date: _________
-          </div>
-        </div>
-        <div style={{ padding: '6px 8px', border: `1px solid ${BRAND.border}`, borderTop: `2px solid ${BRAND.navy}`, borderRadius: 4, background: BRAND.white }}>
-          <div style={{ fontSize: '7.5pt', fontWeight: 700, color: BRAND.navy, fontFamily: FONT.display, marginBottom: 4 }}>
-            Supplier Acknowledgement
-          </div>
-          <div style={{ fontSize: '7pt', color: BRAND.textMuted, marginBottom: 6, fontFamily: FONT.body }}>
-            Confirm acceptance of this order
-          </div>
-          <div style={{ fontSize: '7pt', marginTop: 8, fontFamily: FONT.body, color: BRAND.black }}>
-            Sign: _________________ &nbsp; Name: {po.supplier_ack_name || '_________________'} &nbsp; Date: {formatDateDisplay(po.supplier_ack_date) === '—' ? '_________' : formatDateDisplay(po.supplier_ack_date)}
-          </div>
-        </div>
-      </div>
-
-      {company?.pdf_footer_note && (
+      <PrintSection last>
         <div style={{
-          marginTop: 6,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 12,
           paddingTop: 4,
-          borderTop: `1px dashed ${BRAND.border}`,
-          fontSize: '6.5pt',
-          color: BRAND.textMuted,
-          fontFamily: FONT.body,
-          textAlign: 'center',
-          whiteSpace: 'pre-line',
         }}
         >
-          {company.pdf_footer_note}
+          <div style={{
+            padding: '12px 14px',
+            border: `1px solid ${BRAND.border}`,
+            borderTop: `3px solid ${BRAND.navy}`,
+            borderRadius: 6,
+            background: BRAND.white,
+          }}
+          >
+            <div style={{ fontSize: '8pt', fontWeight: 700, color: BRAND.navy, fontFamily: FONT.display, marginBottom: 6 }}>
+              For {companyName}
+            </div>
+            <div style={{ fontSize: '7.5pt', marginBottom: 10, fontFamily: FONT.body, color: BRAND.black }}>
+              Placed by: {po.order_placed_by || '—'}
+            </div>
+            <div style={{ fontSize: '7.5pt', marginTop: 12, fontFamily: FONT.body, color: BRAND.black }}>
+              Sign: _________________ &nbsp; Name: _________________ &nbsp; Date: _________
+            </div>
+          </div>
+          <div style={{
+            padding: '12px 14px',
+            border: `1px solid ${BRAND.border}`,
+            borderTop: `3px solid ${BRAND.navy}`,
+            borderRadius: 6,
+            background: BRAND.white,
+          }}
+          >
+            <div style={{ fontSize: '8pt', fontWeight: 700, color: BRAND.navy, fontFamily: FONT.display, marginBottom: 6 }}>
+              Supplier Acknowledgement
+            </div>
+            <div style={{ fontSize: '7.5pt', color: BRAND.textMuted, marginBottom: 10, fontFamily: FONT.body }}>
+              Confirm acceptance of this order
+            </div>
+            <div style={{ fontSize: '7.5pt', marginTop: 12, fontFamily: FONT.body, color: BRAND.black }}>
+              Sign: _________________ &nbsp; Name: {po.supplier_ack_name || '_________________'} &nbsp; Date: {formatDateDisplay(po.supplier_ack_date) === '—' ? '_________' : formatDateDisplay(po.supplier_ack_date)}
+            </div>
+          </div>
         </div>
-      )}
+
+        {company?.pdf_footer_note && (
+          <div style={{
+            marginTop: 12,
+            paddingTop: 10,
+            borderTop: `1px dashed ${BRAND.border}`,
+            fontSize: '7pt',
+            color: BRAND.textMuted,
+            fontFamily: FONT.body,
+            textAlign: 'center',
+            whiteSpace: 'pre-line',
+            lineHeight: 1.45,
+          }}
+          >
+            {company.pdf_footer_note}
+          </div>
+        )}
+      </PrintSection>
     </>
   );
 }
@@ -494,46 +535,7 @@ function CompanyWatermark({ company, companyName }) {
   const displayText = text.toUpperCase().slice(0, 48);
 
   return (
-    <div
-      aria-hidden
-      style={{
-        position: 'absolute',
-        inset: 0,
-        pointerEvents: 'none',
-        userSelect: 'none',
-        zIndex: 0,
-      }}
-    >
-      {/* Repeating faint text pattern */}
-      <div style={{
-        position: 'absolute',
-        inset: '-20%',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '48px 24px',
-        transform: 'rotate(-28deg)',
-        opacity: 0.045,
-      }}
-      >
-        {Array.from({ length: 12 }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              fontFamily: FONT.display,
-              fontWeight: 700,
-              fontSize: '11pt',
-              color: BRAND.navy,
-              textAlign: 'center',
-              letterSpacing: '0.12em',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {displayText}
-          </div>
-        ))}
-      </div>
-
-      {/* Centre logo watermark */}
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none', zIndex: 0 }}>
       {company?.logo_url && (
         <img
           src={company.logo_url}
@@ -546,22 +548,20 @@ function CompanyWatermark({ company, companyName }) {
             width: 180,
             height: 180,
             objectFit: 'contain',
-            opacity: 0.06,
+            opacity: 0.05,
           }}
         />
       )}
-
-      {/* Primary diagonal watermark */}
       {displayText && (
         <div style={{
           position: 'absolute',
           top: '48%',
           left: '50%',
           transform: 'translate(-50%, -50%) rotate(-35deg)',
-          fontSize: '32pt',
+          fontSize: '30pt',
           fontWeight: 700,
           fontFamily: FONT.display,
-          color: 'rgba(30, 58, 95, 0.08)',
+          color: 'rgba(30, 58, 95, 0.07)',
           letterSpacing: '0.14em',
           whiteSpace: 'nowrap',
         }}
@@ -577,7 +577,7 @@ function PrintPage({ company, companyName, children }) {
   return (
     <div className="po-print-page" style={pageStyle}>
       <CompanyWatermark company={company} companyName={companyName} />
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      <div style={contentWrap}>
         {children}
       </div>
     </div>
@@ -614,10 +614,10 @@ export default function SupplierPOPrintDocument({ po, company, trimsMap = {} }) 
   if (!hasContinuation) {
     return (
       <PrintPage company={company} companyName={companyName}>
-        <PoHeader {...headerProps} />
-        <PoMeta po={po} paymentDue={paymentDue} piLabel={piLabel} />
-        <PoParties po={po} />
-        <PoItemsTable items={firstPageItems} trimsMap={trimsMap} startIndex={0} />
+        <PrintSection><PoHeader {...headerProps} /></PrintSection>
+        <PrintSection><PoMeta po={po} paymentDue={paymentDue} piLabel={piLabel} /></PrintSection>
+        <PrintSection><PoParties po={po} /></PrintSection>
+        <PrintSection><PoItemsTable items={firstPageItems} trimsMap={trimsMap} startIndex={0} /></PrintSection>
         <PoFooter po={po} totals={totals} companyName={companyName} company={company} />
       </PrintPage>
     );
@@ -626,20 +626,14 @@ export default function SupplierPOPrintDocument({ po, company, trimsMap = {} }) 
   return (
     <>
       <PrintPage company={company} companyName={companyName}>
-        <PoHeader {...headerProps} />
-        <PoMeta po={po} paymentDue={paymentDue} piLabel={piLabel} />
-        <PoParties po={po} />
-        <PoItemsTable items={firstPageItems} trimsMap={trimsMap} startIndex={0} />
+        <PrintSection><PoHeader {...headerProps} /></PrintSection>
+        <PrintSection><PoMeta po={po} paymentDue={paymentDue} piLabel={piLabel} /></PrintSection>
+        <PrintSection><PoParties po={po} /></PrintSection>
+        <PrintSection last><PoItemsTable items={firstPageItems} trimsMap={trimsMap} startIndex={0} /></PrintSection>
       </PrintPage>
 
       <PrintPage company={company} companyName={companyName}>
-        <PoItemsTable
-          items={continuationItems}
-          trimsMap={trimsMap}
-          startIndex={ITEMS_FIRST_PAGE}
-          showContinuation
-          poNumber={po.po_number}
-        />
+        <PrintSection><PoItemsTable items={continuationItems} trimsMap={trimsMap} startIndex={ITEMS_FIRST_PAGE} showContinuation poNumber={po.po_number} /></PrintSection>
         <PoFooter po={po} totals={totals} companyName={companyName} company={company} />
       </PrintPage>
     </>

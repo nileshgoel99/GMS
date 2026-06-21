@@ -71,6 +71,18 @@ class PurchaseOrder(models.Model):
     payment_terms = models.CharField(max_length=500, blank=True, null=True)
     delivery_terms = models.CharField(max_length=200, blank=True, null=True)
 
+    TRANSPORT_PAID_BY_CHOICES = [
+        ('SUPPLIER', 'Supplier'),
+        ('BUYER', 'Buyer'),
+    ]
+    transport_paid_by = models.CharField(
+        max_length=20,
+        choices=TRANSPORT_PAID_BY_CHOICES,
+        blank=True,
+        default='',
+        help_text='Who bears transport / freight cost for this purchase order',
+    )
+
     po_comments = models.TextField(blank=True, default='')
     order_placed_by = models.CharField(max_length=120, blank=True, default='Shivangi Jain')
     supplier_ack_name = models.CharField(max_length=120, blank=True, default='')
