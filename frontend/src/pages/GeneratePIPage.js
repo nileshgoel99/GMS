@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Button, Typography, TextField, Grid, Paper,
-  IconButton, CircularProgress,
+  IconButton, CircularProgress, Alert,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { ArrowBack, Print, Edit, CheckCircle } from '@mui/icons-material';
+import { ArrowBack, Print, Edit, CheckCircle, Autorenew } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, companyAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
@@ -190,7 +190,19 @@ export default function GeneratePIPage() {
 
   const [confirming, setConfirming] = useState(false);
 
+  const isRegenerate = Boolean(po?.pi);
+
   const handleConfirm = async () => {
+    if (isRegenerate) {
+      const indentNote = po.indent_count
+        ? `\n\nWarning: ${po.indent_count} indent(s) linked to the current PI will also be deleted.`
+        : '';
+      const ok = window.confirm(
+        `Replace existing PI (${po.pi_ref || 'current'}) with a new one from this PO?\n\nThe old PI will be permanently deleted.${indentNote}`,
+      );
+      if (!ok) return;
+    }
+
     setConfirming(true);
     try {
       // Save bank/port/inco to localStorage for next time
@@ -211,6 +223,7 @@ export default function GeneratePIPage() {
         payment_terms:            paymentTerms,
         our_bank_details:         ourBank,
         intermediary_bank_details: interBank,
+        replace_existing:           isRegenerate,
         date_of_dispatch_display: po.ex_factory_date ? `${ordinalDate(po.ex_factory_date)} (EX-FACTORY DATE)` : '',
         lines: piLines.map((line) => ({
           item_code:      line.item_code,
@@ -447,10 +460,22 @@ export default function GeneratePIPage() {
           <ArrowBack fontSize="small" />
         </IconButton>
         <Box>
-          <Typography sx={{ fontWeight: 900, fontSize: '1rem', color: slate[900] }}>Generate Proforma Invoice</Typography>
+          <Typography sx={{ fontWeight: 900, fontSize: '1rem', color: slate[900] }}>
+            {isRegenerate ? 'Regenerate Proforma Invoice' : 'Generate Proforma Invoice'}
+          </Typography>
           <Typography sx={{ fontSize: '0.75rem', color: slate[500] }}>PO {po?.po_number} · {po?.buyer_name}</Typography>
         </Box>
         <Box sx={{ flex: 1 }} />
+        {isRegenerate && po?.pi && (
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => navigate(`/orders/pi/${po.pi}/view`)}
+            sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}
+          >
+            View current PI
+          </Button>
+        )}
         {!editing && (
           <Button startIcon={<Edit />} variant="outlined" size="small" onClick={() => setEditing(true)}
             sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
@@ -458,10 +483,14 @@ export default function GeneratePIPage() {
           </Button>
         )}
         {editing ? (
-          <Button startIcon={<CheckCircle />} variant="contained" onClick={handleConfirm}
+          <Button
+            startIcon={isRegenerate ? <Autorenew /> : <CheckCircle />}
+            variant="contained"
+            onClick={handleConfirm}
             disabled={confirming}
-            sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 3 }}>
-            {confirming ? 'Saving PI…' : 'Confirm & Save PI'}
+            sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 3, ...(isRegenerate && { bgcolor: '#b45309', '&:hover': { bgcolor: '#92400e' } }) }}
+          >
+            {confirming ? (isRegenerate ? 'Replacing PI…' : 'Saving PI…') : (isRegenerate ? 'Replace PI' : 'Confirm & Save PI')}
           </Button>
         ) : (
           <Button startIcon={<Print />} variant="contained" onClick={handlePrint}
@@ -470,6 +499,16 @@ export default function GeneratePIPage() {
           </Button>
         )}
       </Box>
+
+      {isRegenerate && (
+        <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
+          A PI already exists for this PO ({po?.pi_ref || 'linked PI'}). Review the lines below, then click
+          {' '}<strong>Replace PI</strong> to delete the old PI and save a new one from the current PO lines.
+          {po?.indent_count > 0 && (
+            <> {' '}<strong>{po.indent_count} indent(s)</strong> linked to the current PI will also be removed.</>
+          )}
+        </Alert>
+      )}
 
       <Grid container spacing={3}>
         {/* ── Edit form ── */}
@@ -511,7 +550,7 @@ export default function GeneratePIPage() {
             <Paper elevation={0} sx={{ mt: 2, borderRadius: 2, border: `1px solid ${slate[200]}`, overflow: 'hidden' }}>
               <Box sx={{ px: 3, py: 2, bgcolor: slate[50], borderBottom: `1px solid ${slate[200]}` }}>
                 <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', color: slate[700] }}>Adjust Unit Prices</Typography>
-                <Typography sx={{ fontSize: '0.7rem', color: slate[400] }}>Items grouped by name · edit prices if needed</Typography>
+                <Typography sx={{ fontSize: '0.7rem', color: slate[400] }}>Items grouped by style (name · colour · code)</Typography>
               </Box>
               <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 {piLines.map((line, i) => (

@@ -32,6 +32,7 @@ import {
   OpenInNew,
   ReceiptLong,
   Assignment,
+  Autorenew,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, customersAPI } from '../services/api';
@@ -1067,6 +1068,14 @@ export default function BuyerPOEditorPage() {
                   </Button>
                   <Button
                     variant="outlined"
+                    startIcon={<Autorenew />}
+                    onClick={() => navigate(`/buyer-pos/${numericId}/generate-pi`)}
+                    sx={{ borderRadius: 2, px: 2.5, fontWeight: 700, textTransform: 'none', borderColor: '#b45309', color: '#b45309' }}
+                  >
+                    Regenerate PI
+                  </Button>
+                  <Button
+                    variant="outlined"
                     startIcon={<Assignment />}
                     onClick={() => navigate(`/indents/new?piId=${formData.pi}`)}
                     sx={{ borderRadius: 2, px: 2.5, fontWeight: 700, textTransform: 'none', borderColor: '#7c3aed', color: '#7c3aed' }}
@@ -1540,6 +1549,20 @@ export default function BuyerPOEditorPage() {
               }}
             >
               View PI
+            </Button>
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={<Autorenew />}
+              onClick={() => navigate(`/buyer-pos/${numericId}/generate-pi`)}
+              disabled={saving || loading}
+              sx={{
+                py: 1.5, px: 4, borderRadius: 2, fontWeight: 900, fontSize: '1rem', textTransform: 'none',
+                bgcolor: '#b45309', boxShadow: `0 4px 20px ${alpha('#b45309', 0.45)}`,
+                '&:hover': { bgcolor: '#92400e', boxShadow: `0 6px 24px ${alpha('#b45309', 0.55)}` },
+              }}
+            >
+              Regenerate PI
             </Button>
             <Button
               variant="contained"

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Button, Typography, IconButton, CircularProgress, Chip, TextField, Grid, Paper, Divider } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { ArrowBack, Print, Edit, Save, Close, Assignment } from '@mui/icons-material';
+import { ArrowBack, Print, Edit, Save, Close, Assignment, Autorenew } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, companyAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
@@ -325,10 +325,10 @@ export default function PIViewPage() {
           sx={{ fontWeight: 700, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em' }} />
         <Box sx={{ flex: 1 }} />
         {pi?.buyer_pos?.[0]?.id && (
-          <Button startIcon={<Edit />} variant="outlined" size="small"
+          <Button startIcon={<Autorenew />} variant="outlined" size="small"
             onClick={() => navigate(`/buyer-pos/${pi.buyer_pos[0].id}/generate-pi`)}
-            sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
-            Re-generate PI
+            sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, borderColor: '#b45309', color: '#b45309' }}>
+            Regenerate PI
           </Button>
         )}
         <Button startIcon={<Assignment />} variant="outlined" size="small"

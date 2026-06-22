@@ -21,7 +21,7 @@ import {
   Collapse,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
-import { Add, Edit, Delete, Visibility, ReceiptLong, Assignment } from '@mui/icons-material';
+import { Add, Edit, Delete, Visibility, ReceiptLong, Assignment, Autorenew } from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
@@ -55,6 +55,17 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
   const [po, setPo] = useState(null);
   const [showBuyer, setShowBuyer] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+
+  const goToGeneratePi = () => {
+    onClose();
+    if (onGeneratePI) onGeneratePI();
+    else navigate(`/buyer-pos/${poId}/generate-pi`);
+  };
+
+  const goToViewPi = () => {
+    onClose();
+    navigate(`/orders/pi/${po.pi}/view`);
+  };
 
   useEffect(() => {
     ordersAPI.getBuyerPO(poId).then((r) => setPo(r.data)).catch(console.error);
@@ -346,14 +357,35 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
             Create Indent
           </Button>
         )}
-        <Button
-          variant="contained"
-          startIcon={<ReceiptLong />}
-          onClick={onGeneratePI}
-          sx={{ fontWeight: 700, borderRadius: 1.5, bgcolor: '#0f766e', '&:hover': { bgcolor: '#0d6560' } }}
-        >
-          {po?.pi_ref ? 'View PI' : 'Generate PI'}
-        </Button>
+        {po?.pi ? (
+          <>
+            <Button
+              variant="outlined"
+              startIcon={<ReceiptLong />}
+              onClick={goToViewPi}
+              sx={{ fontWeight: 700, borderRadius: 1.5, borderColor: '#0f766e', color: '#0f766e' }}
+            >
+              View PI
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Autorenew />}
+              onClick={goToGeneratePi}
+              sx={{ fontWeight: 700, borderRadius: 1.5, bgcolor: '#b45309', '&:hover': { bgcolor: '#92400e' } }}
+            >
+              Regenerate PI
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="contained"
+            startIcon={<ReceiptLong />}
+            onClick={goToGeneratePi}
+            sx={{ fontWeight: 700, borderRadius: 1.5, bgcolor: '#0f766e', '&:hover': { bgcolor: '#0d6560' } }}
+          >
+            Generate PI
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );
@@ -684,11 +716,7 @@ export default function BuyerPOs() {
           onEdit={() => { setDetailId(null); navigate(`/buyer-pos/${detailId}`); }}
           onGeneratePI={() => {
             setDetailId(null);
-            if (detailRow?.pi_id) {
-              navigate(`/orders/pi/${detailRow.pi_id}/view`);
-            } else {
-              navigate(`/buyer-pos/${detailId}/generate-pi`);
-            }
+            navigate(`/buyer-pos/${detailId}/generate-pi`);
           }}
         />
       )}

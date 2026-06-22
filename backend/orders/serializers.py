@@ -406,6 +406,7 @@ class BuyerPOSerializer(serializers.ModelSerializer):
     lines = BuyerPOLineSerializer(many=True)
     customer_name = serializers.SerializerMethodField()
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+    indent_count = serializers.SerializerMethodField()
 
     class Meta:
         model = BuyerPO
@@ -416,7 +417,7 @@ class BuyerPOSerializer(serializers.ModelSerializer):
             'delivery_terms', 'payment_terms', 'delivery_method',
             'freight_terms', 'packaging_terms', 'ex_factory_date',
             'total_qty', 'total_value', 'status', 'notes', 'pi',
-            'po_document', 'pi_ref',
+            'po_document', 'pi_ref', 'indent_count',
             'inco_terms', 'port_of_loading', 'port_of_discharge',
             'lines', 'created_by', 'created_by_name', 'created_at', 'updated_at',
         ]
@@ -424,6 +425,11 @@ class BuyerPOSerializer(serializers.ModelSerializer):
 
     def get_customer_name(self, obj):
         return obj.customer.company_legal_name if obj.customer else None
+
+    def get_indent_count(self, obj):
+        if not obj.pi_id:
+            return 0
+        return obj.pi.indents.count()
 
     def _save_lines(self, po, lines_data):
         po.lines.all().delete()

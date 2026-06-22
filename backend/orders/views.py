@@ -206,9 +206,26 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
         pi_ref = data.get('pi_ref', '').strip()
         if not pi_ref:
             return Response({'detail': 'pi_ref is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        replace_existing = data.get('replace_existing') in (True, 'true', 1, '1')
+        replaced_pi_id = None
+        indents_removed = 0
+
         if po.pi_id:
+            if not replace_existing:
+                return Response({
+                    'detail': (
+                        'A PI already exists for this buyer PO. '
+                        'Confirm replace to delete the old PI and create a new one.'
+                    ),
+                    'existing_pi_id': po.pi_id,
+                    'existing_pi_ref': po.pi_ref,
+                    'indent_count': po.pi.indents.count(),
+                }, status=status.HTTP_409_CONFLICT)
             try:
                 old_pi = ProformaInvoice.objects.get(pk=po.pi_id)
+                replaced_pi_id = old_pi.id
+                indents_removed = old_pi.indents.count()
                 old_pi.delete()
             except ProformaInvoice.DoesNotExist:
                 pass
@@ -251,7 +268,12 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
         po.pi = pi
         po.pi_ref = pi_ref
         po.save(update_fields=['pi', 'pi_ref'])
-        return Response({'id': pi.id, 'pi_number': pi.pi_number}, status=status.HTTP_201_CREATED)
+        return Response({
+            'id': pi.id,
+            'pi_number': pi.pi_number,
+            'replaced_pi_id': replaced_pi_id,
+            'indents_removed': indents_removed,
+        }, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['get'], url_path='next-pi-ref')
     def next_pi_ref(self, request):
