@@ -901,7 +901,7 @@ export default function IndentEditorPage() {
           )}
         </Grid>
 
-        {/* PI line items — single horizontal row */}
+        {/* PI line items — two per row */}
         {pi?.lines?.length > 0 && (
           <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${slate[200]}` }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -920,8 +920,9 @@ export default function IndentEditorPage() {
               )}
             </Box>
             <Box sx={{
-              display: 'flex', flexWrap: 'nowrap', gap: 1, overflowX: 'auto', pb: 0.5,
-              '&::-webkit-scrollbar': { height: 5 },
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+              gap: 1,
             }}>
               {pi.lines.map((line) => {
                 const selected = selectedLineIds.includes(line.id);
@@ -930,20 +931,32 @@ export default function IndentEditorPage() {
                     key={line.id}
                     onClick={() => toggleLine(line.id)}
                     sx={{
-                      display: 'flex', alignItems: 'center', flexShrink: 0, gap: 0.5,
-                      px: 1, py: 0.5, borderRadius: 1.5, cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 0.75,
+                      px: 1.25,
+                      py: 1,
+                      borderRadius: 1.5,
+                      cursor: 'pointer',
+                      minWidth: 0,
                       border: `1px solid ${selected ? '#6366f1' : slate[300]}`,
                       bgcolor: selected ? alpha('#6366f1', 0.08) : 'transparent',
                       '&:hover': { bgcolor: alpha('#6366f1', 0.05) },
                     }}
                   >
-                    <Checkbox size="small" checked={selected} sx={{ p: 0.25 }} tabIndex={-1} />
-                    <Typography noWrap sx={{ fontSize: '0.78rem', fontWeight: 600 }}>
-                      {line.item_name}
-                      {line.color ? ` · ${line.color}` : ''}
-                      {line.quantity_pcs != null ? ` · ${line.quantity_pcs.toLocaleString()} pcs` : ''}
-                      {line.item_code ? ` · ${line.item_code}` : ''}
-                    </Typography>
+                    <Checkbox size="small" checked={selected} sx={{ p: 0.25, mt: 0.15 }} tabIndex={-1} />
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, lineHeight: 1.35, wordBreak: 'break-word' }}>
+                        {line.item_name}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.72rem', color: slate[500], mt: 0.25, lineHeight: 1.35 }}>
+                        {[
+                          line.color,
+                          line.quantity_pcs != null ? `${line.quantity_pcs.toLocaleString()} pcs` : null,
+                          line.item_code,
+                        ].filter(Boolean).join(' · ')}
+                      </Typography>
+                    </Box>
                   </Box>
                 );
               })}
