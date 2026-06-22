@@ -57,6 +57,9 @@ else
   npm install
 fi
 echo "==> production build (CRA)..."
+# Small VPS (e.g. 2GB) often OOM during webpack — disable source maps and raise Node heap.
+export GENERATE_SOURCEMAP="${GENERATE_SOURCEMAP:-false}"
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
 REACT_APP_API_URL="$REACT_API_URL" npm run build
 
 echo "==> restart services..."
