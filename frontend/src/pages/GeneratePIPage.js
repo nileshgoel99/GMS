@@ -34,11 +34,19 @@ function amountInWords(amount, currency = 'USD') {
   return words + ' ONLY';
 }
 
-// ── Group PO lines by item_name ───────────────────────────────────────────────
+// Group PO lines that share the same style (name + colour + code); merge sizes only within that group.
+function lineGroupKey(line) {
+  return [
+    (line.item_name || '').trim(),
+    (line.color || '').trim(),
+    (line.item_code || '').trim(),
+  ].join('\0').toUpperCase();
+}
+
 function groupLines(lines) {
   const map = new Map();
   (lines || []).forEach((line) => {
-    const key = (line.item_name || '').trim().toUpperCase();
+    const key = lineGroupKey(line);
     if (!map.has(key)) {
       map.set(key, {
         item_code: line.item_code || '',
