@@ -27,10 +27,10 @@ function numToWords(n) {
 }
 
 function amountInWords(amount, currency = 'USD') {
-  if (!amount) return '';
+  if (!amount || Number(amount) === 0) return `${currency} ZERO ONLY`;
   const [intPart, decPart] = Number(amount).toFixed(2).split('.');
-  let words = `${currency} ${numToWords(parseInt(intPart))}`;
-  if (parseInt(decPart) > 0) words += ` AND CENTS ${numToWords(parseInt(decPart))}`;
+  let words = `${currency} ${numToWords(parseInt(intPart, 10))}`;
+  if (parseInt(decPart, 10) > 0) words += ` AND CENTS ${numToWords(parseInt(decPart, 10))}`;
   return words + ' ONLY';
 }
 
@@ -407,24 +407,20 @@ export default function GeneratePIPage() {
           ['INCO TERMS',         incoTerms],
           ['PORT OF LOADING',    portOfLoading],
           ['PORT OF DISCHARGE',  portOfDischarge],
-        ].filter(([, v]) => v).map(([label, val]) => (
+        ].map(([label, val]) => (
           <Box key={label} sx={{ display: 'flex', gap: 1, mb: 0.4, fontFamily: 'inherit' }}>
             <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', minWidth: 160 }}>{label}</Typography>
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt' }}>: {val}</Typography>
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt' }}>: {val || '—'}</Typography>
           </Box>
         ))}
-        {ourBank && (
-          <Box sx={{ mt: 0.5, fontFamily: 'inherit' }}>
-            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>OUR BANK: </Typography>
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>- {ourBank}</Typography>
-          </Box>
-        )}
-        {interBank && (
-          <Box sx={{ mt: 0.4, fontFamily: 'inherit' }}>
-            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>INTERMEDIARY BANK: </Typography>
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>- {interBank}</Typography>
-          </Box>
-        )}
+        <Box sx={{ mt: 0.5, fontFamily: 'inherit' }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>OUR BANK: </Typography>
+          <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>- {ourBank || '—'}</Typography>
+        </Box>
+        <Box sx={{ mt: 0.4, fontFamily: 'inherit' }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>INTERMEDIARY BANK: </Typography>
+          <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>- {interBank || '—'}</Typography>
+        </Box>
       </Box>
 
       {/* Signature */}

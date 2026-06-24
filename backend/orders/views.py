@@ -22,6 +22,7 @@ from .serializers import (
     BuyerPOListSerializer,
     SalesEntrySerializer,
     SalesEntryListSerializer,
+    _sync_pi_totals,
 )
 
 
@@ -43,9 +44,20 @@ class ProformaInvoiceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not instance.total_amount:
+            _sync_pi_totals(instance)
+            instance.refresh_from_db()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
     @action(detail=True, methods=['get'], url_path='pdf')
     def pdf(self, request, pk=None):
         pi = self.get_object()
+        if not pi.total_amount:
+            _sync_pi_totals(pi)
+            pi.refresh_from_db()
         data = build_pi_pdf_bytes(pi)
         filename = f'{pi.pi_number.replace("/", "-")}.pdf'
         resp = HttpResponse(data, content_type='application/pdf')
@@ -231,6 +243,20 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
                 pass
         lines_data = data.get('lines', [])
         pi_date_str = data.get('pi_date') or date.today().isoformat()
+        from company.models import CompanyProfile, CompanyCurrencyBank
+        company = CompanyProfile.get_solo()
+        inter_bank = (data.get('intermediary_bank_details') or '').strip()
+        if not inter_bank and po.currency:
+            currency_bank = CompanyCurrencyBank.objects.filter(
+                currency=str(po.currency).upper(),
+            ).first()
+            if currency_bank:
+                inter_bank = currency_bank.intermediary_bank_details or ''
+        dispatch_display = (data.get('date_of_dispatch_display') or '').strip()
+        if not dispatch_display and po.ex_factory_date:
+            dispatch_display = (
+                f"{po.ex_factory_date.strftime('%d %B %Y').upper()} (EX-FACTORY DATE)"
+            )
         payload = {
             'pi_number':                   pi_ref,
             'customer':                    po.customer_id,
@@ -240,13 +266,13 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
             'order_date':                  pi_date_str,
             'delivery_date':               po.ex_factory_date.isoformat() if po.ex_factory_date else None,
             'status':                      'CONFIRMED',
-            'payment_terms_display':       data.get('payment_terms', po.payment_terms or ''),
-            'port_of_discharge':           data.get('port_of_discharge', ''),
-            'port_of_loading':             data.get('port_of_loading', ''),
-            'inco_terms':                  data.get('inco_terms', po.delivery_terms or ''),
-            'our_bank_details':            data.get('our_bank_details', ''),
-            'intermediary_bank_details':   data.get('intermediary_bank_details', ''),
-            'date_of_dispatch_display':    data.get('date_of_dispatch_display', ''),
+            'payment_terms_display':       data.get('payment_terms') or po.payment_terms or '',
+            'port_of_discharge':           data.get('port_of_discharge') or po.port_of_discharge or '',
+            'port_of_loading':             data.get('port_of_loading') or po.port_of_loading or '',
+            'inco_terms':                  data.get('inco_terms') or po.inco_terms or po.delivery_terms or '',
+            'our_bank_details':            data.get('our_bank_details') or company.our_bank_details or '',
+            'intermediary_bank_details':   inter_bank,
+            'date_of_dispatch_display':    dispatch_display,
             'lines': [
                 {
                     'item_code':      l.get('item_code', ''),

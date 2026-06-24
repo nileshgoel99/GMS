@@ -25,11 +25,47 @@ function numToWords(n) {
 }
 
 function amountInWords(amount, currency = 'USD') {
-  if (!amount) return '';
+  if (!amount || Number(amount) === 0) return `${currency} ZERO ONLY`;
   const [intPart, decPart] = Number(amount).toFixed(2).split('.');
-  let words = `${currency} ${numToWords(parseInt(intPart))}`;
-  if (parseInt(decPart) > 0) words += ` AND CENTS ${numToWords(parseInt(decPart))}`;
+  let words = `${currency} ${numToWords(parseInt(intPart, 10))}`;
+  if (parseInt(decPart, 10) > 0) words += ` AND CENTS ${numToWords(parseInt(decPart, 10))}`;
   return words + ' ONLY';
+}
+
+function computePiTotal(pi) {
+  const stored = parseFloat(pi?.total_amount);
+  if (!Number.isNaN(stored) && stored > 0) return stored;
+  return (pi?.lines || []).reduce((sum, line) => {
+    const direct = parseFloat(line.line_value_usd);
+    if (!Number.isNaN(direct) && direct > 0) return sum + direct;
+    const price = parseFloat(line.unit_price_usd || 0);
+    const qty = line.quantity_pcs || 0;
+    return sum + price * qty;
+  }, 0);
+}
+
+function getPiCurrency(pi) {
+  return pi?.buyer_pos?.[0]?.currency || 'USD';
+}
+
+function getPiFooter(pi, company) {
+  const po = pi?.buyer_pos?.[0];
+  const dispatchFromPi = (pi?.date_of_dispatch_display || '').trim();
+  const dispatchFromDelivery = pi?.delivery_date
+    ? `${formatDateDMY(pi.delivery_date)} (EX-FACTORY DATE)`
+    : '';
+  const dispatchFromPo = po?.ex_factory_date
+    ? `${formatDateDMY(po.ex_factory_date)} (EX-FACTORY DATE)`
+    : '';
+  return {
+    dateOfDispatch: dispatchFromPi || dispatchFromDelivery || dispatchFromPo,
+    paymentTerms: (pi?.payment_terms_display || po?.payment_terms || '').trim(),
+    portOfDischarge: (pi?.port_of_discharge || po?.port_of_discharge || '').trim(),
+    portOfLoading: (pi?.port_of_loading || po?.port_of_loading || '').trim(),
+    incoTerms: (pi?.inco_terms || po?.inco_terms || po?.delivery_terms || '').trim(),
+    ourBank: (pi?.our_bank_details || company?.our_bank_details || '').trim(),
+    intermediaryBank: (pi?.intermediary_bank_details || '').trim(),
+  };
 }
 
 const PRINT_STYLE = `
@@ -58,12 +94,9 @@ function PIDocument({ pi, company }) {
   ].filter(Boolean).join(', ');
 
   const totalQty = (pi.lines || []).reduce((s, l) => s + (l.quantity_pcs || 0), 0);
-  const totalAmt = parseFloat(pi.total_amount || 0);
-
-  // Format date as DD-MM-YYYY
-  const fmtDate = (d) => formatDateDMY(d);
-
-  const currency = (pi.lines?.[0]?.currency) || 'USD';
+  const totalAmt = computePiTotal(pi);
+  const currency = getPiCurrency(pi);
+  const footer = getPiFooter(pi, company);
 
   return (
     <Box sx={{ fontFamily: '"Times New Roman", serif', color: '#000', fontSize: '11pt', lineHeight: 1.4, p: 0 }}>
@@ -106,7 +139,7 @@ function PIDocument({ pi, company }) {
         </Box>
         <Box sx={{ minWidth: 210 }}>
           {[
-            ['DATE',          fmtDate(pi.order_date)],
+            ['DATE',          formatDateDMY(pi.order_date)],
             ['REF NO',        pi.pi_number],
             ['BUYER PO NO.',  pi.buyer_po_number ? `#${pi.buyer_po_number}` : ''],
           ].map(([label, val]) => val ? (
@@ -180,29 +213,29 @@ function PIDocument({ pi, company }) {
       <Box sx={{ fontSize: '9.5pt', fontFamily: 'inherit', mt: 1.5 }}>
         {[
           ['VALUE IN WORD',     amountInWords(totalAmt, currency)],
-          ['DATE OF DISPATCH',  pi.date_of_dispatch_display || (pi.delivery_date ? `${pi.delivery_date} (EX-FACTORY DATE)` : '')],
-          ['PAYMENT TERMS',     pi.payment_terms_display],
-          ['INCO TERMS',        pi.inco_terms],
-          ['PORT OF LOADING',   pi.port_of_loading],
-          ['PORT OF DISCHARGE', pi.port_of_discharge],
-        ].filter(([, v]) => v).map(([label, val]) => (
+          ['DATE OF DISPATCH',  footer.dateOfDispatch],
+          ['PAYMENT TERMS',     footer.paymentTerms],
+          ['INCO TERMS',        footer.incoTerms],
+          ['PORT OF LOADING',   footer.portOfLoading],
+          ['PORT OF DISCHARGE', footer.portOfDischarge],
+        ].map(([label, val]) => (
           <Box key={label} sx={{ display: 'flex', gap: 1, mb: 0.4 }}>
             <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', minWidth: 160 }}>{label}</Typography>
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt' }}>: {val}</Typography>
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt' }}>: {val || '—'}</Typography>
           </Box>
         ))}
-        {pi.our_bank_details && (
-          <Box sx={{ mt: 0.5 }}>
-            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>OUR BANK: </Typography>
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>- {pi.our_bank_details}</Typography>
-          </Box>
-        )}
-        {pi.intermediary_bank_details && (
-          <Box sx={{ mt: 0.4 }}>
-            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>INTERMEDIARY BANK: </Typography>
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>- {pi.intermediary_bank_details}</Typography>
-          </Box>
-        )}
+        <Box sx={{ mt: 0.5 }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>OUR BANK: </Typography>
+          <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>
+            - {footer.ourBank || '—'}
+          </Typography>
+        </Box>
+        <Box sx={{ mt: 0.4 }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>INTERMEDIARY BANK: </Typography>
+          <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>
+            - {footer.intermediaryBank || '—'}
+          </Typography>
+        </Box>
       </Box>
 
       {/* Signature */}
@@ -292,7 +325,8 @@ export default function PIViewPage() {
   };
 
   const totalQty = (pi?.lines || []).reduce((s, l) => s + (l.quantity_pcs || 0), 0);
-  const totalAmt = parseFloat(pi?.total_amount || 0);
+  const totalAmt = computePiTotal(pi);
+  const currency = getPiCurrency(pi);
 
   if (loading) return (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
@@ -368,7 +402,7 @@ export default function PIViewPage() {
         <Box sx={{ textAlign: 'right' }}>
           <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4) }}>Invoice Value</Typography>
           <Typography sx={{ fontWeight: 900, fontSize: '1.3rem', color: '#93c5fd', fontVariantNumeric: 'tabular-nums' }}>
-            USD {totalAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            {currency} {totalAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </Typography>
         </Box>
       </Box>

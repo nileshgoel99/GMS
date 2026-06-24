@@ -67,24 +67,72 @@ def _normalize_lines_payload(lines_data):
         row.setdefault('quantity_pcs', 0)
         row.setdefault('unit_price_usd', None)
         row.setdefault('line_value_usd', None)
+        if row['line_value_usd'] is None and row['unit_price_usd'] is not None:
+            qty = int(row.get('quantity_pcs', 0) or 0)
+            if qty:
+                row['line_value_usd'] = (
+                    Decimal(str(row['unit_price_usd'])) * qty
+                ).quantize(Decimal('0.01'))
         out.append(row)
     return out
 
 
 def _rollup_header_from_lines(lines):
     total_qty = sum(int(r.get('quantity_pcs', 0) or 0) for r in lines)
+    total_amount = Decimal('0')
+    for row in lines:
+        lv = row.get('line_value_usd')
+        if lv is not None:
+            total_amount += Decimal(str(lv))
+        elif row.get('unit_price_usd') is not None:
+            qty = int(row.get('quantity_pcs', 0) or 0)
+            if qty:
+                total_amount += Decimal(str(row['unit_price_usd'])) * qty
     names = [r['item_name'] for r in lines if r.get('item_name')]
     unique_names = list(dict.fromkeys(names))
     garment_type = ', '.join(unique_names[:3])
     if len(unique_names) > 3:
         garment_type += f' +{len(unique_names) - 3} more'
-    return {'quantity': total_qty, 'garment_type': garment_type}
+    return {
+        'quantity': total_qty,
+        'garment_type': garment_type,
+        'total_amount': total_amount.quantize(Decimal('0.01')) if total_amount else None,
+    }
+
+
+def _sync_pi_totals(pi):
+    """Recompute line values and header total/qty from PI lines."""
+    total_amount = Decimal('0')
+    total_qty = 0
+    for line in pi.lines.all().order_by('line_number'):
+        if line.line_value_usd is None and line.unit_price_usd is not None and line.quantity_pcs:
+            line.line_value_usd = (
+                Decimal(line.unit_price_usd) * line.quantity_pcs
+            ).quantize(Decimal('0.01'))
+            line.save(update_fields=['line_value_usd'])
+        total_qty += line.quantity_pcs or 0
+        if line.line_value_usd is not None:
+            total_amount += Decimal(line.line_value_usd)
+    pi.quantity = total_qty
+    pi.total_amount = total_amount.quantize(Decimal('0.01')) if total_amount else None
+    pi.save(update_fields=['quantity', 'total_amount'])
+    return pi
+
+
+class BuyerPOSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BuyerPO
+        fields = [
+            'id', 'po_number', 'currency', 'payment_terms', 'delivery_terms',
+            'inco_terms', 'port_of_loading', 'port_of_discharge', 'ex_factory_date',
+        ]
 
 
 class ProformaInvoiceSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     customer_display = CustomerListSerializer(source='customer', read_only=True)
     lines = ProformaInvoiceLineSerializer(many=True, required=False)
+    buyer_pos = BuyerPOSummarySerializer(many=True, read_only=True)
 
     class Meta:
         model = ProformaInvoice
@@ -135,6 +183,7 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
                 unit_price_usd=row['unit_price_usd'],
                 line_value_usd=row['line_value_usd'],
             )
+        _sync_pi_totals(pi)
         return pi
 
     def update(self, instance, validated_data):
@@ -166,6 +215,8 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+        if lines_data is not None:
+            _sync_pi_totals(instance)
         return instance
 
 
