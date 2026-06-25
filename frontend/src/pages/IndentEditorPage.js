@@ -3,13 +3,13 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Box, Button, Typography, TextField, MenuItem, Grid, Paper,
   IconButton, Chip, Autocomplete, CircularProgress, Divider,
-  Table, TableHead, TableBody, TableRow, TableCell, Tooltip,
-  Checkbox, FormControlLabel,
+  Table, TableHead, TableBody, TableRow, TableCell, TableContainer, Tooltip,
+  Checkbox, FormControlLabel, Collapse,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
   ArrowBack, Save, Print, Add, Delete, CheckCircle,
-  AutoAwesome, LibraryAdd,
+  AutoAwesome, LibraryAdd, ExpandMore, ExpandLess,
 } from '@mui/icons-material';
 import { ordersAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
@@ -636,6 +636,7 @@ export default function IndentEditorPage() {
   const [autoFilled,   setAutoFilled]  = useState(false);
   const [trimModalOpen, setTrimModalOpen] = useState(false);
   const [trimModalTargetRow, setTrimModalTargetRow] = useState(null);
+  const [sizeBreakdownOpen, setSizeBreakdownOpen] = useState(true);
 
   const activeLines = useMemo(() => {
     if (!pi?.lines) return [];
@@ -651,6 +652,13 @@ export default function IndentEditorPage() {
   const colorQty = useMemo(() => buildColorQty(activeLines), [activeLines]);
   const totalQty = useMemo(() => Object.values(colorQty).reduce((s, v) => s + v, 0), [colorQty]);
   const sizeTable = useMemo(() => buildSizeTable(selectedPiLines), [selectedPiLines]);
+  const sizeBreakdownSummary = useMemo(() => {
+    if (!sizeTable.rows.length) return '';
+    const totalPcs = sizeTable.rows.reduce((sum, row) => sum + row.total, 0);
+    const lineLabel = `${sizeTable.rows.length} line${sizeTable.rows.length !== 1 ? 's' : ''}`;
+    const sizeLabel = `${sizeTable.sizes.length} size${sizeTable.sizes.length !== 1 ? 's' : ''}`;
+    return `${lineLabel} · ${sizeLabel} · ${totalPcs.toLocaleString()} pcs`;
+  }, [sizeTable]);
   const piColorOptions = useMemo(() => Object.keys(colorQty), [colorQty]);
   const piSizeOptions = useMemo(() => {
     const sizes = new Set();
@@ -1026,124 +1034,221 @@ export default function IndentEditorPage() {
           )}
         </Grid>
 
-        {/* PI line items — two per row */}
+        {/* PI line items + size breakdown */}
         {pi?.lines?.length > 0 && (
           <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${slate[200]}` }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
               <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
                 PI Line Items ({selectedLineIds.length}/{pi.lines.length})
               </Typography>
               <Button size="small" onClick={selectAllLines} sx={{ textTransform: 'none', fontWeight: 700, minWidth: 0, py: 0 }}>All</Button>
               <Button size="small" onClick={clearAllLines} sx={{ textTransform: 'none', fontWeight: 700, minWidth: 0, py: 0 }}>None</Button>
               {colorChips.length > 0 && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto', flexWrap: 'nowrap', overflow: 'hidden' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
                   {colorChips.map(([color, qty]) => (
-                    <Chip key={color} label={`${color}: ${qty}`} size="small"
+                    <Chip key={color} label={`${color}: ${qty.toLocaleString()}`} size="small"
                       sx={{ fontWeight: 700, fontSize: '0.68rem', bgcolor: alpha('#6366f1', 0.1), color: '#4338ca' }} />
                   ))}
                 </Box>
               )}
             </Box>
+
             <Box sx={{
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
-              gap: 1,
+              gridTemplateColumns: {
+                xs: '1fr',
+                lg: sizeTable.rows.length > 0 ? 'minmax(0, 1fr) minmax(0, 1fr)' : '1fr',
+              },
+              gap: 1.5,
+              alignItems: 'start',
             }}>
-              {pi.lines.map((line) => {
-                const selected = selectedLineIds.includes(line.id);
-                const sizeText = formatLineSizes(line);
-                return (
+              {/* Line selection */}
+              <Box sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: '1fr' },
+                gap: 1,
+                maxHeight: { lg: sizeTable.rows.length > 0 ? 320 : 'none' },
+                overflowY: { lg: sizeTable.rows.length > 0 ? 'auto' : 'visible' },
+                pr: { lg: sizeTable.rows.length > 0 ? 0.5 : 0 },
+              }}>
+                {pi.lines.map((line) => {
+                  const selected = selectedLineIds.includes(line.id);
+                  const sizeText = formatLineSizes(line);
+                  return (
+                    <Box
+                      key={line.id}
+                      onClick={() => toggleLine(line.id)}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 0.75,
+                        px: 1.25,
+                        py: 1,
+                        borderRadius: 1.5,
+                        cursor: 'pointer',
+                        minWidth: 0,
+                        border: `1px solid ${selected ? '#6366f1' : slate[300]}`,
+                        bgcolor: selected ? alpha('#6366f1', 0.08) : 'transparent',
+                        '&:hover': { bgcolor: alpha('#6366f1', 0.05) },
+                      }}
+                    >
+                      <Checkbox size="small" checked={selected} sx={{ p: 0.25, mt: 0.15 }} tabIndex={-1} />
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, lineHeight: 1.35, wordBreak: 'break-word' }}>
+                          {line.item_name}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.72rem', color: slate[500], mt: 0.25, lineHeight: 1.35 }}>
+                          {[
+                            line.color,
+                            line.quantity_pcs != null ? `${line.quantity_pcs.toLocaleString()} pcs` : null,
+                            line.item_code,
+                          ].filter(Boolean).join(' · ')}
+                        </Typography>
+                        {sizeText && (
+                          <Typography sx={{ fontSize: '0.68rem', color: slate[600], mt: 0.5, lineHeight: 1.4, fontWeight: 600 }}>
+                            Sizes: {sizeText}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+
+              {/* Size breakdown — collapsible */}
+              {sizeTable.rows.length > 0 && (
+                <Box sx={{
+                  border: `1px solid ${slate[200]}`,
+                  borderRadius: 1.5,
+                  overflow: 'hidden',
+                  bgcolor: '#fff',
+                  minWidth: 0,
+                }}>
                   <Box
-                    key={line.id}
-                    onClick={() => toggleLine(line.id)}
+                    onClick={() => setSizeBreakdownOpen((v) => !v)}
                     sx={{
                       display: 'flex',
-                      alignItems: 'flex-start',
+                      alignItems: 'center',
                       gap: 0.75,
                       px: 1.25,
-                      py: 1,
-                      borderRadius: 1.5,
+                      py: 0.85,
+                      bgcolor: slate[50],
+                      borderBottom: sizeBreakdownOpen ? `1px solid ${slate[200]}` : 'none',
                       cursor: 'pointer',
-                      minWidth: 0,
-                      border: `1px solid ${selected ? '#6366f1' : slate[300]}`,
-                      bgcolor: selected ? alpha('#6366f1', 0.08) : 'transparent',
-                      '&:hover': { bgcolor: alpha('#6366f1', 0.05) },
+                      userSelect: 'none',
+                      '&:hover': { bgcolor: alpha('#6366f1', 0.04) },
                     }}
                   >
-                    <Checkbox size="small" checked={selected} sx={{ p: 0.25, mt: 0.15 }} tabIndex={-1} />
-                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                      <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, lineHeight: 1.35, wordBreak: 'break-word' }}>
-                        {line.item_name}
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 800, color: slate[700] }}>
+                      Size breakdown
+                    </Typography>
+                    {!sizeBreakdownOpen && sizeBreakdownSummary && (
+                      <Typography sx={{ fontSize: '0.68rem', color: slate[500], fontWeight: 600 }}>
+                        {sizeBreakdownSummary}
                       </Typography>
-                      <Typography sx={{ fontSize: '0.72rem', color: slate[500], mt: 0.25, lineHeight: 1.35 }}>
-                        {[
-                          line.color,
-                          line.quantity_pcs != null ? `${line.quantity_pcs.toLocaleString()} pcs` : null,
-                          line.item_code,
-                        ].filter(Boolean).join(' · ')}
-                      </Typography>
-                      {sizeText && (
-                        <Typography sx={{ fontSize: '0.68rem', color: slate[600], mt: 0.5, lineHeight: 1.4, fontWeight: 600 }}>
-                          Sizes: {sizeText}
-                        </Typography>
-                      )}
-                    </Box>
+                    )}
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); setSizeBreakdownOpen((v) => !v); }}
+                      sx={{ ml: 'auto', color: slate[500] }}
+                      aria-label={sizeBreakdownOpen ? 'Minimise size breakdown' : 'Expand size breakdown'}
+                    >
+                      {sizeBreakdownOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+                    </IconButton>
                   </Box>
-                );
-              })}
-            </Box>
 
-            {sizeTable.rows.length > 0 && (
-              <Box sx={{ mt: 1.5, overflowX: 'auto', border: `1px solid ${slate[200]}`, borderRadius: 1.5 }}>
-                <Typography sx={{ px: 1.25, py: 0.75, fontSize: '0.72rem', fontWeight: 800, color: slate[600], bgcolor: slate[50], borderBottom: `1px solid ${slate[200]}` }}>
-                  Size breakdown (selected lines)
-                </Typography>
-                <Table size="small" sx={{ minWidth: 420 }}>
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: alpha('#6366f1', 0.06) }}>
-                      <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', whiteSpace: 'nowrap' }}>Colour</TableCell>
-                      {sizeTable.sizes.map((size) => (
-                        <TableCell key={size} align="center" sx={{ fontWeight: 800, fontSize: '0.72rem', minWidth: 44 }}>
-                          {size}
-                        </TableCell>
-                      ))}
-                      <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.72rem', minWidth: 52 }}>Total</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {sizeTable.rows.map((row) => (
-                      <TableRow key={row.id} hover>
-                        <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                          {row.color}
-                          <Typography component="span" sx={{ display: 'block', fontSize: '0.65rem', color: slate[500], fontWeight: 500 }}>
-                            {row.itemName}
-                          </Typography>
-                        </TableCell>
-                        {sizeTable.sizes.map((size) => (
-                          <TableCell key={size} align="center" sx={{ fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
-                            {row.sizeMap[size] ? row.sizeMap[size].toLocaleString() : '—'}
-                          </TableCell>
-                        ))}
-                        <TableCell align="center" sx={{ fontSize: '0.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                          {row.total.toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow sx={{ bgcolor: alpha(slate[900], 0.03) }}>
-                      <TableCell sx={{ fontSize: '0.72rem', fontWeight: 800 }}>Total</TableCell>
-                      {sizeTable.sizes.map((size) => (
-                        <TableCell key={size} align="center" sx={{ fontSize: '0.72rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                          {sizeTable.rows.reduce((sum, row) => sum + (row.sizeMap[size] || 0), 0).toLocaleString() || '—'}
-                        </TableCell>
-                      ))}
-                      <TableCell align="center" sx={{ fontSize: '0.72rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
-                        {sizeTable.rows.reduce((sum, row) => sum + row.total, 0).toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </Box>
-            )}
+                  <Collapse in={sizeBreakdownOpen}>
+                    <TableContainer sx={{ maxHeight: 280, overflow: 'auto' }}>
+                      <Table size="small" stickyHeader sx={{ minWidth: 360 }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{
+                              fontWeight: 800,
+                              fontSize: '0.68rem',
+                              whiteSpace: 'nowrap',
+                              minWidth: 100,
+                              position: 'sticky',
+                              left: 0,
+                              zIndex: 3,
+                              bgcolor: alpha('#6366f1', 0.1),
+                              boxShadow: '2px 0 4px rgba(0,0,0,0.06)',
+                            }}>
+                              Colour
+                            </TableCell>
+                            {sizeTable.sizes.map((size) => (
+                              <TableCell
+                                key={size}
+                                align="center"
+                                sx={{ fontWeight: 800, fontSize: '0.68rem', minWidth: 40, px: 0.75, py: 0.75, bgcolor: alpha('#6366f1', 0.06) }}
+                              >
+                                {size}
+                              </TableCell>
+                            ))}
+                            <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.68rem', minWidth: 48, px: 0.75, bgcolor: alpha('#6366f1', 0.06) }}>
+                              Total
+                            </TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {sizeTable.rows.map((row) => (
+                            <TableRow key={row.id} hover>
+                              <TableCell sx={{
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                position: 'sticky',
+                                left: 0,
+                                zIndex: 1,
+                                bgcolor: '#fff',
+                                boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
+                                minWidth: 100,
+                                py: 0.75,
+                              }}>
+                                <Typography sx={{ fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 1.3 }}>
+                                  {row.color}
+                                </Typography>
+                                <Typography sx={{ fontSize: '0.62rem', color: slate[500], fontWeight: 500, lineHeight: 1.3, mt: 0.15 }}>
+                                  {row.itemName}
+                                </Typography>
+                              </TableCell>
+                              {sizeTable.sizes.map((size) => (
+                                <TableCell key={size} align="center" sx={{ fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums', px: 0.75, py: 0.75 }}>
+                                  {row.sizeMap[size] ? row.sizeMap[size].toLocaleString() : '—'}
+                                </TableCell>
+                              ))}
+                              <TableCell align="center" sx={{ fontSize: '0.72rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', px: 0.75, py: 0.75 }}>
+                                {row.total.toLocaleString()}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow sx={{ bgcolor: alpha(slate[900], 0.03) }}>
+                            <TableCell sx={{
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              position: 'sticky',
+                              left: 0,
+                              zIndex: 1,
+                              bgcolor: alpha(slate[900], 0.03),
+                              boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
+                              py: 0.75,
+                            }}>
+                              Total
+                            </TableCell>
+                            {sizeTable.sizes.map((size) => (
+                              <TableCell key={size} align="center" sx={{ fontSize: '0.68rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', px: 0.75, py: 0.75 }}>
+                                {sizeTable.rows.reduce((sum, row) => sum + (row.sizeMap[size] || 0), 0).toLocaleString() || '—'}
+                              </TableCell>
+                            ))}
+                            <TableCell align="center" sx={{ fontSize: '0.68rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums', px: 0.75, py: 0.75 }}>
+                              {sizeTable.rows.reduce((sum, row) => sum + row.total, 0).toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Collapse>
+                </Box>
+              )}
+            </Box>
           </Box>
         )}
       </Paper>
