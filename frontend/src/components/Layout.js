@@ -145,24 +145,38 @@ const Layout = ({ children }) => {
   const drawer = (
     <Box
       sx={{
+        minHeight: '100%',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        background: navChrome.gradient,
         color: navChrome.text,
-        borderRight: `1px solid ${sidebarBorder}`,
-        boxShadow: `inset 4px 0 0 0 ${navChrome.rail}`,
         position: 'relative',
-        '&::before': {
-          content: '""',
+        overflow: 'hidden',
+      }}
+    >
+      <Box
+        aria-hidden
+        sx={{
           pointerEvents: 'none',
           position: 'absolute',
           inset: 0,
-          opacity: 1,
+          background: navChrome.gradient,
+          zIndex: 0,
+        }}
+      />
+      <Box
+        aria-hidden
+        sx={{
+          pointerEvents: 'none',
+          position: 'absolute',
+          inset: 0,
           background: navChrome.sheen,
-        },
-        '&::after': {
-          content: '""',
+          zIndex: 0,
+        }}
+      />
+      <Box
+        aria-hidden
+        sx={{
           pointerEvents: 'none',
           position: 'absolute',
           inset: 0,
@@ -174,9 +188,9 @@ const Layout = ({ children }) => {
             transparent 1px,
             transparent 7px
           )`,
-        },
-      }}
-    >
+          zIndex: 0,
+        }}
+      />
       <Toolbar
         sx={{
           minHeight: { xs: 68, sm: 76 },
@@ -256,7 +270,15 @@ const Layout = ({ children }) => {
 
       <Divider sx={{ borderColor: sidebarBorder, position: 'relative', zIndex: 1 }} />
 
-      <List sx={{ px: compactNav ? 1 : 1.25, flex: 1, position: 'relative', zIndex: 1, py: 0.5 }}>
+      <List sx={{
+        px: compactNav ? 1 : 1.25,
+        flex: 1,
+        minHeight: 0,
+        overflowY: 'auto',
+        position: 'relative',
+        zIndex: 1,
+        py: 0.5,
+      }}>
         {navGroups.map((group) => (
           <Fragment key={group.id}>
             {!compactNav ? (
@@ -355,14 +377,20 @@ const Layout = ({ children }) => {
         ))}
       </List>
 
-      <Box sx={{ p: compactNav ? 1 : 2, mt: 'auto', position: 'relative', zIndex: 1 }}>
+      <Box sx={{
+        p: compactNav ? 1 : 2,
+        pt: compactNav ? 1 : 1.5,
+        pb: compactNav ? 1.25 : 2,
+        mt: 'auto',
+        flexShrink: 0,
+        position: 'relative',
+        zIndex: 1,
+      }}>
         <Box
           sx={{
             borderRadius: '12px',
             border: `1px solid ${alpha('#fff', 0.14)}`,
-            bgcolor: alpha('#000', 0.22),
-            backdropFilter: 'blur(12px) saturate(150%)',
-            WebkitBackdropFilter: 'blur(12px) saturate(150%)',
+            bgcolor: alpha('#0f1c1a', 0.72),
             p: compactNav ? 1 : 1.75,
           }}
         >
@@ -417,7 +445,7 @@ const Layout = ({ children }) => {
           </Button>
         </Box>
         {!compactNav ? (
-            <Typography variant="caption" sx={{ display: 'block', mt: 1.75, color: alpha('#ffffff', 0.65), px: 0.5 }}>
+          <Typography variant="caption" sx={{ display: 'block', mt: 1.25, color: alpha('#ffffff', 0.65), px: 0.5 }}>
             GMS · Cut &amp; sew operations
           </Typography>
         ) : null}
@@ -509,7 +537,17 @@ const Layout = ({ children }) => {
           ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: 'block', sm: 'none' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: layoutDrawerWidth, border: 'none' },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: layoutDrawerWidth,
+              border: 'none',
+              minHeight: '100vh',
+              height: '100%',
+              backgroundColor: '#162827',
+              background: navChrome.gradient,
+              borderRight: `1px solid ${sidebarBorder}`,
+              boxShadow: `inset 4px 0 0 0 ${navChrome.rail}`,
+            },
           }}
         >
           {drawer}
@@ -522,6 +560,12 @@ const Layout = ({ children }) => {
               boxSizing: 'border-box',
               width: drawerWidth,
               border: 'none',
+              minHeight: '100vh',
+              height: '100%',
+              backgroundColor: '#162827',
+              background: navChrome.gradient,
+              borderRight: `1px solid ${sidebarBorder}`,
+              boxShadow: `inset 4px 0 0 0 ${navChrome.rail}`,
               transition: theme.transitions.create('width', {
                 easing: theme.transitions.easing.sharp,
                 duration: theme.transitions.duration.shorter,
