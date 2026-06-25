@@ -189,6 +189,7 @@ class IndentFabricLine(models.Model):
     indent = models.ForeignKey(Indent, on_delete=models.CASCADE, related_name='fabric_lines')
     material = models.CharField(max_length=500)
     color = models.CharField(max_length=120, blank=True, default='')
+    gsm = models.CharField(max_length=50, blank=True, default='', help_text='Fabric weight e.g. 245 GSM')
     roll_width = models.CharField(max_length=50, blank=True, default='', help_text='Optional width of the fabric roll, e.g. 58 inch')
     consumption_per_pc = models.DecimalField(max_digits=10, decimal_places=4, default=0)
     unit = models.CharField(max_length=20, default='MTRS')

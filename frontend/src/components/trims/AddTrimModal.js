@@ -19,7 +19,7 @@ export const TRIM_CATEGORY_SUGGESTIONS = [
   'Polybag', 'Waist Band', 'Hook & Loop', 'Sticker', 'Other',
 ];
 
-export const TRIM_UNIT_OPTIONS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'CM', 'MM', 'INCH', 'GMS', ''];
+export const TRIM_UNIT_OPTIONS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'CMS', 'CM', 'MM', 'INCH', 'GMS', ''];
 
 const emptyProperty = () => ({ name: '', unit: '' });
 export const emptyTrimForm = () => ({
@@ -158,7 +158,7 @@ export default function AddTrimModal({ open, onClose, onSaved }) {
               </Button>
             </Box>
             <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 1.5 }}>
-              Property name + unit (e.g. Width → CM, Number / Washes → no unit)
+              Property name + unit (e.g. Width → CMS, Quality → text, Number / Washes → no unit)
             </Typography>
             {form.properties.length === 0 ? (
               <Box sx={{ p: 2, bgcolor: alpha(slate[200], 0.3), borderRadius: 1.5, textAlign: 'center' }}>
@@ -183,7 +183,7 @@ export default function AddTrimModal({ open, onClose, onSaved }) {
                           value={prop.name}
                           onInputChange={(_, v) => updateProperty(idx, 'name', v)}
                           renderInput={(params) => (
-                            <TextField {...params} size="small" fullWidth placeholder="Width, Color, Number, Washes…" />
+                            <TextField {...params} size="small" fullWidth placeholder="Width, Color, Microns, GSM…" />
                           )}
                         />
                       </TableCell>
@@ -197,7 +197,7 @@ export default function AddTrimModal({ open, onClose, onSaved }) {
                             options={TRIM_UNIT_OPTIONS}
                             value={prop.unit}
                             onInputChange={(_, v) => updateProperty(idx, 'unit', v)}
-                            renderInput={(params) => <TextField {...params} size="small" placeholder="CM, PCS…" />}
+                            renderInput={(params) => <TextField {...params} size="small" placeholder="CMS, PCS…" />}
                           />
                         )}
                       </TableCell>

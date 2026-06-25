@@ -265,7 +265,7 @@ class IndentFabricLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = IndentFabricLine
         fields = [
-            'id', 'material', 'color', 'roll_width', 'consumption_per_pc', 'unit',
+            'id', 'material', 'color', 'gsm', 'roll_width', 'consumption_per_pc', 'unit',
             'total_consumption', 'remarks', 'sort_order',
         ]
         read_only_fields = ('id',)

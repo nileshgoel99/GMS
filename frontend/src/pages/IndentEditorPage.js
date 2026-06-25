@@ -15,7 +15,7 @@ import { ordersAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import AddTrimModal from '../components/trims/AddTrimModal';
-import { isNumericTrimProperty, formatTrimPropertyLabel } from '../components/trims/trimConstants';
+import { formatTrimPropertyLabel, isNumericTrimProperty } from '../components/trims/trimConstants';
 
 // ── Print styles ─────────────────────────────────────────────────────────────
 const PRINT_STYLE = `
@@ -31,7 +31,7 @@ const PRINT_STYLE = `
 const UNITS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GMS'];
 
 // ── Empty row factories ───────────────────────────────────────────────────────
-const emptyFabric = () => ({ material: '', color: '', roll_width: '', consumption_per_pc: '', unit: 'MTRS', total_consumption: '', remarks: '' });
+const emptyFabric = () => ({ material: '', color: '', gsm: '', roll_width: '', consumption_per_pc: '', unit: 'MTRS', total_consumption: '', remarks: '' });
 const emptyTrim = () => ({
   trim: null, trim_name: '', category: '', color_variant: '', size_variant: '',
   property_values: {}, consumption_per_pc: '', unit: 'PCS', total_consumption: '', total_unit: '', remarks: '',
@@ -68,31 +68,97 @@ const rowQtyForColor = (color, colorQty, totalQty) => {
   return totalQty;
 };
 
+const normalizeMatchKey = (value) => String(value || '').trim().toLowerCase();
+
+const findTrimPropertyValue = (propertyValues, pattern) => {
+  const entry = Object.entries(propertyValues || {}).find(([k]) => pattern.test(String(k).trim()));
+  const raw = entry?.[1];
+  return raw != null && String(raw).trim() ? String(raw).trim() : '';
+};
+
+const getTrimColorFromRow = (row) =>
+  findTrimPropertyValue(row.property_values, /^colou?r$/i) || (row.color_variant?.trim() || '');
+
+const getTrimSizeFromRow = (row) =>
+  findTrimPropertyValue(row.property_values, /^size$/i) || (row.size_variant?.trim() || '');
+
+const piLineMatchesColor = (line, color) =>
+  normalizeMatchKey(line.color) === normalizeMatchKey(color);
+
+const sizesMatch = (a, b) => normalizeMatchKey(a) === normalizeMatchKey(b);
+
+/** Qty from selected PI lines for a trim row's Color / Size properties. */
+const qtyFromPiForTrim = (row, piLines, colorQty) => {
+  const color = getTrimColorFromRow(row);
+  const size = getTrimSizeFromRow(row);
+  const lines = piLines || [];
+
+  if (color && size) {
+    let qty = 0;
+    lines.forEach((line) => {
+      if (!piLineMatchesColor(line, color)) return;
+      (line.size_breakdown || []).forEach(({ size: s, qty: q }) => {
+        if (sizesMatch(s, size)) qty += parseInt(q, 10) || 0;
+      });
+    });
+    return qty;
+  }
+
+  if (color) {
+    const fromMap = rowQtyForColor(color, colorQty, 0);
+    if (fromMap > 0) return fromMap;
+    let qty = 0;
+    lines.forEach((line) => {
+      if (piLineMatchesColor(line, color)) qty += line.quantity_pcs || 0;
+    });
+    return qty;
+  }
+
+  if (size) {
+    let qty = 0;
+    lines.forEach((line) => {
+      (line.size_breakdown || []).forEach(({ size: s, qty: q }) => {
+        if (sizesMatch(s, size)) qty += parseInt(q, 10) || 0;
+      });
+    });
+    return qty;
+  }
+
+  return null;
+};
+
+const rowQtyForTrim = (row, piLines, colorQty, totalQty) => {
+  const matched = qtyFromPiForTrim(row, piLines, colorQty);
+  if (matched != null && (getTrimColorFromRow(row) || getTrimSizeFromRow(row))) {
+    return matched;
+  }
+  return totalQty;
+};
+
 const calcRowTotal = (consumption, color, colorQty, totalQty) =>
   calcTotal(consumption, rowQtyForColor(color, colorQty, totalQty));
 
 const fabricRowTotal = (row, colorQty, totalQty) =>
   calcRowTotal(row.consumption_per_pc, row.color, colorQty, totalQty);
 
-const trimRowTotal = (row, colorQty, totalQty) => {
-  const colorKey = row.property_values?.Color || row.property_values?.color || row.color_variant;
-  return calcRowTotal(row.consumption_per_pc, colorKey, colorQty, totalQty);
-};
+const trimRowTotal = (row, piLines, colorQty, totalQty) =>
+  calcTotal(row.consumption_per_pc, rowQtyForTrim(row, piLines, colorQty, totalQty));
 
 // ── BOM table column helpers ───────────────────────────────────────────────────
 const BOM_ROW_H = 46;
 const BOM_ROW_TOTAL = BOM_ROW_H + 18;
 const BOM_CELL_PAD_Y = (BOM_ROW_TOTAL - BOM_ROW_H) / 2;
-const BOM_TABLE_MIN_W = 1320;
+const BOM_TABLE_MIN_W = 1420;
 
 const FABRIC_COLS = [
-  { label: 'Material *', width: 260, align: 'left' },
-  { label: 'Color', width: 130, align: 'left' },
-  { label: 'Roll W (CM)', width: 115, align: 'right' },
-  { label: 'Cons./pc', width: 105, align: 'right' },
-  { label: 'Unit', width: 95, align: 'center' },
-  { label: 'Total', width: 115, align: 'right' },
-  { label: 'Remarks', width: 180, align: 'left' },
+  { label: 'Material *', width: 240, align: 'left' },
+  { label: 'Color', width: 120, align: 'left' },
+  { label: 'GSM', width: 90, align: 'right' },
+  { label: 'Roll W (CMS)', width: 110, align: 'right' },
+  { label: 'Cons./pc', width: 100, align: 'right' },
+  { label: 'Unit', width: 90, align: 'center' },
+  { label: 'Total', width: 110, align: 'right' },
+  { label: 'Remarks', width: 170, align: 'left' },
   { label: '', width: 52, align: 'center' },
 ];
 
@@ -335,6 +401,45 @@ const buildColorQty = (piLines) => {
   return map;
 };
 
+const sortSizes = (sizes) => [...sizes].sort((a, b) => {
+  const na = parseFloat(a);
+  const nb = parseFloat(b);
+  if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+  return String(a).localeCompare(String(b), undefined, { numeric: true });
+});
+
+const formatLineSizes = (line) => {
+  const sb = line?.size_breakdown || [];
+  if (!sb.length) return '';
+  return sb
+    .filter((s) => s.size && (parseInt(s.qty, 10) || 0))
+    .map((s) => `${s.size}: ${Number(s.qty).toLocaleString()}`)
+    .join(' · ');
+};
+
+const buildSizeTable = (piLines) => {
+  const allSizes = new Set();
+  const rows = [];
+  (piLines || []).forEach((line) => {
+    const sb = line.size_breakdown || [];
+    if (!sb.length) return;
+    const sizeMap = {};
+    sb.forEach(({ size, qty }) => {
+      if (!size) return;
+      allSizes.add(size);
+      sizeMap[size] = (sizeMap[size] || 0) + (parseInt(qty, 10) || 0);
+    });
+    rows.push({
+      id: line.id,
+      color: line.color || '—',
+      itemName: line.item_name || '—',
+      sizeMap,
+      total: line.quantity_pcs || Object.values(sizeMap).reduce((s, v) => s + v, 0),
+    });
+  });
+  return { sizes: sortSizes(allSizes), rows };
+};
+
 // ── Table cell sx ─────────────────────────────────────────────────────────────
 const cellSx = { border: '1px solid #000', p: '4px 6px', fontSize: '8.5pt', fontFamily: 'inherit', verticalAlign: 'middle' };
 const thSx   = { ...cellSx, fontWeight: 700, bgcolor: '#e8e8e8', textAlign: 'center' };
@@ -404,7 +509,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
       <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', mb: 1.5 }}>
         <Box component="thead">
           <Box component="tr">
-            {['MATERIAL', 'COLOR / VARIANT', 'ROLL W (CM)', 'CONSUM.', 'UNIT', 'TOT CON.', 'UNIT', 'REMARKS'].map((h) => (
+            {['MATERIAL', 'COLOR / VARIANT', 'GSM', 'ROLL W (CMS)', 'CONSUM.', 'UNIT', 'TOT CON.', 'REMARKS'].map((h) => (
               <Box component="th" key={h} sx={thSx}>{h}</Box>
             ))}
           </Box>
@@ -414,7 +519,8 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
             <Box component="tr" key={`f${i}`}>
               <Box component="td" sx={{ ...cellSx, fontWeight: 600 }}>{row.material}</Box>
               <Box component="td" sx={cellSx}>{row.color}</Box>
-              <Box component="td" sx={cellSx}>{row.roll_width ? `${row.roll_width} CM` : '—'}</Box>
+              <Box component="td" sx={{ ...cellSx, textAlign: 'right' }}>{row.gsm ? `${row.gsm} GSM` : '—'}</Box>
+              <Box component="td" sx={cellSx}>{row.roll_width ? `${row.roll_width} CMS` : '—'}</Box>
               <Box component="td" sx={{ ...cellSx, textAlign: 'right' }}>{row.consumption_per_pc}</Box>
               <Box component="td" sx={{ ...cellSx, textAlign: 'center' }}>{row.unit}</Box>
               <Box component="td" sx={{ ...cellSx, textAlign: 'right', fontWeight: 700 }}>{row.total_consumption}</Box>
@@ -474,7 +580,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
             Carton Size:&nbsp;&nbsp;
             {indent.pcs_per_carton ? `${indent.pcs_per_carton} pcs/box` : ''}
             {indent.carton_ply ? `  ${indent.carton_ply}` : ''}
-            {indent.carton_dimensions ? `  ${indent.carton_dimensions} (L*W*H)` : ''}
+            {indent.carton_dimensions ? `  ${indent.carton_dimensions} (L*W*H CMS)` : ''}
           </Typography>
         </Box>
       )}
@@ -537,8 +643,24 @@ export default function IndentEditorPage() {
     return pi.lines.filter((l) => selectedLineIds.includes(l.id));
   }, [pi, selectedLineIds]);
 
+  const selectedPiLines = useMemo(() => {
+    if (!pi?.lines || !selectedLineIds.length) return [];
+    return pi.lines.filter((l) => selectedLineIds.includes(l.id));
+  }, [pi, selectedLineIds]);
+
   const colorQty = useMemo(() => buildColorQty(activeLines), [activeLines]);
   const totalQty = useMemo(() => Object.values(colorQty).reduce((s, v) => s + v, 0), [colorQty]);
+  const sizeTable = useMemo(() => buildSizeTable(selectedPiLines), [selectedPiLines]);
+  const piColorOptions = useMemo(() => Object.keys(colorQty), [colorQty]);
+  const piSizeOptions = useMemo(() => {
+    const sizes = new Set();
+    activeLines.forEach((line) => {
+      (line.size_breakdown || []).forEach(({ size }) => {
+        if (size) sizes.add(size);
+      });
+    });
+    return sortSizes(sizes);
+  }, [activeLines]);
 
   const getTrimMaster = (row) => (row.trim ? trimsList.find((t) => t.id === row.trim) : null);
 
@@ -555,10 +677,10 @@ export default function IndentEditorPage() {
     setTrimLines((prev) => prev.map((row) => ({
       ...row,
       total_consumption: row.consumption_per_pc
-        ? trimRowTotal(row, colorQty, totalQty)
+        ? trimRowTotal(row, activeLines, colorQty, totalQty)
         : row.total_consumption,
     })));
-  }, [colorQty, totalQty]);
+  }, [colorQty, totalQty, activeLines]);
 
   // ── Load on mount ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -671,7 +793,7 @@ export default function IndentEditorPage() {
     setFabricLines((prev) => {
       const next = [...prev];
       const updated = { ...next[i], [field]: value };
-      if (field === 'total_consumption' || field === 'remarks' || field === 'material' || field === 'unit') {
+      if (field === 'total_consumption' || field === 'remarks' || field === 'material' || field === 'unit' || field === 'gsm' || field === 'roll_width') {
         next[i] = updated;
       } else {
         updated.total_consumption = fabricRowTotal(updated, colorQty, totalQty);
@@ -689,8 +811,8 @@ export default function IndentEditorPage() {
     setTrimLines((prev) => {
       const next = [...prev];
       const updated = { ...next[i], [field]: value };
-      if (field === 'consumption_per_pc' || field === 'color_variant') {
-        updated.total_consumption = trimRowTotal(updated, colorQty, totalQty);
+      if (field === 'consumption_per_pc' || field === 'color_variant' || field === 'size_variant') {
+        updated.total_consumption = trimRowTotal(updated, activeLines, colorQty, totalQty);
       }
       next[i] = updated;
       return next;
@@ -714,6 +836,9 @@ export default function IndentEditorPage() {
         color_variant: '',
         size_variant: '',
       };
+      if (next[i].consumption_per_pc) {
+        next[i].total_consumption = trimRowTotal(next[i], activeLines, colorQty, totalQty);
+      }
       return next;
     });
   };
@@ -722,7 +847,7 @@ export default function IndentEditorPage() {
     setTrimLines((prev) => {
       const next = [...prev];
       const row = { ...next[i], property_values: { ...(next[i].property_values || {}), [propName]: value } };
-      row.total_consumption = trimRowTotal(row, colorQty, totalQty);
+      row.total_consumption = trimRowTotal(row, activeLines, colorQty, totalQty);
       next[i] = row;
       return next;
     });
@@ -926,6 +1051,7 @@ export default function IndentEditorPage() {
             }}>
               {pi.lines.map((line) => {
                 const selected = selectedLineIds.includes(line.id);
+                const sizeText = formatLineSizes(line);
                 return (
                   <Box
                     key={line.id}
@@ -956,18 +1082,75 @@ export default function IndentEditorPage() {
                           line.item_code,
                         ].filter(Boolean).join(' · ')}
                       </Typography>
+                      {sizeText && (
+                        <Typography sx={{ fontSize: '0.68rem', color: slate[600], mt: 0.5, lineHeight: 1.4, fontWeight: 600 }}>
+                          Sizes: {sizeText}
+                        </Typography>
+                      )}
                     </Box>
                   </Box>
                 );
               })}
             </Box>
+
+            {sizeTable.rows.length > 0 && (
+              <Box sx={{ mt: 1.5, overflowX: 'auto', border: `1px solid ${slate[200]}`, borderRadius: 1.5 }}>
+                <Typography sx={{ px: 1.25, py: 0.75, fontSize: '0.72rem', fontWeight: 800, color: slate[600], bgcolor: slate[50], borderBottom: `1px solid ${slate[200]}` }}>
+                  Size breakdown (selected lines)
+                </Typography>
+                <Table size="small" sx={{ minWidth: 420 }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: alpha('#6366f1', 0.06) }}>
+                      <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', whiteSpace: 'nowrap' }}>Colour</TableCell>
+                      {sizeTable.sizes.map((size) => (
+                        <TableCell key={size} align="center" sx={{ fontWeight: 800, fontSize: '0.72rem', minWidth: 44 }}>
+                          {size}
+                        </TableCell>
+                      ))}
+                      <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.72rem', minWidth: 52 }}>Total</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {sizeTable.rows.map((row) => (
+                      <TableRow key={row.id} hover>
+                        <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          {row.color}
+                          <Typography component="span" sx={{ display: 'block', fontSize: '0.65rem', color: slate[500], fontWeight: 500 }}>
+                            {row.itemName}
+                          </Typography>
+                        </TableCell>
+                        {sizeTable.sizes.map((size) => (
+                          <TableCell key={size} align="center" sx={{ fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
+                            {row.sizeMap[size] ? row.sizeMap[size].toLocaleString() : '—'}
+                          </TableCell>
+                        ))}
+                        <TableCell align="center" sx={{ fontSize: '0.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                          {row.total.toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow sx={{ bgcolor: alpha(slate[900], 0.03) }}>
+                      <TableCell sx={{ fontSize: '0.72rem', fontWeight: 800 }}>Total</TableCell>
+                      {sizeTable.sizes.map((size) => (
+                        <TableCell key={size} align="center" sx={{ fontSize: '0.72rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                          {sizeTable.rows.reduce((sum, row) => sum + (row.sizeMap[size] || 0), 0).toLocaleString() || '—'}
+                        </TableCell>
+                      ))}
+                      <TableCell align="center" sx={{ fontSize: '0.72rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+                        {sizeTable.rows.reduce((sum, row) => sum + row.total, 0).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </Box>
+            )}
           </Box>
         )}
       </Paper>
 
       {totalQty > 0 && (
         <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 1.5 }}>
-          Totals auto-calculate from consumption × selected PI qty ({totalQty.toLocaleString()} pcs)
+          Totals auto-calculate from consumption × PI qty. Trims with Color / Size use only the matching PI colour (and size) — e.g. Yellow buttons use Yellow pcs only.
         </Typography>
       )}
 
@@ -1009,10 +1192,19 @@ export default function IndentEditorPage() {
                       </TableCell>
                       <TableCell sx={bodyCell('right')}>
                         <Box sx={bomCellInner('right')}>
+                          <TextField size="small" fullWidth type="number" value={row.gsm || ''}
+                            onChange={(e) => setFabricField(i, 'gsm', e.target.value)}
+                            placeholder="245" inputProps={{ step: '0.01', min: '0' }}
+                            InputProps={{ endAdornment: <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', pr: 0.5, whiteSpace: 'nowrap' }}>GSM</Typography> }}
+                            sx={bomFieldSx('right')} />
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={bodyCell('right')}>
+                        <Box sx={bomCellInner('right')}>
                           <TextField size="small" fullWidth type="number" value={row.roll_width || ''}
                             onChange={(e) => setFabricField(i, 'roll_width', e.target.value)}
                             placeholder="150" inputProps={{ step: '1', min: '0' }}
-                            InputProps={{ endAdornment: <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', pr: 0.5, whiteSpace: 'nowrap' }}>CM</Typography> }}
+                            InputProps={{ endAdornment: <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', pr: 0.5, whiteSpace: 'nowrap' }}>CMS</Typography> }}
                             sx={bomFieldSx('right')} />
                         </Box>
                       </TableCell>
@@ -1093,8 +1285,11 @@ export default function IndentEditorPage() {
                     onChange={(e) => setCartonPly(e.target.value)} placeholder="5 PLY" sx={sxInput} />
                 </Grid>
                 <Grid item xs={12} sm={4} md={3}>
-                  <TextField size="small" fullWidth label="Dimensions" value={cartonDims}
-                    onChange={(e) => setCartonDims(e.target.value)} placeholder="L × W × H" sx={sxInput} />
+                  <TextField size="small" fullWidth label="Dimensions (CMS)" value={cartonDims}
+                    onChange={(e) => setCartonDims(e.target.value)} placeholder="L × W × H in CMS"
+                    helperText="Length × Width × Height in centimetres"
+                    FormHelperTextProps={{ sx: { mx: 0, fontSize: '0.68rem' } }}
+                    sx={sxInput} />
                 </Grid>
               </Grid>
             </Box>
@@ -1174,7 +1369,12 @@ export default function IndentEditorPage() {
                                   gap: 1,
                                   alignItems: 'flex-start',
                                 }}>
-                                  {schema.map((prop) => (
+                                  {schema.map((prop) => {
+                                    const isColorProp = /^colou?r$/i.test(String(prop.name).trim());
+                                    const isSizeProp = /^size$/i.test(String(prop.name).trim());
+                                    const isNumericProp = isNumericTrimProperty(prop.name);
+                                    const propValue = row.property_values?.[prop.name] || '';
+                                    return (
                                     <Box
                                       key={prop.name}
                                       sx={{
@@ -1197,18 +1397,45 @@ export default function IndentEditorPage() {
                                       >
                                         {prop.name}{prop.unit ? ` (${prop.unit})` : ''}
                                       </Typography>
+                                      {isColorProp ? (
+                                        <Autocomplete
+                                          freeSolo
+                                          options={piColorOptions}
+                                          value={propValue}
+                                          onChange={(_, v) => setTrimPropertyValue(i, prop.name, v || '')}
+                                          onInputChange={(_, v) => setTrimPropertyValue(i, prop.name, v)}
+                                          sx={{ m: 0, width: '100%' }}
+                                          renderInput={(params) => (
+                                            <TextField {...params} size="small" fullWidth placeholder="From PI colours" sx={trimPropFieldSx('left')} />
+                                          )}
+                                        />
+                                      ) : isSizeProp ? (
+                                        <Autocomplete
+                                          freeSolo
+                                          options={piSizeOptions}
+                                          value={propValue}
+                                          onChange={(_, v) => setTrimPropertyValue(i, prop.name, v || '')}
+                                          onInputChange={(_, v) => setTrimPropertyValue(i, prop.name, v)}
+                                          sx={{ m: 0, width: '100%' }}
+                                          renderInput={(params) => (
+                                            <TextField {...params} size="small" fullWidth placeholder="From PI sizes" sx={trimPropFieldSx('left')} />
+                                          )}
+                                        />
+                                      ) : (
                                       <TextField
                                         size="small"
                                         fullWidth
-                                        type={isNumericTrimProperty(prop.name) ? 'number' : 'text'}
-                                        placeholder={isNumericTrimProperty(prop.name) ? '0' : 'Enter value'}
-                                        value={row.property_values?.[prop.name] || ''}
+                                        type={isNumericProp ? 'number' : 'text'}
+                                        placeholder={isNumericProp ? '0' : 'Enter value'}
+                                        value={propValue}
                                         onChange={(e) => setTrimPropertyValue(i, prop.name, e.target.value)}
-                                        inputProps={isNumericTrimProperty(prop.name) ? { step: '1', min: '0' } : undefined}
-                                        sx={trimPropFieldSx(isNumericTrimProperty(prop.name) ? 'right' : 'left')}
+                                        inputProps={isNumericProp ? { min: 0, step: /^gsm$/i.test(String(prop.name).trim()) ? '0.01' : '1' } : undefined}
+                                        sx={trimPropFieldSx(isNumericProp ? 'right' : 'left')}
                                       />
+                                      )}
                                     </Box>
-                                  ))}
+                                    );
+                                  })}
                                 </Box>
                               ) : (
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>

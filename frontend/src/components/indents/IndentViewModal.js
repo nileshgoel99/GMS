@@ -185,7 +185,7 @@ export default function IndentViewModal({ open, indentId, onClose }) {
             <Grid container spacing={2}>
               <Grid item xs={4} sm={2}><InfoItem label="Pcs/Box" value={indent.pcs_per_carton} /></Grid>
               <Grid item xs={4} sm={2}><InfoItem label="Carton PLY" value={indent.carton_ply} /></Grid>
-              <Grid item xs={4} sm={3}><InfoItem label="Dimensions" value={indent.carton_dimensions} /></Grid>
+              <Grid item xs={4} sm={3}><InfoItem label="Dimensions (CMS)" value={indent.carton_dimensions} /></Grid>
               <Grid item xs={12} sm={5}><InfoItem label="Prepared By" value={indent.prepared_by} /></Grid>
               <Grid item xs={6} sm={4}><InfoItem label="Received By" value={indent.received_by} /></Grid>
               <Grid item xs={6} sm={4}><InfoItem label="Approved By" value={indent.approved_by} /></Grid>
@@ -199,13 +199,14 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                   <TableHead>
                     <TableRow>
                       {[
-                        { h: 'Material', a: 'left', w: '26%' },
-                        { h: 'Color', a: 'left', w: '12%' },
-                        { h: 'Roll W (CM)', a: 'right', w: '10%' },
+                        { h: 'Material', a: 'left', w: '22%' },
+                        { h: 'Color', a: 'left', w: '10%' },
+                        { h: 'GSM', a: 'right', w: '8%' },
+                        { h: 'Roll W (CMS)', a: 'right', w: '10%' },
                         { h: 'Cons./pc', a: 'right', w: '10%' },
                         { h: 'Unit', a: 'center', w: '8%' },
                         { h: 'Total', a: 'right', w: '10%' },
-                        { h: 'Remarks', a: 'left', w: '24%' },
+                        { h: 'Remarks', a: 'left', w: '22%' },
                       ].map((col) => (
                         <TableCell key={col.h} sx={{ ...viewHeadSx, textAlign: col.a, width: col.w }}>{col.h}</TableCell>
                       ))}
@@ -214,14 +215,15 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                   <TableBody>
                     {(indent.fabric_lines || []).filter((r) => r.material?.trim()).length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} sx={{ ...viewCellSx('center'), color: 'text.disabled' }}>No fabric rows</TableCell>
+                        <TableCell colSpan={8} sx={{ ...viewCellSx('center'), color: 'text.disabled' }}>No fabric rows</TableCell>
                       </TableRow>
                     ) : (
                       (indent.fabric_lines || []).filter((r) => r.material?.trim()).map((row, i) => (
                         <TableRow key={i} hover>
                           <TableCell sx={viewCellSx('left')}>{row.material}</TableCell>
                           <TableCell sx={viewCellSx('left')}>{val(row.color)}</TableCell>
-                          <TableCell sx={viewCellSx('right')}>{row.roll_width ? `${row.roll_width} CM` : '—'}</TableCell>
+                          <TableCell sx={viewCellSx('right')}>{row.gsm ? `${row.gsm} GSM` : '—'}</TableCell>
+                          <TableCell sx={viewCellSx('right')}>{row.roll_width ? `${row.roll_width} CMS` : '—'}</TableCell>
                           <TableCell sx={viewCellSx('right')}>{val(row.consumption_per_pc)}</TableCell>
                           <TableCell sx={{ ...viewCellSx('center'), fontWeight: 600 }}>{val(row.unit)}</TableCell>
                           <TableCell sx={{ ...viewCellSx('right'), fontWeight: 700 }}>{val(row.total_consumption)}</TableCell>

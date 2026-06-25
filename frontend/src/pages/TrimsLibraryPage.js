@@ -23,7 +23,7 @@ const CATEGORY_SUGGESTIONS = [
   'Polybag', 'Waist Band', 'Hook & Loop', 'Sticker', 'Other',
 ];
 
-const UNIT_OPTIONS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'CM', 'MM', 'INCH', ''];
+const UNIT_OPTIONS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'CMS', 'CM', 'MM', 'INCH', ''];
 
 const emptyProperty = () => ({ name: '', unit: '' });
 const emptyForm = () => ({ name: '', category: '', default_unit: 'PCS', notes: '', properties: [], supplier: null });
@@ -331,7 +331,7 @@ export default function TrimsLibraryPage() {
               </Button>
             </Box>
             <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 1.5 }}>
-              Define property names and units (e.g. Width → CM, Number / Washes → no unit)
+              Define property names and units (e.g. Width → CMS, Quality → text, Number / Washes → no unit)
             </Typography>
             {form.properties.length === 0 ? (
               <Box sx={{ p: 2, bgcolor: alpha(slate[200], 0.3), borderRadius: 1.5, textAlign: 'center' }}>
@@ -356,7 +356,7 @@ export default function TrimsLibraryPage() {
                           value={prop.name}
                           onInputChange={(_, v) => updateProperty(idx, 'name', v)}
                           renderInput={(params) => (
-                            <TextField {...params} size="small" fullWidth placeholder="Width, Color, Number, Washes…" />
+                            <TextField {...params} size="small" fullWidth placeholder="Width, Color, Microns, GSM…" />
                           )}
                         />
                       </TableCell>
@@ -370,7 +370,7 @@ export default function TrimsLibraryPage() {
                             options={UNIT_OPTIONS}
                             value={prop.unit}
                             onInputChange={(_, v) => updateProperty(idx, 'unit', v)}
-                            renderInput={(params) => <TextField {...params} size="small" placeholder="e.g. CM, PCS" />}
+                            renderInput={(params) => <TextField {...params} size="small" placeholder="e.g. CMS, PCS" />}
                           />
                         )}
                       </TableCell>
