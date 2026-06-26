@@ -19,7 +19,7 @@ export const TRIM_CATEGORY_SUGGESTIONS = [
   'Polybag', 'Waist Band', 'Hook & Loop', 'Sticker', 'Other',
 ];
 
-export const TRIM_UNIT_OPTIONS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'CMS', 'CM', 'MM', 'INCH', 'GMS', ''];
+export const TRIM_UNIT_OPTIONS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GROSS', 'CMS', 'CM', 'MM', 'INCH', 'GMS', ''];
 
 const emptyProperty = () => ({ name: '', unit: '' });
 export const emptyTrimForm = () => ({

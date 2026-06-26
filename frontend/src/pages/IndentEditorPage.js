@@ -28,7 +28,7 @@ const PRINT_STYLE = `
 `;
 
 // ── Unit helpers ──────────────────────────────────────────────────────────────
-const UNITS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GMS'];
+const UNITS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GROSS', 'GMS', 'CMS'];
 
 // ── Empty row factories ───────────────────────────────────────────────────────
 const emptyFabric = () => ({ material: '', color: '', gsm: '', roll_width: '', consumption_per_pc: '', unit: 'MTRS', total_consumption: '', remarks: '' });
@@ -87,13 +87,30 @@ const piLineMatchesColor = (line, color) =>
 
 const sizesMatch = (a, b) => normalizeMatchKey(a) === normalizeMatchKey(b);
 
+const getPiGarmentSizes = (piLines) => {
+  const sizes = new Set();
+  (piLines || []).forEach((line) => {
+    (line.size_breakdown || []).forEach(({ size }) => {
+      if (size) sizes.add(normalizeMatchKey(size));
+    });
+  });
+  return sizes;
+};
+
+/** Only treat trim Size as a PI garment size when it appears in the PI size breakdown. */
+const isPiGarmentSize = (size, piLines) => {
+  const norm = normalizeMatchKey(size);
+  return Boolean(norm && getPiGarmentSizes(piLines).has(norm));
+};
+
 /** Qty from selected PI lines for a trim row's Color / Size properties. */
 const qtyFromPiForTrim = (row, piLines, colorQty) => {
   const color = getTrimColorFromRow(row);
   const size = getTrimSizeFromRow(row);
   const lines = piLines || [];
+  const useGarmentSize = size && isPiGarmentSize(size, lines);
 
-  if (color && size) {
+  if (color && useGarmentSize) {
     let qty = 0;
     lines.forEach((line) => {
       if (!piLineMatchesColor(line, color)) return;
@@ -101,7 +118,7 @@ const qtyFromPiForTrim = (row, piLines, colorQty) => {
         if (sizesMatch(s, size)) qty += parseInt(q, 10) || 0;
       });
     });
-    return qty;
+    if (qty > 0) return qty;
   }
 
   if (color) {
@@ -114,7 +131,7 @@ const qtyFromPiForTrim = (row, piLines, colorQty) => {
     return qty;
   }
 
-  if (size) {
+  if (useGarmentSize) {
     let qty = 0;
     lines.forEach((line) => {
       (line.size_breakdown || []).forEach(({ size: s, qty: q }) => {
@@ -128,10 +145,11 @@ const qtyFromPiForTrim = (row, piLines, colorQty) => {
 };
 
 const rowQtyForTrim = (row, piLines, colorQty, totalQty) => {
+  const color = getTrimColorFromRow(row);
+  const size = getTrimSizeFromRow(row);
+  if (!color && !size) return totalQty;
   const matched = qtyFromPiForTrim(row, piLines, colorQty);
-  if (matched != null && (getTrimColorFromRow(row) || getTrimSizeFromRow(row))) {
-    return matched;
-  }
+  if (matched != null) return matched;
   return totalQty;
 };
 

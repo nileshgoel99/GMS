@@ -23,7 +23,7 @@ const CATEGORY_SUGGESTIONS = [
   'Polybag', 'Waist Band', 'Hook & Loop', 'Sticker', 'Other',
 ];
 
-const UNIT_OPTIONS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'CMS', 'CM', 'MM', 'INCH', ''];
+const UNIT_OPTIONS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GROSS', 'CMS', 'CM', 'MM', 'INCH', 'GMS', ''];
 
 const emptyProperty = () => ({ name: '', unit: '' });
 const emptyForm = () => ({ name: '', category: '', default_unit: 'PCS', notes: '', properties: [], supplier: null });
