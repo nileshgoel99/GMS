@@ -15,7 +15,7 @@ import { ordersAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import AddTrimModal from '../components/trims/AddTrimModal';
-import { formatTrimPropertyLabel, isNumericTrimProperty } from '../components/trims/trimConstants';
+import { formatTrimPropertyLabel, isGarmentSizeTrimProperty, isNumericTrimProperty } from '../components/trims/trimConstants';
 
 // ── Print styles ─────────────────────────────────────────────────────────────
 const PRINT_STYLE = `
@@ -79,43 +79,26 @@ const findTrimPropertyValue = (propertyValues, pattern) => {
 const getTrimColorFromRow = (row) =>
   findTrimPropertyValue(row.property_values, /^colou?r$/i) || (row.color_variant?.trim() || '');
 
-const getTrimSizeFromRow = (row) =>
-  findTrimPropertyValue(row.property_values, /^size$/i) || (row.size_variant?.trim() || '');
+const getTrimGarmentSizeFromRow = (row) =>
+  findTrimPropertyValue(row.property_values, /^garment\s*size$/i) || (row.size_variant?.trim() || '');
 
 const piLineMatchesColor = (line, color) =>
   normalizeMatchKey(line.color) === normalizeMatchKey(color);
 
 const sizesMatch = (a, b) => normalizeMatchKey(a) === normalizeMatchKey(b);
 
-const getPiGarmentSizes = (piLines) => {
-  const sizes = new Set();
-  (piLines || []).forEach((line) => {
-    (line.size_breakdown || []).forEach(({ size }) => {
-      if (size) sizes.add(normalizeMatchKey(size));
-    });
-  });
-  return sizes;
-};
-
-/** Only treat trim Size as a PI garment size when it appears in the PI size breakdown. */
-const isPiGarmentSize = (size, piLines) => {
-  const norm = normalizeMatchKey(size);
-  return Boolean(norm && getPiGarmentSizes(piLines).has(norm));
-};
-
-/** Qty from selected PI lines for a trim row's Color / Size properties. */
+/** Qty from selected PI lines for a trim row's Color / Garment Size properties. */
 const qtyFromPiForTrim = (row, piLines, colorQty) => {
   const color = getTrimColorFromRow(row);
-  const size = getTrimSizeFromRow(row);
+  const garmentSize = getTrimGarmentSizeFromRow(row);
   const lines = piLines || [];
-  const useGarmentSize = size && isPiGarmentSize(size, lines);
 
-  if (color && useGarmentSize) {
+  if (color && garmentSize) {
     let qty = 0;
     lines.forEach((line) => {
       if (!piLineMatchesColor(line, color)) return;
       (line.size_breakdown || []).forEach(({ size: s, qty: q }) => {
-        if (sizesMatch(s, size)) qty += parseInt(q, 10) || 0;
+        if (sizesMatch(s, garmentSize)) qty += parseInt(q, 10) || 0;
       });
     });
     if (qty > 0) return qty;
@@ -131,11 +114,11 @@ const qtyFromPiForTrim = (row, piLines, colorQty) => {
     return qty;
   }
 
-  if (useGarmentSize) {
+  if (garmentSize) {
     let qty = 0;
     lines.forEach((line) => {
       (line.size_breakdown || []).forEach(({ size: s, qty: q }) => {
-        if (sizesMatch(s, size)) qty += parseInt(q, 10) || 0;
+        if (sizesMatch(s, garmentSize)) qty += parseInt(q, 10) || 0;
       });
     });
     return qty;
@@ -146,8 +129,8 @@ const qtyFromPiForTrim = (row, piLines, colorQty) => {
 
 const rowQtyForTrim = (row, piLines, colorQty, totalQty) => {
   const color = getTrimColorFromRow(row);
-  const size = getTrimSizeFromRow(row);
-  if (!color && !size) return totalQty;
+  const garmentSize = getTrimGarmentSizeFromRow(row);
+  if (!color && !garmentSize) return totalQty;
   const matched = qtyFromPiForTrim(row, piLines, colorQty);
   if (matched != null) return matched;
   return totalQty;
@@ -1273,7 +1256,7 @@ export default function IndentEditorPage() {
 
       {totalQty > 0 && (
         <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 1.5 }}>
-          Totals auto-calculate from consumption × PI qty. Trims with Color / Size use only the matching PI colour (and size) — e.g. Yellow buttons use Yellow pcs only.
+          Totals auto-calculate from consumption × PI qty. Trims with Color use only the matching PI colour (e.g. Yellow buttons → Yellow pcs). Use Garment Size (not Size) when qty should follow PI size breakdown.
         </Typography>
       )}
 
@@ -1494,7 +1477,7 @@ export default function IndentEditorPage() {
                                 }}>
                                   {schema.map((prop) => {
                                     const isColorProp = /^colou?r$/i.test(String(prop.name).trim());
-                                    const isSizeProp = /^size$/i.test(String(prop.name).trim());
+                                    const isGarmentSizeProp = isGarmentSizeTrimProperty(prop.name);
                                     const isNumericProp = isNumericTrimProperty(prop.name);
                                     const propValue = row.property_values?.[prop.name] || '';
                                     return (
@@ -1532,7 +1515,7 @@ export default function IndentEditorPage() {
                                             <TextField {...params} size="small" fullWidth placeholder="From PI colours" sx={trimPropFieldSx('left')} />
                                           )}
                                         />
-                                      ) : isSizeProp ? (
+                                      ) : isGarmentSizeProp ? (
                                         <Autocomplete
                                           freeSolo
                                           options={piSizeOptions}
@@ -1541,7 +1524,7 @@ export default function IndentEditorPage() {
                                           onInputChange={(_, v) => setTrimPropertyValue(i, prop.name, v)}
                                           sx={{ m: 0, width: '100%' }}
                                           renderInput={(params) => (
-                                            <TextField {...params} size="small" fullWidth placeholder="From PI sizes" sx={trimPropFieldSx('left')} />
+                                            <TextField {...params} size="small" fullWidth placeholder="PI garment size (S, M, L…)" sx={trimPropFieldSx('left')} />
                                           )}
                                         />
                                       ) : (
@@ -1573,11 +1556,14 @@ export default function IndentEditorPage() {
                                       )} />
                                   </Box>
                                   <Box sx={{ flex: '1 1 130px', minWidth: 110, maxWidth: 200 }}>
-                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: slate[600], mb: 0.35 }}>Size</Typography>
-                                    <TextField size="small" fullWidth value={row.size_variant}
-                                      onChange={(e) => setTrimField(i, 'size_variant', e.target.value)}
-                                      placeholder="Size / variant"
-                                      sx={trimPropFieldSx('left')} />
+                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: slate[600], mb: 0.35 }}>Garment Size</Typography>
+                                    <Autocomplete freeSolo options={piSizeOptions} value={row.size_variant}
+                                      onChange={(_, v) => setTrimField(i, 'size_variant', v || '')}
+                                      onInputChange={(_, v) => setTrimField(i, 'size_variant', v)}
+                                      sx={{ m: 0, width: '100%' }}
+                                      renderInput={(params) => (
+                                        <TextField {...params} size="small" fullWidth placeholder="PI garment size" sx={trimPropFieldSx('left')} />
+                                      )} />
                                   </Box>
                                 </Box>
                               )}

@@ -331,7 +331,7 @@ export default function TrimsLibraryPage() {
               </Button>
             </Box>
             <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 1.5 }}>
-              Define property names and units (e.g. Width → CMS, Quality → text, Number / Washes → no unit)
+              Define property names and units (e.g. Width → CMS, Size → button dia., Garment Size → PI size, Number / Washes → no unit)
             </Typography>
             {form.properties.length === 0 ? (
               <Box sx={{ p: 2, bgcolor: alpha(slate[200], 0.3), borderRadius: 1.5, textAlign: 'center' }}>
