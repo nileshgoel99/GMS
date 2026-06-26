@@ -165,6 +165,16 @@ class Indent(models.Model):
     pcs_per_carton = models.PositiveIntegerField(default=0, blank=True)
     carton_ply = models.CharField(max_length=50, blank=True, default='', help_text='e.g. 5 PLY')
     carton_dimensions = models.CharField(max_length=100, blank=True, default='', help_text='e.g. 24.5*14.5*9 (L*W*H)')
+    CARTON_DIM_UNIT_CHOICES = [
+        ('CMS', 'Centimetres'),
+        ('INCH', 'Inches'),
+    ]
+    carton_dimensions_unit = models.CharField(
+        max_length=10,
+        choices=CARTON_DIM_UNIT_CHOICES,
+        default='CMS',
+        blank=True,
+    )
 
     prepared_by = models.CharField(max_length=120, blank=True, default='')
     received_by = models.CharField(max_length=120, blank=True, default='')

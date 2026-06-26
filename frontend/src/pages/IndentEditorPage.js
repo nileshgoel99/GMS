@@ -30,6 +30,13 @@ const PRINT_STYLE = `
 // ── Unit helpers ──────────────────────────────────────────────────────────────
 const UNITS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GROSS', 'GMS', 'CMS'];
 
+const CARTON_DIM_UNITS = [
+  { value: 'CMS', label: 'CMS (cm)' },
+  { value: 'INCH', label: 'Inches' },
+];
+
+const cartonDimUnitLabel = (unit) => (unit === 'INCH' ? 'Inches' : 'CMS');
+
 // ── Empty row factories ───────────────────────────────────────────────────────
 const emptyFabric = () => ({ material: '', color: '', gsm: '', roll_width: '', consumption_per_pc: '', unit: 'MTRS', total_consumption: '', remarks: '' });
 const emptyTrim = () => ({
@@ -581,7 +588,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
             Carton Size:&nbsp;&nbsp;
             {indent.pcs_per_carton ? `${indent.pcs_per_carton} pcs/box` : ''}
             {indent.carton_ply ? `  ${indent.carton_ply}` : ''}
-            {indent.carton_dimensions ? `  ${indent.carton_dimensions} (L*W*H CMS)` : ''}
+            {indent.carton_dimensions ? `  ${indent.carton_dimensions} (L*W*H ${cartonDimUnitLabel(indent.carton_dimensions_unit)})` : ''}
           </Typography>
         </Box>
       )}
@@ -627,6 +634,7 @@ export default function IndentEditorPage() {
   const [pcsPerCarton, setPcsPerCarton] = useState('');
   const [cartonPly,    setCartonPly]   = useState('');
   const [cartonDims,   setCartonDims]  = useState('');
+  const [cartonDimUnit, setCartonDimUnit] = useState('CMS');
   const [preparedBy,   setPreparedBy]  = useState('');
   const [receivedBy,   setReceivedBy]  = useState('');
   const [approvedBy,   setApprovedBy]  = useState('');
@@ -726,6 +734,7 @@ export default function IndentEditorPage() {
           setPcsPerCarton(data.pcs_per_carton || '');
           setCartonPly(data.carton_ply || '');
           setCartonDims(data.carton_dimensions || '');
+          setCartonDimUnit(data.carton_dimensions_unit || 'CMS');
           setPreparedBy(data.prepared_by || '');
           setReceivedBy(data.received_by || '');
           setApprovedBy(data.approved_by || '');
@@ -911,6 +920,7 @@ export default function IndentEditorPage() {
         pcs_per_carton: pcsPerCarton || 0,
         carton_ply: cartonPly,
         carton_dimensions: cartonDims,
+        carton_dimensions_unit: cartonDimUnit,
         prepared_by: preparedBy,
         received_by: receivedBy,
         approved_by: approvedBy,
@@ -1170,9 +1180,11 @@ export default function IndentEditorPage() {
                               minWidth: 100,
                               position: 'sticky',
                               left: 0,
-                              zIndex: 3,
-                              bgcolor: alpha('#6366f1', 0.1),
+                              zIndex: 4,
+                              bgcolor: '#e0e7ff',
+                              backgroundImage: 'none',
                               boxShadow: '2px 0 4px rgba(0,0,0,0.06)',
+                              borderBottom: `1px solid ${slate[300]}`,
                             }}>
                               Colour
                             </TableCell>
@@ -1180,12 +1192,29 @@ export default function IndentEditorPage() {
                               <TableCell
                                 key={size}
                                 align="center"
-                                sx={{ fontWeight: 800, fontSize: '0.68rem', minWidth: 40, px: 0.75, py: 0.75, bgcolor: alpha('#6366f1', 0.06) }}
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: '0.68rem',
+                                  minWidth: 40,
+                                  px: 0.75,
+                                  py: 0.75,
+                                  bgcolor: '#eef2ff',
+                                  backgroundImage: 'none',
+                                  borderBottom: `1px solid ${slate[300]}`,
+                                }}
                               >
                                 {size}
                               </TableCell>
                             ))}
-                            <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.68rem', minWidth: 48, px: 0.75, bgcolor: alpha('#6366f1', 0.06) }}>
+                            <TableCell align="center" sx={{
+                              fontWeight: 800,
+                              fontSize: '0.68rem',
+                              minWidth: 48,
+                              px: 0.75,
+                              bgcolor: '#eef2ff',
+                              backgroundImage: 'none',
+                              borderBottom: `1px solid ${slate[300]}`,
+                            }}>
                               Total
                             </TableCell>
                           </TableRow>
@@ -1390,10 +1419,23 @@ export default function IndentEditorPage() {
                   <TextField size="small" fullWidth label="PLY" value={cartonPly}
                     onChange={(e) => setCartonPly(e.target.value)} placeholder="5 PLY" sx={sxInput} />
                 </Grid>
-                <Grid item xs={12} sm={4} md={3}>
-                  <TextField size="small" fullWidth label="Dimensions (CMS)" value={cartonDims}
-                    onChange={(e) => setCartonDims(e.target.value)} placeholder="L × W × H in CMS"
-                    helperText="Length × Width × Height in centimetres"
+                <Grid item xs={12} sm={4} md={2}>
+                  <TextField size="small" fullWidth select label="Dim. unit" value={cartonDimUnit}
+                    onChange={(e) => setCartonDimUnit(e.target.value)} sx={sxInput}>
+                    {CARTON_DIM_UNITS.map((u) => (
+                      <MenuItem key={u.value} value={u.value}>{u.label}</MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={8} md={4}>
+                  <TextField size="small" fullWidth
+                    label={`Dimensions (${cartonDimUnitLabel(cartonDimUnit)})`}
+                    value={cartonDims}
+                    onChange={(e) => setCartonDims(e.target.value)}
+                    placeholder={cartonDimUnit === 'INCH' ? 'L × W × H in inches' : 'L × W × H in CMS'}
+                    helperText={cartonDimUnit === 'INCH'
+                      ? 'Length × Width × Height in inches'
+                      : 'Length × Width × Height in centimetres'}
                     FormHelperTextProps={{ sx: { mx: 0, fontSize: '0.68rem' } }}
                     sx={sxInput} />
                 </Grid>
@@ -1675,7 +1717,7 @@ export default function IndentEditorPage() {
         <IndentDocument
           pi={pi}
           selectedLines={activeLines}
-          indent={{ indent_number: indentNumber, indent_date: indentDate, pcs_per_carton: pcsPerCarton, carton_ply: cartonPly, carton_dimensions: cartonDims, prepared_by: preparedBy, received_by: receivedBy, approved_by: approvedBy }}
+          indent={{ indent_number: indentNumber, indent_date: indentDate, pcs_per_carton: pcsPerCarton, carton_ply: cartonPly, carton_dimensions: cartonDims, carton_dimensions_unit: cartonDimUnit, prepared_by: preparedBy, received_by: receivedBy, approved_by: approvedBy }}
           fabricLines={fabricLines}
           trimLines={trimLines}
           company={company}

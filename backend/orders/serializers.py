@@ -294,7 +294,7 @@ class IndentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'pi', 'pi_number', 'pi_lines', 'selected_pi_line_ids',
             'indent_number', 'indent_date', 'status',
-            'pcs_per_carton', 'carton_ply', 'carton_dimensions',
+            'pcs_per_carton', 'carton_ply', 'carton_dimensions', 'carton_dimensions_unit',
             'prepared_by', 'received_by', 'approved_by', 'notes',
             'fabric_lines', 'trim_lines',
             'created_by', 'created_by_name', 'created_at', 'updated_at',

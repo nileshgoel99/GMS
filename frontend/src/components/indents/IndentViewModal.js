@@ -185,7 +185,12 @@ export default function IndentViewModal({ open, indentId, onClose }) {
             <Grid container spacing={2}>
               <Grid item xs={4} sm={2}><InfoItem label="Pcs/Box" value={indent.pcs_per_carton} /></Grid>
               <Grid item xs={4} sm={2}><InfoItem label="Carton PLY" value={indent.carton_ply} /></Grid>
-              <Grid item xs={4} sm={3}><InfoItem label="Dimensions (CMS)" value={indent.carton_dimensions} /></Grid>
+              <Grid item xs={4} sm={3}>
+                <InfoItem
+                  label={`Dimensions (${indent.carton_dimensions_unit === 'INCH' ? 'Inches' : 'CMS'})`}
+                  value={indent.carton_dimensions}
+                />
+              </Grid>
               <Grid item xs={12} sm={5}><InfoItem label="Prepared By" value={indent.prepared_by} /></Grid>
               <Grid item xs={6} sm={4}><InfoItem label="Received By" value={indent.received_by} /></Grid>
               <Grid item xs={6} sm={4}><InfoItem label="Approved By" value={indent.approved_by} /></Grid>
