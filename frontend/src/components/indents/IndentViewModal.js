@@ -85,12 +85,27 @@ export default function IndentViewModal({ open, indentId, onClose }) {
     (async () => {
       setLoading(true);
       try {
-        const [indentRes, trimsRes] = await Promise.all([
-          ordersAPI.getIndent(indentId),
-          ordersAPI.getTrimsMaster(),
-        ]);
-        setIndent(indentRes.data);
-        const trims = Array.isArray(trimsRes.data) ? trimsRes.data : trimsRes.data?.results || [];
+        const indentRes = await ordersAPI.getIndent(indentId);
+        const data = indentRes.data;
+        setIndent(data);
+        const trims = [...(data.linked_trims || [])];
+        try {
+          const trimsRes = await ordersAPI.getIndentTrimsLibrary();
+          const library = Array.isArray(trimsRes.data) ? trimsRes.data : trimsRes.data?.results || [];
+          library.forEach((t) => {
+            if (!trims.some((m) => m.id === t.id)) trims.push(t);
+          });
+        } catch {
+          try {
+            const trimsRes = await ordersAPI.getTrimsMaster();
+            const library = Array.isArray(trimsRes.data) ? trimsRes.data : trimsRes.data?.results || [];
+            library.forEach((t) => {
+              if (!trims.some((m) => m.id === t.id)) trims.push(t);
+            });
+          } catch {
+            /* linked_trims only */
+          }
+        }
         setTrimsMap(Object.fromEntries(trims.map((t) => [t.id, t])));
       } catch (e) {
         console.error(e);

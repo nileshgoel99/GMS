@@ -251,6 +251,20 @@ class ProformaInvoiceListSerializer(serializers.ModelSerializer):
 # Indent / TrimMaster serializers
 # ---------------------------------------------------------------------------
 
+class BlankAsZeroDecimalField(serializers.DecimalField):
+    """Treat blank/null as zero — indent BOM rows often omit totals until calculated."""
+
+    def to_internal_value(self, data):
+        if data is None or data == '':
+            return Decimal('0')
+        if isinstance(data, str) and not data.strip():
+            return Decimal('0')
+        try:
+            return super().to_internal_value(data)
+        except serializers.ValidationError:
+            return Decimal('0')
+
+
 class TrimMasterSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, default='')
     supplier_country = serializers.CharField(source='supplier.country', read_only=True, default='')
@@ -261,7 +275,28 @@ class TrimMasterSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'created_at', 'updated_at')
 
 
+class IndentPiOptionSerializer(serializers.ModelSerializer):
+    """Minimal PI fields for indent creation picker."""
+
+    class Meta:
+        model = ProformaInvoice
+        fields = ['id', 'pi_number', 'client_name', 'quantity', 'garment_type', 'order_date']
+
+
+class IndentPiContextSerializer(serializers.ModelSerializer):
+    """PI + lines for indent workflow without full PI module access."""
+
+    lines = ProformaInvoiceLineSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ProformaInvoice
+        fields = ['id', 'pi_number', 'client_name', 'buyer_po_number', 'order_date', 'quantity', 'lines']
+
+
 class IndentFabricLineSerializer(serializers.ModelSerializer):
+    consumption_per_pc = BlankAsZeroDecimalField(max_digits=10, decimal_places=4, required=False)
+    total_consumption = BlankAsZeroDecimalField(max_digits=14, decimal_places=4, required=False)
+
     class Meta:
         model = IndentFabricLine
         fields = [
@@ -272,6 +307,9 @@ class IndentFabricLineSerializer(serializers.ModelSerializer):
 
 
 class IndentTrimLineSerializer(serializers.ModelSerializer):
+    consumption_per_pc = BlankAsZeroDecimalField(max_digits=10, decimal_places=4, required=False)
+    total_consumption = BlankAsZeroDecimalField(max_digits=14, decimal_places=4, required=False)
+
     class Meta:
         model = IndentTrimLine
         fields = [
@@ -287,12 +325,16 @@ class IndentSerializer(serializers.ModelSerializer):
     trim_lines = IndentTrimLineSerializer(many=True, required=False)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     pi_number = serializers.CharField(source='pi.pi_number', read_only=True)
+    pi_client_name = serializers.CharField(source='pi.client_name', read_only=True)
     pi_lines = serializers.SerializerMethodField()
+    pi_detail = serializers.SerializerMethodField()
+    linked_trims = serializers.SerializerMethodField()
 
     class Meta:
         model = Indent
         fields = [
-            'id', 'pi', 'pi_number', 'pi_lines', 'selected_pi_line_ids',
+            'id', 'pi', 'pi_number', 'pi_client_name', 'pi_lines', 'pi_detail', 'linked_trims',
+            'selected_pi_line_ids',
             'indent_number', 'indent_date', 'status',
             'pcs_per_carton', 'carton_ply', 'carton_dimensions', 'carton_dimensions_unit',
             'prepared_by', 'received_by', 'approved_by', 'notes',
@@ -303,6 +345,16 @@ class IndentSerializer(serializers.ModelSerializer):
 
     def get_pi_lines(self, obj):
         return ProformaInvoiceLineSerializer(obj.pi.lines.all(), many=True).data
+
+    def get_pi_detail(self, obj):
+        return IndentPiContextSerializer(obj.pi).data
+
+    def get_linked_trims(self, obj):
+        trim_ids = obj.trim_lines.exclude(trim_id__isnull=True).values_list('trim_id', flat=True).distinct()
+        if not trim_ids:
+            return []
+        qs = TrimMaster.objects.filter(id__in=trim_ids).select_related('supplier')
+        return TrimMasterSerializer(qs, many=True).data
 
     def _save_lines(self, indent, fabric_data, trim_data):
         indent.fabric_lines.all().delete()

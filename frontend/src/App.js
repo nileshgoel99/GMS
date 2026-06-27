@@ -26,6 +26,8 @@ import CompanyPage from './pages/CompanyPage';
 import BuyerPOs from './pages/BuyerPOs';
 import BuyerPOEditorPage from './pages/BuyerPOEditorPage';
 import GeneratePIPage from './pages/GeneratePIPage';
+import UsersPage from './pages/UsersPage';
+import ProfilePage from './pages/ProfilePage';
 
 // Forces a full remount when navigating between different PO IDs (new vs edit)
 function BuyerPOEditorPageKeyed() {
@@ -237,6 +239,26 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <GeneratePIPage />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <ProfilePage />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <PrivateRoute module="users">
+                  <Layout>
+                    <UsersPage />
                   </Layout>
                 </PrivateRoute>
               }

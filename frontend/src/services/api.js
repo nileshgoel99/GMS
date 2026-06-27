@@ -59,6 +59,19 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (credentials) => axios.post(`${API_BASE_URL}/token/`, credentials),
   refresh: (refresh) => axios.post(`${API_BASE_URL}/token/refresh/`, { refresh }),
+  me: () => api.get('/accounts/me/'),
+  updateMe: (data) => api.patch('/accounts/me/', data),
+};
+
+export const accountsAPI = {
+  getUsers: (params) => api.get('/accounts/users/', { params }),
+  createUser: (data) => api.post('/accounts/users/', data),
+  updateUser: (id, data) => api.patch(`/accounts/users/${id}/`, data),
+  getRoles: (params) => api.get('/accounts/roles/', { params }),
+  createRole: (data) => api.post('/accounts/roles/', data),
+  updateRole: (id, data) => api.patch(`/accounts/roles/${id}/`, data),
+  deleteRole: (id) => api.delete(`/accounts/roles/${id}/`),
+  getModules: () => api.get('/accounts/modules/'),
 };
 
 export const companyAPI = {
@@ -137,6 +150,9 @@ export const ordersAPI = {
   deleteIndent: (id) => api.delete(`/orders/indents/${id}/`),
   getNextIndentNumber: () => api.get('/orders/indents/next-number/'),
   getIndentTemplate: (itemName) => api.get('/orders/indents/template/', { params: { item_name: itemName } }),
+  getIndentPiOptions: (params) => api.get('/orders/indents/pi-options/', { params }),
+  getIndentPiContext: (piId) => api.get('/orders/indents/pi-context/', { params: { pi: piId } }),
+  getIndentTrimsLibrary: (params) => api.get('/orders/indents/trims-library/', { params }),
 
   // Indent templates (read-only)
   getIndentTemplates: (params) => api.get('/orders/indent-templates/', { params }),

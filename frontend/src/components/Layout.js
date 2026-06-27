@@ -36,10 +36,14 @@ import {
   ReceiptLong as ReceiptLongIcon,
   PointOfSale as PointOfSaleIcon,
   LocalShipping as LocalShippingIcon,
+  Inventory2 as InventoryIcon,
+  ManageAccounts as ManageAccountsIcon,
+  PersonOutline as PersonOutlineIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { layoutDrawerWidth, navChrome, slate } from '../theme/appTheme';
+import { hasModuleAccess, dashboardTitleForUser } from '../config/permissions';
 
 const DRAWER_COLLAPSED_WIDTH = 88;
 
@@ -47,42 +51,50 @@ const navGroups = [
   {
     id: 'overview',
     label: 'Overview',
-    items: [{ text: 'Plant dashboard', icon: <DashboardIcon />, path: '/' }],
+    items: [{ text: 'Dashboard', icon: <DashboardIcon />, path: '/', module: null }],
   },
   {
     id: 'commercial',
     label: 'Merchandising & sales',
     items: [
-      { text: 'Buyers', icon: <PublicIcon />, path: '/customers' },
-      { text: 'Buyer POs', icon: <ReceiptLongIcon />, path: '/buyer-pos' },
-      { text: 'Sales entry', icon: <PointOfSaleIcon />, path: '/sales' },
-      { text: 'Proforma invoices', icon: <AssignmentIcon />, path: '/orders' },
+      { text: 'Buyers', icon: <PublicIcon />, path: '/customers', module: 'customers' },
+      { text: 'Buyer POs', icon: <ReceiptLongIcon />, path: '/buyer-pos', module: 'buyer_pos' },
+      { text: 'Sales entry', icon: <PointOfSaleIcon />, path: '/sales', module: 'sales' },
+      { text: 'Proforma invoices', icon: <AssignmentIcon />, path: '/orders', module: 'pi' },
     ],
   },
   {
     id: 'planning',
     label: 'Planning',
-    items: [{ text: 'Indents', icon: <ListAltIcon />, path: '/indents' }],
+    items: [{ text: 'Indents', icon: <ListAltIcon />, path: '/indents', module: 'indents' }],
   },
   {
     id: 'supply',
     label: 'Materials & buying',
     items: [
-      { text: 'Trims library', icon: <ListAltIcon />, path: '/trims' },
-      { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers' },
-      { text: 'Supplier POs', icon: <ShoppingCartIcon />, path: '/procurement' },
-      { text: 'Purchase bill entry', icon: <ReceiptLongIcon />, path: '/purchase-bills' },
+      { text: 'Trims library', icon: <ListAltIcon />, path: '/trims', module: 'trims' },
+      { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers', module: 'suppliers' },
+      { text: 'Supplier POs', icon: <ShoppingCartIcon />, path: '/procurement', module: 'supplier_po' },
+      { text: 'Purchase bill entry', icon: <ReceiptLongIcon />, path: '/purchase-bills', module: 'purchase_bills' },
     ],
+  },
+  {
+    id: 'stock',
+    label: 'Stock',
+    items: [{ text: 'Inventory', icon: <InventoryIcon />, path: '/inventory', module: 'inventory' }],
   },
   {
     id: 'floor',
     label: 'Shop floor',
-    items: [{ text: 'Cutting, sewing & finishing', icon: <ManufacturingIcon />, path: '/production' }],
+    items: [{ text: 'Cutting, sewing & finishing', icon: <ManufacturingIcon />, path: '/production', module: 'production' }],
   },
   {
     id: 'organization',
     label: 'Organization',
-    items: [{ text: 'Company details', icon: <BusinessIcon />, path: '/company' }],
+    items: [
+      { text: 'Company details', icon: <BusinessIcon />, path: '/company', module: 'company' },
+      { text: 'Users & roles', icon: <ManageAccountsIcon />, path: '/users', module: 'users' },
+    ],
   },
 ];
 
@@ -103,6 +115,8 @@ const routeMeta = {
     '/sales/new': { title: 'New sales entry' },
   '/production': { title: 'Production' },
   '/company': { title: 'Company details' },
+  '/profile': { title: 'My profile' },
+  '/users': { title: 'Users & roles' },
 };
 
 const pathMatchesNav = (pathname, path) => {
@@ -111,6 +125,8 @@ const pathMatchesNav = (pathname, path) => {
   if (path === '/indents') return pathname === '/indents' || pathname.startsWith('/indents/');
   if (path === '/purchase-bills') return pathname === '/purchase-bills' || pathname.startsWith('/purchase-bills/');
   if (path === '/sales') return pathname === '/sales' || pathname.startsWith('/sales/');
+  if (path === '/users') return pathname === '/users' || pathname.startsWith('/users/');
+  if (path === '/inventory') return pathname === '/inventory' || pathname.startsWith('/inventory/');
   return pathname === path || pathname.startsWith(`${path}/`);
 };
 
@@ -127,20 +143,41 @@ const Layout = ({ children }) => {
   const drawerWidth = collapsed ? DRAWER_COLLAPSED_WIDTH : layoutDrawerWidth;
   const sidebarBorder = navChrome.border;
 
+  const visibleNavGroups = useMemo(() => navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.module || hasModuleAccess(user, item.module)),
+    }))
+    .filter((group) => group.items.length > 0), [user]);
+
   const header = useMemo(() => {
     if (location.pathname.startsWith('/orders/pi/')) {
       return { title: 'Proforma Invoice' };
     }
+    if (location.pathname === '/') {
+      return { title: dashboardTitleForUser(user) };
+    }
     const meta = routeMeta[location.pathname] || { title: 'GMS' };
     return { title: meta.title };
-  }, [location.pathname]);
+  }, [location.pathname, user]);
+
+  const displayName = useMemo(() => {
+    const full = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
+    return full || user?.username || 'User';
+  }, [user?.first_name, user?.last_name, user?.username]);
 
   const initials = useMemo(() => {
+    const fn = user?.first_name?.trim();
+    const ln = user?.last_name?.trim();
+    if (fn || ln) {
+      const letters = `${fn?.[0] || ''}${ln?.[0] || ''}`.toUpperCase();
+      if (letters) return letters;
+    }
     const name = user?.username || 'U';
     const parts = name.replace(/[^a-zA-Z0-9]/g, ' ').trim().split(/\s+/);
     if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     return name.slice(0, 2).toUpperCase();
-  }, [user?.username]);
+  }, [user?.first_name, user?.last_name, user?.username]);
 
   const drawer = (
     <Box
@@ -279,7 +316,7 @@ const Layout = ({ children }) => {
         zIndex: 1,
         py: 0.5,
       }}>
-        {navGroups.map((group) => (
+        {visibleNavGroups.map((group) => (
           <Fragment key={group.id}>
             {!compactNav ? (
               <ListSubheader
@@ -400,9 +437,21 @@ const Layout = ({ children }) => {
             </Typography>
           ) : null}
           {!compactNav ? (
-            <Typography variant="body2" sx={{ color: '#fff', fontWeight: 700, mt: 0.5 }} noWrap title={user?.username}>
-              {user?.username || 'User'}
-            </Typography>
+            <>
+              <Typography variant="body2" sx={{ color: '#fff', fontWeight: 700, mt: 0.5 }} noWrap title={displayName}>
+                {displayName}
+              </Typography>
+              {user?.username && displayName !== user.username && (
+                <Typography variant="caption" sx={{ color: alpha('#fff', 0.65), fontWeight: 600, display: 'block' }} noWrap>
+                  @{user.username}
+                </Typography>
+              )}
+              {user?.role_label && (
+                <Typography variant="caption" sx={{ color: alpha('#fff', 0.72), fontWeight: 600, display: 'block', mt: 0.25 }}>
+                  {user.role_label}
+                </Typography>
+              )}
+            </>
           ) : (
             <Stack direction="row" justifyContent="center" sx={{ py: 0.5 }}>
               <Avatar
@@ -422,13 +471,37 @@ const Layout = ({ children }) => {
           <Button
             fullWidth
             variant="outlined"
+            startIcon={compactNav ? null : <PersonOutlineIcon />}
+            onClick={() => {
+              navigate('/profile');
+              setMobileOpen(false);
+            }}
+            sx={{
+              mt: 1.35,
+              borderColor: alpha('#fff', 0.28),
+              color: '#fff',
+              fontWeight: 600,
+              textTransform: 'none',
+              '& .MuiButton-startIcon': { color: alpha('#fff', 0.85) },
+              '&:hover': {
+                borderColor: alpha(theme.palette.primary.light, 0.65),
+                bgcolor: alpha(theme.palette.primary.main, 0.18),
+                color: '#fff',
+              },
+            }}
+          >
+            {compactNav ? <PersonOutlineIcon fontSize="small" /> : 'My profile'}
+          </Button>
+          <Button
+            fullWidth
+            variant="outlined"
             startIcon={compactNav ? null : <LogoutIcon />}
             onClick={() => {
               logout();
               navigate('/login');
             }}
             sx={{
-              mt: 1.35,
+              mt: 1,
               borderColor: alpha('#fff', 0.28),
               color: '#fff',
               fontWeight: 600,
@@ -509,19 +582,32 @@ const Layout = ({ children }) => {
                 Operator
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
-                {user?.username || '—'}
+                {displayName}
               </Typography>
             </Box>
-            <Avatar
-              sx={{
-                bgcolor: alpha(theme.palette.primary.main, 0.12),
-                color: 'primary.dark',
-                fontWeight: 600,
-                fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-              }}
-            >
-              {initials}
-            </Avatar>
+            <Tooltip title="My profile">
+              <IconButton
+                onClick={() => navigate('/profile')}
+                sx={{
+                  bgcolor: alpha(theme.palette.primary.main, 0.08),
+                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.14) },
+                }}
+                aria-label="My profile"
+              >
+                <Avatar
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    bgcolor: alpha(theme.palette.primary.main, 0.12),
+                    color: 'primary.dark',
+                    fontWeight: 600,
+                    fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+                  }}
+                >
+                  {initials}
+                </Avatar>
+              </IconButton>
+            </Tooltip>
             <Button variant="outlined" color="inherit" onClick={handleLogout} sx={{ borderColor: alpha(theme.palette.text.primary, 0.12) }}>
               Sign out
             </Button>

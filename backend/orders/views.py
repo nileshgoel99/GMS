@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.db.models import Count, Sum
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 
 from rest_framework import viewsets, filters, status, parsers
 from rest_framework.decorators import action
@@ -17,6 +18,8 @@ from .serializers import (
     TrimMasterSerializer,
     IndentSerializer,
     IndentListSerializer,
+    IndentPiOptionSerializer,
+    IndentPiContextSerializer,
     ItemIndentTemplateSerializer,
     BuyerPOSerializer,
     BuyerPOListSerializer,
@@ -125,6 +128,28 @@ class IndentViewSet(viewsets.ModelViewSet):
             return Response(ItemIndentTemplateSerializer(tmpl).data)
         except ItemIndentTemplate.DoesNotExist:
             return Response(None, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['get'], url_path='pi-options')
+    def pi_options(self, request):
+        """PI list for indent creation — available without PI module access."""
+        qs = ProformaInvoice.objects.all().order_by('-order_date', '-created_at')
+        serializer = IndentPiOptionSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='pi-context')
+    def pi_context(self, request):
+        """Linked PI details for indent workflow — available without PI module access."""
+        pi_id = request.query_params.get('pi', '').strip()
+        if not pi_id:
+            return Response({'detail': 'pi query param required.'}, status=status.HTTP_400_BAD_REQUEST)
+        pi = get_object_or_404(ProformaInvoice.objects.prefetch_related('lines'), pk=pi_id)
+        return Response(IndentPiContextSerializer(pi).data)
+
+    @action(detail=False, methods=['get'], url_path='trims-library')
+    def trims_library(self, request):
+        """Read-only trims library for indent editor — available without trims module access."""
+        qs = TrimMaster.objects.select_related('supplier').all().order_by('category', 'name')
+        return Response(TrimMasterSerializer(qs, many=True).data)
 
 
 class ItemIndentTemplateViewSet(viewsets.ReadOnlyModelViewSet):

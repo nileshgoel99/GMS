@@ -11,7 +11,127 @@ import PayablesDueModal from '../components/dashboard/PayablesDueModal';
 import ActiveOrdersModal from '../components/dashboard/ActiveOrdersModal';
 import PurchaseOrdersModal from '../components/dashboard/PurchaseOrdersModal';
 import PosDueToReceiveModal from '../components/dashboard/PosDueToReceiveModal';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { hasModuleAccess, dashboardTitleForUser } from '../config/permissions';
 import { ordersAPI, inventoryAPI, procurementAPI, productionAPI, purchaseBillAPI, salesEntryAPI } from '../services/api';
+
+const ROLE_HERO = {
+  ADMIN: {
+    overline: 'Executive overview',
+    headline: <>Manufacturing <Box component="span" sx={{ color: 'primary.main' }}>control tower</Box></>,
+    subtitle: 'Throughput, materials risk, purchasing, and production at a glance—aligned for daily operations and management review.',
+  },
+  MANAGER: {
+    overline: 'Operations',
+    headline: <>Stock & <Box component="span" sx={{ color: 'primary.main' }}>materials</Box></>,
+    subtitle: 'Inventory levels, reorder alerts, and indent workflow—your plant operations at a glance.',
+  },
+  MERCHANDISER: {
+    overline: 'Merchandising',
+    headline: <>Orders & <Box component="span" sx={{ color: 'primary.main' }}>buyer pipeline</Box></>,
+    subtitle: 'Active PIs, order status, and merchandising workflow across buyers and indents.',
+  },
+  ACCOUNTS: {
+    overline: 'Finance',
+    headline: <>Cash flow & <Box component="span" sx={{ color: 'primary.main' }}>payments</Box></>,
+    subtitle: 'Receivables to collect and payables due this month—accounts overview at a glance.',
+  },
+  PURCHASING: {
+    overline: 'Procurement',
+    headline: <>Supplier POs & <Box component="span" sx={{ color: 'primary.main' }}>receipts</Box></>,
+    subtitle: 'Purchase orders, expected deliveries, and vendor commitments for the month.',
+  },
+};
+
+const DashboardHero = ({ theme, title, overline, headline, subtitle }) => (
+  <Paper
+    elevation={0}
+    sx={{
+      mb: { xs: 2.5, md: 3 },
+      p: { xs: 2.5, sm: 3 },
+      borderRadius: '18px',
+      border: '1px solid',
+      borderColor: 'divider',
+      bgcolor: 'background.paper',
+      boxShadow: theme.shadows[1],
+    }}
+  >
+    <Typography variant="overline" color="primary" sx={{ fontWeight: 600, letterSpacing: '0.08em' }}>
+      {overline}
+    </Typography>
+    <Typography
+      variant="h3"
+      component="h1"
+      sx={{
+        mt: 0.75,
+        fontWeight: 600,
+        letterSpacing: '-0.03em',
+        lineHeight: 1.2,
+        color: 'text.primary',
+      }}
+    >
+      {headline || title}
+    </Typography>
+    <Typography variant="body1" color="text.secondary" sx={{ mt: 1.25, maxWidth: 720, fontWeight: 400, lineHeight: 1.6 }}>
+      {subtitle}
+    </Typography>
+  </Paper>
+);
+
+const DashboardLoading = ({ theme }) => (
+  <Box
+    display="flex"
+    flexDirection="column"
+    justifyContent="center"
+    alignItems="center"
+    minHeight="420px"
+    gap={2}
+    sx={{
+      borderRadius: '12px',
+      border: `1px solid ${theme.palette.divider}`,
+      bgcolor: 'background.paper',
+    }}
+  >
+    <CircularProgress size={36} thickness={4} sx={{ color: 'primary.main' }} />
+    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+      Loading dashboard…
+    </Typography>
+  </Box>
+);
+
+const MaterialsRiskCard = ({ theme, count }) => (
+  <SectionCard title="Materials risk" subtitle="Items at or below reorder thresholds" accent="warning">
+    <Stack direction="row" spacing={2} alignItems="center" sx={{ py: 0.5 }}>
+      <Box
+        sx={{
+          width: 56,
+          height: 56,
+          borderRadius: '12px',
+          display: 'grid',
+          placeItems: 'center',
+          bgcolor: alpha(theme.palette.warning.main, 0.12),
+          border: `1px solid ${alpha(theme.palette.warning.main, 0.35)}`,
+          color: 'warning.dark',
+        }}
+      >
+        <WarningAmber sx={{ fontSize: 30 }} />
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          variant="h3"
+          className="font-numeric"
+          sx={{ fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1, color: 'warning.dark' }}
+        >
+          {count}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontWeight: 400 }}>
+          SKUs require procurement attention
+        </Typography>
+      </Box>
+    </Stack>
+  </SectionCard>
+);
 
 const statusLabel = (key) =>
   String(key || '')
@@ -240,6 +360,11 @@ const StatusRows = ({ data }) => {
 
 const Dashboard = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const dashboardRole = user?.is_admin ? 'ADMIN' : (user?.role || 'ADMIN');
+  const hero = ROLE_HERO[dashboardRole] || ROLE_HERO.ADMIN;
+
   const [loading, setLoading] = useState(true);
   const [receivablesOpen, setReceivablesOpen] = useState(false);
   const [payablesOpen, setPayablesOpen] = useState(false);
@@ -256,351 +381,382 @@ const Dashboard = () => {
   });
 
   useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     const fetchStats = async () => {
-      const [
-        ordersRes,
-        inventoryRes,
-        procurementRes,
-        productionRes,
-        paymentDueRes,
-        payablesRes,
-      ] = await Promise.allSettled([
-        ordersAPI.getStatistics(),
-        inventoryAPI.getStatistics(),
-        procurementAPI.getStatistics(),
-        productionAPI.getStatistics(),
-        salesEntryAPI.getReceivablesSummary(),
-        purchaseBillAPI.getPayablesDueSummary(),
-      ]);
+      const tasks = [];
 
-      const pick = (res, fallback = {}) => (res.status === 'fulfilled' ? res.value.data : fallback);
-      if (ordersRes.status === 'rejected') console.error('Orders stats:', ordersRes.reason);
-      if (inventoryRes.status === 'rejected') console.error('Inventory stats:', inventoryRes.reason);
-      if (procurementRes.status === 'rejected') console.error('Procurement stats:', procurementRes.reason);
-      if (productionRes.status === 'rejected') console.error('Production stats:', productionRes.reason);
-      if (paymentDueRes.status === 'rejected') console.error('Receivables summary:', paymentDueRes.reason);
-      if (payablesRes.status === 'rejected') console.error('Payables summary:', payablesRes.reason);
+      if (hasModuleAccess(user, 'pi') || dashboardRole === 'ADMIN') {
+        tasks.push(['orders', ordersAPI.getStatistics()]);
+      }
+      if (hasModuleAccess(user, 'inventory') || dashboardRole === 'ADMIN') {
+        tasks.push(['inventory', inventoryAPI.getStatistics()]);
+      }
+      if (hasModuleAccess(user, 'supplier_po') || dashboardRole === 'ADMIN') {
+        tasks.push(['procurement', procurementAPI.getStatistics()]);
+      }
+      if (hasModuleAccess(user, 'production') || dashboardRole === 'ADMIN') {
+        tasks.push(['production', productionAPI.getStatistics()]);
+      }
+      if (hasModuleAccess(user, 'sales') || dashboardRole === 'ADMIN') {
+        tasks.push(['paymentDue', salesEntryAPI.getReceivablesSummary()]);
+      }
+      if (hasModuleAccess(user, 'purchase_bills') || dashboardRole === 'ADMIN') {
+        tasks.push(['payables', purchaseBillAPI.getPayablesDueSummary()]);
+      }
 
-      setStats({
-        orders: pick(ordersRes),
-        inventory: pick(inventoryRes),
-        procurement: pick(procurementRes),
-        production: pick(productionRes),
-        paymentDue: pick(paymentDueRes),
+      const results = await Promise.allSettled(tasks.map(([, p]) => p));
+      const next = { orders: {}, inventory: {}, procurement: {}, production: {}, paymentDue: {} };
+      let payables = {};
+
+      results.forEach((res, idx) => {
+        const [key] = tasks[idx];
+        if (res.status === 'fulfilled') {
+          if (key === 'payables') payables = res.value.data;
+          else next[key] = res.value.data;
+        } else {
+          console.error(`${key} stats:`, res.reason);
+        }
       });
-      setPayablesDue(pick(payablesRes));
+
+      setStats(next);
+      setPayablesDue(payables);
       setLoading(false);
     };
 
     fetchStats();
-  }, []);
+  }, [user, dashboardRole]);
 
   if (loading) {
-    return (
-      <Box
-        display="flex"
-        flexDirection="column"
-        justifyContent="center"
-        alignItems="center"
-        minHeight="420px"
-        gap={2}
-        sx={{
-          borderRadius: '12px',
-          border: `1px solid ${theme.palette.divider}`,
-          bgcolor: 'background.paper',
-        }}
-      >
-        <CircularProgress size={36} thickness={4} sx={{ color: 'primary.main' }} />
-        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-          Loading dashboard…
-        </Typography>
-      </Box>
-    );
+    return <DashboardLoading theme={theme} />;
   }
+
+  const showOrders = hasModuleAccess(user, 'pi') || dashboardRole === 'ADMIN';
+  const showInventory = hasModuleAccess(user, 'inventory') || dashboardRole === 'ADMIN';
+  const showProcurement = hasModuleAccess(user, 'supplier_po') || dashboardRole === 'ADMIN';
+  const showProduction = hasModuleAccess(user, 'production') || dashboardRole === 'ADMIN';
+  const showReceivables = hasModuleAccess(user, 'sales') || dashboardRole === 'ADMIN';
+  const showPayables = hasModuleAccess(user, 'purchase_bills') || dashboardRole === 'ADMIN';
+
+  const renderRoleContent = () => {
+    if (dashboardRole === 'MANAGER') {
+      return (
+        <>
+          <Grid container spacing={{ xs: 2, sm: 2.5 }} sx={{ mb: { xs: 2, sm: 2.5 } }}>
+            <Grid item xs={12} sm={6}>
+              <StatCard
+                accent="success"
+                title="Inventory SKUs"
+                value={stats.inventory.total_items || 0}
+                subtitle="Tracked materials and trims"
+                icon={<Inventory2 sx={{ fontSize: 24 }} />}
+                onClick={() => navigate('/inventory')}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <StatCard
+                accent="warning"
+                title="Low stock items"
+                value={stats.inventory.low_stock_items || 0}
+                subtitle="SKUs at or below reorder level"
+                icon={<WarningAmber sx={{ fontSize: 24 }} />}
+                onClick={() => navigate('/inventory')}
+              />
+            </Grid>
+          </Grid>
+          <Grid container spacing={{ xs: 2, sm: 2.5 }}>
+            <Grid item xs={12} md={6}>
+              <MaterialsRiskCard theme={theme} count={stats.inventory.low_stock_items || 0} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <SectionCard title="Quick links" subtitle="Jump to your workspace modules" accent="primary">
+                <Stack spacing={1.5}>
+                  <StatCard
+                    accent="info"
+                    title="Indents"
+                    value="→"
+                    subtitle="Create and manage material indents"
+                    icon={<Assignment sx={{ fontSize: 24 }} />}
+                    onClick={() => navigate('/indents')}
+                  />
+                  <StatCard
+                    accent="success"
+                    title="Inventory"
+                    value="→"
+                    subtitle="Stock levels and SKU management"
+                    icon={<Inventory2 sx={{ fontSize: 24 }} />}
+                    onClick={() => navigate('/inventory')}
+                  />
+                </Stack>
+              </SectionCard>
+            </Grid>
+          </Grid>
+        </>
+      );
+    }
+
+    if (dashboardRole === 'MERCHANDISER') {
+      return (
+        <>
+          <Grid container spacing={{ xs: 2, sm: 2.5 }} sx={{ mb: { xs: 2, sm: 2.5 } }}>
+            <Grid item xs={12} sm={6}>
+              <StatCard
+                accent="info"
+                title="Active orders"
+                value={stats.orders.total_orders || 0}
+                subtitle="PI records in the system"
+                icon={<Assignment sx={{ fontSize: 24 }} />}
+                onClick={() => setActiveOrdersOpen(true)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <StatCard
+                accent="primary"
+                title="Indents"
+                value="→"
+                subtitle="Material indents for production"
+                icon={<Factory sx={{ fontSize: 24 }} />}
+                onClick={() => navigate('/indents')}
+              />
+            </Grid>
+          </Grid>
+          <Grid container spacing={{ xs: 2, sm: 2.5 }}>
+            <Grid item xs={12} md={6}>
+              <SectionCard title="Orders by status" subtitle="Pipeline distribution across PI lifecycle" accent="info">
+                <StatusRows data={stats.orders.by_status} />
+              </SectionCard>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <SectionCard title="Quick links" subtitle="Merchandising workflow" accent="primary">
+                <Stack spacing={1.5}>
+                  <StatCard accent="info" title="Buyer POs" value="→" subtitle="Buyer purchase orders" icon={<ShoppingCart sx={{ fontSize: 24 }} />} onClick={() => navigate('/buyer-pos')} />
+                  <StatCard accent="secondary" title="Proforma invoices" value="→" subtitle="PI records and order pipeline" icon={<Assignment sx={{ fontSize: 24 }} />} onClick={() => navigate('/orders')} />
+                </Stack>
+              </SectionCard>
+            </Grid>
+          </Grid>
+        </>
+      );
+    }
+
+    if (dashboardRole === 'ACCOUNTS') {
+      return (
+        <Grid container spacing={{ xs: 2, sm: 2.5 }}>
+          <Grid item xs={12}>
+            <SectionCard
+              title="Cash Flow — Due This Month"
+              subtitle={`${stats.procurement.current_month || stats.paymentDue.current_month || 'Current month'} · Receivables and payables`}
+              accent="primary"
+              headerIcon={<AccountBalance sx={{ fontSize: 22 }} />}
+            >
+              <Stack spacing={1.5}>
+                <PaymentDueRow
+                  icon={<AccountBalanceWallet sx={{ fontSize: 22 }} />}
+                  iconBg={alpha('#059669', 0.07)}
+                  iconColor="#047857"
+                  borderColor={alpha('#059669', 0.22)}
+                  title="Receivables — To Be Collected"
+                  description="Sales entries with balance due for collection this month"
+                  amount={formatCurrency(stats.paymentDue.payments_due_to_collect?.total_amount, 'USD')}
+                  count={stats.paymentDue.payments_due_to_collect?.count || 0}
+                  countLabel="order(s)"
+                  onClick={() => setReceivablesOpen(true)}
+                />
+                <PaymentDueRow
+                  icon={<Payments sx={{ fontSize: 22 }} />}
+                  iconBg={alpha(theme.palette.error.main, 0.07)}
+                  iconColor={theme.palette.error.dark}
+                  borderColor={alpha(theme.palette.error.main, 0.22)}
+                  title="Payables — To Be Paid"
+                  description="Purchase bills for material received — balance due this month"
+                  amount={formatCurrency(payablesDue.payments_due_to_pay?.total_amount)}
+                  count={payablesDue.payments_due_to_pay?.count || 0}
+                  countLabel="bill(s)"
+                  onClick={() => setPayablesOpen(true)}
+                />
+              </Stack>
+            </SectionCard>
+          </Grid>
+        </Grid>
+      );
+    }
+
+    if (dashboardRole === 'PURCHASING') {
+      return (
+        <>
+          <Grid container spacing={{ xs: 2, sm: 2.5 }} sx={{ mb: { xs: 2, sm: 2.5 } }}>
+            <Grid item xs={12} sm={6}>
+              <StatCard
+                accent="warning"
+                title="Purchase orders"
+                value={stats.procurement.total_pos || 0}
+                subtitle="Vendor commitments and receipts"
+                icon={<ShoppingCart sx={{ fontSize: 24 }} />}
+                onClick={() => setPurchaseOrdersOpen(true)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <StatCard
+                accent="info"
+                title="POs due to receive"
+                value={stats.procurement.pos_due_to_receive?.count || 0}
+                subtitle={`Expected in ${stats.procurement.current_month || 'this month'}`}
+                icon={<LocalShipping sx={{ fontSize: 24 }} />}
+                onClick={() => setDueToReceiveOpen(true)}
+              />
+            </Grid>
+          </Grid>
+          <Grid container spacing={{ xs: 2, sm: 2.5 }}>
+            <Grid item xs={12} md={6}>
+              <SectionCard title="Procurement health" subtitle="PO distribution by operational state" accent="warning">
+                <StatusRows data={stats.procurement.by_status} />
+              </SectionCard>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <SectionCard title="Quick links" subtitle="Procurement workflow" accent="primary">
+                <Stack spacing={1.5}>
+                  <StatCard accent="warning" title="Supplier POs" value="→" subtitle="Create and track vendor POs" icon={<ShoppingCart sx={{ fontSize: 24 }} />} onClick={() => navigate('/procurement')} />
+                  <StatCard accent="info" title="Indents" value="→" subtitle="Material indents to fulfill" icon={<Assignment sx={{ fontSize: 24 }} />} onClick={() => navigate('/indents')} />
+                </Stack>
+              </SectionCard>
+            </Grid>
+          </Grid>
+        </>
+      );
+    }
+
+    // ADMIN — full plant dashboard
+    return (
+      <>
+        <Grid container spacing={{ xs: 2, sm: 2.5 }} sx={{ mb: { xs: 2, sm: 2.5 } }}>
+          {showOrders ? (
+            <Grid item xs={12} sm={6} lg={3}>
+              <StatCard accent="info" title="Active orders" value={stats.orders.total_orders || 0} subtitle="PI records in the system" icon={<Assignment sx={{ fontSize: 24 }} />} onClick={() => setActiveOrdersOpen(true)} />
+            </Grid>
+          ) : null}
+          {showInventory ? (
+            <Grid item xs={12} sm={6} lg={3}>
+              <StatCard accent="success" title="Inventory SKUs" value={stats.inventory.total_items || 0} subtitle="Tracked materials and trims" icon={<Inventory2 sx={{ fontSize: 24 }} />} />
+            </Grid>
+          ) : null}
+          {showProcurement ? (
+            <Grid item xs={12} sm={6} lg={3}>
+              <StatCard accent="warning" title="Purchase orders" value={stats.procurement.total_pos || 0} subtitle="Vendor commitments and receipts" icon={<ShoppingCart sx={{ fontSize: 24 }} />} onClick={() => setPurchaseOrdersOpen(true)} />
+            </Grid>
+          ) : null}
+          {showProduction ? (
+            <Grid item xs={12} sm={6} lg={3}>
+              <StatCard accent="secondary" title="Production issues" value={stats.production.total_issues || 0} subtitle="Shop-floor material releases" icon={<Factory sx={{ fontSize: 24 }} />} />
+            </Grid>
+          ) : null}
+        </Grid>
+
+        {(showReceivables || showPayables || showProcurement) ? (
+          <Grid container spacing={{ xs: 2, sm: 2.5 }} sx={{ mb: { xs: 2, sm: 2.5 } }}>
+            {(showReceivables || showPayables) ? (
+              <Grid item xs={12} md={6}>
+                <SectionCard title="Cash Flow — Due This Month" subtitle={`${stats.procurement.current_month || stats.paymentDue.current_month || 'Current month'} · Receivables and payables`} accent="primary" headerIcon={<AccountBalance sx={{ fontSize: 22 }} />}>
+                  <Stack spacing={1.5}>
+                    {showReceivables ? (
+                      <PaymentDueRow icon={<AccountBalanceWallet sx={{ fontSize: 22 }} />} iconBg={alpha('#059669', 0.07)} iconColor="#047857" borderColor={alpha('#059669', 0.22)} title="Receivables — To Be Collected" description="Sales entries with balance due for collection this month" amount={formatCurrency(stats.paymentDue.payments_due_to_collect?.total_amount, 'USD')} count={stats.paymentDue.payments_due_to_collect?.count || 0} countLabel="order(s)" onClick={() => setReceivablesOpen(true)} />
+                    ) : null}
+                    {showPayables ? (
+                      <PaymentDueRow icon={<Payments sx={{ fontSize: 22 }} />} iconBg={alpha(theme.palette.error.main, 0.07)} iconColor={theme.palette.error.dark} borderColor={alpha(theme.palette.error.main, 0.22)} title="Payables — To Be Paid" description="Purchase bills for material received — balance due this month" amount={formatCurrency(payablesDue.payments_due_to_pay?.total_amount)} count={payablesDue.payments_due_to_pay?.count || 0} countLabel="bill(s)" onClick={() => setPayablesOpen(true)} />
+                    ) : null}
+                  </Stack>
+                </SectionCard>
+              </Grid>
+            ) : null}
+            {showProcurement ? (
+              <Grid item xs={12} md={6}>
+                <SectionCard title="Supplier POs due to receive" subtitle={`Expected deliveries in ${stats.procurement.current_month || 'this month'}`} accent="info" headerIcon={<LocalShipping sx={{ fontSize: 22 }} />}>
+                  <Box component="button" type="button" onClick={() => setDueToReceiveOpen(true)} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, py: 1.5, px: 1.75, width: '100%', textAlign: 'left', borderRadius: '10px', bgcolor: alpha(theme.palette.info.main, 0.07), border: `1px solid ${alpha(theme.palette.info.main, 0.22)}`, cursor: 'pointer', font: 'inherit', fontFamily: 'inherit', transition: 'transform 0.15s ease, box-shadow 0.15s ease', '&:hover': { transform: 'translateY(-1px)', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }, '&:focus-visible': { outline: `2px solid ${theme.palette.info.main}`, outlineOffset: 2 } }}>
+                    <Stack direction="row" spacing={2} alignItems="center" sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ width: 56, height: 56, borderRadius: '12px', display: 'grid', placeItems: 'center', flexShrink: 0, bgcolor: alpha(theme.palette.info.main, 0.12), border: `1px solid ${alpha(theme.palette.info.main, 0.35)}`, color: 'info.dark' }}>
+                        <LocalShipping sx={{ fontSize: 30 }} />
+                      </Box>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="h3" className="font-numeric" sx={{ fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1, color: 'info.dark' }}>
+                          {stats.procurement.pos_due_to_receive?.count || 0}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontWeight: 400 }}>
+                          supplier PO(s) expected for delivery this month
+                        </Typography>
+                      </Box>
+                    </Stack>
+                    <ChevronRight sx={{ fontSize: 20, color: 'text.disabled', flexShrink: 0 }} />
+                  </Box>
+                </SectionCard>
+              </Grid>
+            ) : null}
+          </Grid>
+        ) : null}
+
+        <Grid container spacing={{ xs: 2, sm: 2.5 }}>
+          {showOrders ? (
+            <Grid item xs={12} md={6}>
+              <SectionCard title="Orders by status" subtitle="Pipeline distribution across PI lifecycle" accent="info">
+                <StatusRows data={stats.orders.by_status} />
+              </SectionCard>
+            </Grid>
+          ) : null}
+          {showInventory ? (
+            <Grid item xs={12} md={6}>
+              <MaterialsRiskCard theme={theme} count={stats.inventory.low_stock_items || 0} />
+            </Grid>
+          ) : null}
+          {showProcurement ? (
+            <Grid item xs={12} md={6}>
+              <SectionCard title="Procurement health" subtitle="PO distribution by operational state" accent="warning">
+                <StatusRows data={stats.procurement.by_status} />
+              </SectionCard>
+            </Grid>
+          ) : null}
+          {showProduction ? (
+            <Grid item xs={12} md={6}>
+              <SectionCard title="Production movement" subtitle="Issues tracked through the shop floor" accent="secondary">
+                <StatusRows data={stats.production.by_status} />
+              </SectionCard>
+            </Grid>
+          ) : null}
+        </Grid>
+      </>
+    );
+  };
 
   return (
     <Box>
-      <Paper
-        elevation={0}
-        sx={{
-          mb: { xs: 2.5, md: 3 },
-          p: { xs: 2.5, sm: 3 },
-          borderRadius: '18px',
-          border: '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
-          boxShadow: theme.shadows[1],
-        }}
-      >
-        <Typography variant="overline" color="primary" sx={{ fontWeight: 600, letterSpacing: '0.08em' }}>
-          Executive overview
-        </Typography>
-        <Typography
-          variant="h3"
-          component="h1"
-          sx={{
-            mt: 0.75,
-            fontWeight: 600,
-            letterSpacing: '-0.03em',
-            lineHeight: 1.2,
-            color: 'text.primary',
-          }}
-        >
-          Manufacturing <Box component="span" sx={{ color: 'primary.main' }}>control tower</Box>
-        </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mt: 1.25, maxWidth: 720, fontWeight: 400, lineHeight: 1.6 }}>
-          Throughput, materials risk, purchasing, and production at a glance—aligned for daily operations and management review.
-        </Typography>
-      </Paper>
-
-      <Grid container spacing={{ xs: 2, sm: 2.5 }} sx={{ mb: { xs: 2, sm: 2.5 } }}>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard
-            accent="info"
-            title="Active orders"
-            value={stats.orders.total_orders || 0}
-            subtitle="PI records in the system"
-            icon={<Assignment sx={{ fontSize: 24 }} />}
-            onClick={() => setActiveOrdersOpen(true)}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard
-            accent="success"
-            title="Inventory SKUs"
-            value={stats.inventory.total_items || 0}
-            subtitle="Tracked materials and trims"
-            icon={<Inventory2 sx={{ fontSize: 24 }} />}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard
-            accent="warning"
-            title="Purchase orders"
-            value={stats.procurement.total_pos || 0}
-            subtitle="Vendor commitments and receipts"
-            icon={<ShoppingCart sx={{ fontSize: 24 }} />}
-            onClick={() => setPurchaseOrdersOpen(true)}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard
-            accent="secondary"
-            title="Production issues"
-            value={stats.production.total_issues || 0}
-            subtitle="Shop-floor material releases"
-            icon={<Factory sx={{ fontSize: 24 }} />}
-          />
-        </Grid>
-      </Grid>
-
-      <Grid container spacing={{ xs: 2, sm: 2.5 }} sx={{ mb: { xs: 2, sm: 2.5 } }}>
-        <Grid item xs={12} md={6}>
-          <SectionCard
-            title="Cash Flow — Due This Month"
-            subtitle={`${stats.procurement.current_month || stats.paymentDue.current_month || 'Current month'} · Receivables and payables`}
-            accent="primary"
-            headerIcon={<AccountBalance sx={{ fontSize: 22 }} />}
-          >
-            <Stack spacing={1.5}>
-              <PaymentDueRow
-                icon={<AccountBalanceWallet sx={{ fontSize: 22 }} />}
-                iconBg={alpha('#059669', 0.07)}
-                iconColor="#047857"
-                borderColor={alpha('#059669', 0.22)}
-                title="Receivables — To Be Collected"
-                description="Sales entries with balance due for collection this month"
-                amount={formatCurrency(stats.paymentDue.payments_due_to_collect?.total_amount, 'USD')}
-                count={stats.paymentDue.payments_due_to_collect?.count || 0}
-                countLabel="order(s)"
-                onClick={() => setReceivablesOpen(true)}
-              />
-              <PaymentDueRow
-                icon={<Payments sx={{ fontSize: 22 }} />}
-                iconBg={alpha(theme.palette.error.main, 0.07)}
-                iconColor={theme.palette.error.dark}
-                borderColor={alpha(theme.palette.error.main, 0.22)}
-                title="Payables — To Be Paid"
-                description="Purchase bills for material received — balance due this month"
-                amount={formatCurrency(payablesDue.payments_due_to_pay?.total_amount)}
-                count={payablesDue.payments_due_to_pay?.count || 0}
-                countLabel="bill(s)"
-                onClick={() => setPayablesOpen(true)}
-              />
-            </Stack>
-          </SectionCard>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <SectionCard
-            title="Supplier POs due to receive"
-            subtitle={`Expected deliveries in ${stats.procurement.current_month || 'this month'}`}
-            accent="info"
-            headerIcon={<LocalShipping sx={{ fontSize: 22 }} />}
-          >
-            <Box
-              component="button"
-              type="button"
-              onClick={() => setDueToReceiveOpen(true)}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 2,
-                py: 1.5,
-                px: 1.75,
-                width: '100%',
-                textAlign: 'left',
-                borderRadius: '10px',
-                bgcolor: alpha(theme.palette.info.main, 0.07),
-                border: `1px solid ${alpha(theme.palette.info.main, 0.22)}`,
-                cursor: 'pointer',
-                font: 'inherit',
-                fontFamily: 'inherit',
-                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                '&:hover': {
-                  transform: 'translateY(-1px)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-                },
-                '&:focus-visible': {
-                  outline: `2px solid ${theme.palette.info.main}`,
-                  outlineOffset: 2,
-                },
-              }}
-            >
-              <Stack direction="row" spacing={2} alignItems="center" sx={{ flex: 1, minWidth: 0 }}>
-                <Box
-                  sx={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: '12px',
-                    display: 'grid',
-                    placeItems: 'center',
-                    flexShrink: 0,
-                    bgcolor: alpha(theme.palette.info.main, 0.12),
-                    border: `1px solid ${alpha(theme.palette.info.main, 0.35)}`,
-                    color: 'info.dark',
-                  }}
-                >
-                  <LocalShipping sx={{ fontSize: 30 }} />
-                </Box>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography
-                    variant="h3"
-                    className="font-numeric"
-                    sx={{
-                      fontWeight: 600,
-                      letterSpacing: '-0.03em',
-                      lineHeight: 1,
-                      color: 'info.dark',
-                    }}
-                  >
-                    {stats.procurement.pos_due_to_receive?.count || 0}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontWeight: 400 }}>
-                    supplier PO(s) expected for delivery this month
-                  </Typography>
-                </Box>
-              </Stack>
-              <ChevronRight sx={{ fontSize: 20, color: 'text.disabled', flexShrink: 0 }} />
-            </Box>
-          </SectionCard>
-        </Grid>
-      </Grid>
-
-      <Grid container spacing={{ xs: 2, sm: 2.5 }}>
-        <Grid item xs={12} md={6}>
-          <SectionCard title="Orders by status" subtitle="Pipeline distribution across PI lifecycle" accent="info">
-            <StatusRows data={stats.orders.by_status} />
-          </SectionCard>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <SectionCard title="Materials risk" subtitle="Items at or below reorder thresholds" accent="warning">
-            <Stack direction="row" spacing={2} alignItems="center" sx={{ py: 0.5 }}>
-              <Box
-                sx={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: '12px',
-                  display: 'grid',
-                  placeItems: 'center',
-                  bgcolor: alpha(theme.palette.warning.main, 0.12),
-                  border: `1px solid ${alpha(theme.palette.warning.main, 0.35)}`,
-                  color: 'warning.dark',
-                }}
-              >
-                <WarningAmber sx={{ fontSize: 30 }} />
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography
-                  variant="h3"
-                  className="font-numeric"
-                  sx={{
-                    fontWeight: 600,
-                    letterSpacing: '-0.03em',
-                    lineHeight: 1,
-                    color: 'warning.dark',
-                  }}
-                >
-                  {stats.inventory.low_stock_items || 0}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontWeight: 400 }}>
-                  SKUs require procurement attention
-                </Typography>
-              </Box>
-            </Stack>
-          </SectionCard>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <SectionCard title="Procurement health" subtitle="PO distribution by operational state" accent="warning">
-            <StatusRows data={stats.procurement.by_status} />
-          </SectionCard>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <SectionCard title="Production movement" subtitle="Issues tracked through the shop floor" accent="secondary">
-            <StatusRows data={stats.production.by_status} />
-          </SectionCard>
-        </Grid>
-      </Grid>
-
-      <ReceivablesDueModal
-        open={receivablesOpen}
-        onClose={() => setReceivablesOpen(false)}
-        monthLabel={stats.paymentDue.current_month || stats.procurement.current_month}
-        summary={stats.paymentDue.payments_due_to_collect}
-        items={stats.paymentDue.payments_due_to_collect?.items || []}
+      <DashboardHero
+        theme={theme}
+        title={dashboardTitleForUser(user)}
+        overline={hero.overline}
+        headline={hero.headline}
+        subtitle={hero.subtitle}
       />
 
-      <PayablesDueModal
-        open={payablesOpen}
-        onClose={() => setPayablesOpen(false)}
-        monthLabel={payablesDue.current_month || stats.procurement.current_month || stats.paymentDue.current_month}
-        summary={payablesDue.payments_due_to_pay}
-        items={payablesDue.payments_due_to_pay?.items || []}
-      />
+      {renderRoleContent()}
 
-      <ActiveOrdersModal
-        open={activeOrdersOpen}
-        onClose={() => setActiveOrdersOpen(false)}
-        totalCount={stats.orders.total_orders || 0}
-      />
+      {showReceivables ? (
+        <ReceivablesDueModal open={receivablesOpen} onClose={() => setReceivablesOpen(false)} monthLabel={stats.paymentDue.current_month || stats.procurement.current_month} summary={stats.paymentDue.payments_due_to_collect} items={stats.paymentDue.payments_due_to_collect?.items || []} />
+      ) : null}
 
-      <PurchaseOrdersModal
-        open={purchaseOrdersOpen}
-        onClose={() => setPurchaseOrdersOpen(false)}
-        totalCount={stats.procurement.total_pos || 0}
-      />
+      {showPayables ? (
+        <PayablesDueModal open={payablesOpen} onClose={() => setPayablesOpen(false)} monthLabel={payablesDue.current_month || stats.procurement.current_month || stats.paymentDue.current_month} summary={payablesDue.payments_due_to_pay} items={payablesDue.payments_due_to_pay?.items || []} />
+      ) : null}
 
-      <PosDueToReceiveModal
-        open={dueToReceiveOpen}
-        onClose={() => setDueToReceiveOpen(false)}
-        monthLabel={stats.procurement.current_month}
-        summary={stats.procurement.pos_due_to_receive}
-        items={stats.procurement.pos_due_to_receive?.items || []}
-      />
+      {showOrders ? (
+        <ActiveOrdersModal open={activeOrdersOpen} onClose={() => setActiveOrdersOpen(false)} totalCount={stats.orders.total_orders || 0} />
+      ) : null}
+
+      {showProcurement ? (
+        <>
+          <PurchaseOrdersModal open={purchaseOrdersOpen} onClose={() => setPurchaseOrdersOpen(false)} totalCount={stats.procurement.total_pos || 0} />
+          <PosDueToReceiveModal open={dueToReceiveOpen} onClose={() => setDueToReceiveOpen(false)} monthLabel={stats.procurement.current_month} summary={stats.procurement.pos_due_to_receive} items={stats.procurement.pos_due_to_receive?.items || []} />
+        </>
+      ) : null}
     </Box>
   );
 };

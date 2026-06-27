@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import {
   Box, Button, Typography, TextField, MenuItem, Grid, Paper,
   IconButton, Chip, Autocomplete, CircularProgress, Divider,
   Table, TableHead, TableBody, TableRow, TableCell, TableContainer, Tooltip,
-  Checkbox, FormControlLabel, Collapse,
+  Checkbox, FormControlLabel, Collapse, Snackbar, Alert,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
   ArrowBack, Save, Print, Add, Delete, CheckCircle,
   AutoAwesome, LibraryAdd, ExpandMore, ExpandLess,
 } from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext';
+import { hasModuleAccess } from '../config/permissions';
 import { ordersAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
@@ -64,9 +66,42 @@ const initPropertyValues = (properties) => {
 const calcTotal = (consumption, qty) => {
   const c = parseFloat(consumption);
   const q = parseFloat(qty);
-  if (isNaN(c) || isNaN(q) || q <= 0) return '';
+  if (isNaN(c) || isNaN(q) || q <= 0) return '0';
   return (c * q).toFixed(4).replace(/\.?0+$/, '');
 };
+
+const toApiDecimal = (value) => {
+  if (value === '' || value == null) return 0;
+  const n = parseFloat(value);
+  return Number.isNaN(n) ? 0 : n;
+};
+
+const serializeFabricLine = (row) => ({
+  id: row.id,
+  material: row.material,
+  color: row.color || '',
+  gsm: row.gsm || '',
+  roll_width: row.roll_width || '',
+  consumption_per_pc: toApiDecimal(row.consumption_per_pc),
+  unit: row.unit || 'MTRS',
+  total_consumption: toApiDecimal(row.total_consumption),
+  remarks: row.remarks || '',
+});
+
+const serializeTrimLine = (row) => ({
+  id: row.id,
+  trim: row.trim || null,
+  trim_name: row.trim_name,
+  category: row.category || '',
+  color_variant: row.color_variant || '',
+  size_variant: row.size_variant || '',
+  property_values: row.property_values || {},
+  consumption_per_pc: toApiDecimal(row.consumption_per_pc),
+  unit: row.unit || 'PCS',
+  total_consumption: toApiDecimal(row.total_consumption),
+  total_unit: row.total_unit || row.unit || '',
+  remarks: row.remarks || '',
+});
 
 const rowQtyForColor = (color, colorQty, totalQty) => {
   if (color && colorQty[color] != null) return colorQty[color];
@@ -610,9 +645,56 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
   );
 }
 
+const asApiList = (data) => (Array.isArray(data) ? data : data?.results || []);
+
+const piFromIndentData = (data) => {
+  if (data?.pi_detail) {
+    return { ...data.pi_detail, lines: data.pi_detail.lines || data.pi_lines || [] };
+  }
+  return {
+    id: data.pi,
+    pi_number: data.pi_number,
+    client_name: data.pi_client_name || '',
+    lines: data.pi_lines || [],
+  };
+};
+
+const loadIndentTrims = async () => {
+  try {
+    const res = await ordersAPI.getIndentTrimsLibrary();
+    return asApiList(res.data);
+  } catch {
+    const res = await ordersAPI.getTrimsMaster();
+    return asApiList(res.data);
+  }
+};
+
+const loadIndentPiContext = async (piId) => {
+  try {
+    const res = await ordersAPI.getIndentPiContext(piId);
+    return res.data;
+  } catch {
+    const res = await ordersAPI.getPI(piId);
+    return res.data;
+  }
+};
+
+const loadIndentPiOptions = async () => {
+  try {
+    const res = await ordersAPI.getIndentPiOptions();
+    return asApiList(res.data);
+  } catch {
+    const res = await ordersAPI.getPIs({ page_size: 200 });
+    return asApiList(res.data);
+  }
+};
+
 // ── Main Editor Page ──────────────────────────────────────────────────────────
 export default function IndentEditorPage() {
   const navigate    = useNavigate();
+  const location    = useLocation();
+  const { user }    = useAuth();
+  const canManageTrimsLibrary = hasModuleAccess(user, 'trims');
   const { id }      = useParams();
   const [searchParams] = useSearchParams();
   const isNew       = id === 'new';
@@ -646,6 +728,7 @@ export default function IndentEditorPage() {
   const [trimModalOpen, setTrimModalOpen] = useState(false);
   const [trimModalTargetRow, setTrimModalTargetRow] = useState(null);
   const [sizeBreakdownOpen, setSizeBreakdownOpen] = useState(true);
+  const [saveNotice, setSaveNotice] = useState('');
 
   const activeLines = useMemo(() => {
     if (!pi?.lines) return [];
@@ -683,6 +766,13 @@ export default function IndentEditorPage() {
 
   const getTrimSchema = (row) => getTrimMaster(row)?.properties || [];
 
+  useEffect(() => {
+    if (location.state?.saveMessage) {
+      setSaveNotice(location.state.saveMessage);
+      navigate(location.pathname + location.search, { replace: true, state: {} });
+    }
+  }, [location.pathname, location.search, location.state, navigate]);
+
   // Recalculate totals when selected PI lines change
   useEffect(() => {
     setFabricLines((prev) => prev.map((row) => ({
@@ -703,28 +793,20 @@ export default function IndentEditorPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [trimRes] = await Promise.all([ordersAPI.getTrimsMaster()]);
-        setTrimsList(Array.isArray(trimRes.data) ? trimRes.data : trimRes.data?.results || []);
-
         if (isNew) {
-          // Load PI list for selector
-          const piRes = await ordersAPI.getPIs({ page_size: 200 });
-          const piArr = Array.isArray(piRes.data) ? piRes.data : piRes.data?.results || [];
+          const [trims, piArr] = await Promise.all([loadIndentTrims(), loadIndentPiOptions()]);
+          setTrimsList(trims);
           setPiList(piArr);
 
-          // Auto-select PI from URL param
           if (piIdFromUrl) {
-            const full = await ordersAPI.getPI(piIdFromUrl);
-            const piData = full.data;
+            const piData = await loadIndentPiContext(piIdFromUrl);
             setPi(piData);
             setSelectedLineIds((piData.lines || []).map((l) => l.id));
             await tryAutoFillForLines(piData.lines || []);
           }
-          // Generate indent number
           const numRes = await ordersAPI.getNextIndentNumber();
           setIndentNumber(numRes.data.indent_number);
         } else {
-          // Load existing indent
           const res = await ordersAPI.getIndent(id);
           const data = res.data;
           setIndent(data);
@@ -743,12 +825,19 @@ export default function IndentEditorPage() {
           setTrimLines(data.trim_lines?.length ? data.trim_lines.map((r) => ({ ...emptyTrim(), ...r, property_values: r.property_values || {} })) : [emptyTrim()]);
           setSelectedLineIds(data.selected_pi_line_ids?.length ? data.selected_pi_line_ids : []);
 
-          const piRes = await ordersAPI.getPI(data.pi);
-          const piData = piRes.data;
+          const piData = piFromIndentData(data);
           setPi(piData);
           if (!data.selected_pi_line_ids?.length) {
             setSelectedLineIds((piData.lines || []).map((l) => l.id));
           }
+
+          const libraryTrims = await loadIndentTrims();
+          const linked = data.linked_trims || [];
+          const merged = [...libraryTrims];
+          linked.forEach((t) => {
+            if (!merged.some((m) => m.id === t.id)) merged.push(t);
+          });
+          setTrimsList(merged);
         }
       } catch (e) {
         console.error(e);
@@ -779,8 +868,7 @@ export default function IndentEditorPage() {
 
   const loadFullPi = async (piSummary) => {
     if (!piSummary?.id) return null;
-    const res = await ordersAPI.getPI(piSummary.id);
-    return res.data;
+    return loadIndentPiContext(piSummary.id);
   };
 
   const handlePiSelect = async (piSummary) => {
@@ -925,18 +1013,29 @@ export default function IndentEditorPage() {
         received_by: receivedBy,
         approved_by: approvedBy,
         notes,
-        fabric_lines: fabricLines.filter((r) => r.material.trim()),
-        trim_lines: trimLines.filter((r) => r.trim_name.trim()),
+        fabric_lines: fabricLines.filter((r) => r.material.trim()).map(serializeFabricLine),
+        trim_lines: trimLines.filter((r) => r.trim_name.trim()).map(serializeTrimLine),
       };
 
       let res;
+      const savedStatus = nextStatus || status;
+      const successMessage = savedStatus === 'CONFIRMED'
+        ? `Indent ${indentNumber} confirmed and saved.`
+        : isNew
+          ? `Indent ${indentNumber} created successfully.`
+          : `Indent ${indentNumber} saved successfully.`;
+
       if (isNew) {
         res = await ordersAPI.createIndent(payload);
-        navigate(`/indents/${res.data.id}`, { replace: true });
+        navigate(`/indents/${res.data.id}`, {
+          replace: true,
+          state: { saveMessage: successMessage },
+        });
       } else {
         res = await ordersAPI.updateIndent(id, payload);
         setIndent(res.data);
         setStatus(res.data.status);
+        setSaveNotice(successMessage);
       }
     } catch (e) {
       const msg = e.response?.data ? JSON.stringify(e.response.data) : e.message;
@@ -961,6 +1060,22 @@ export default function IndentEditorPage() {
   return (
     <Box sx={{ p: { xs: 1.5, sm: 2.5 } }}>
       <style>{PRINT_STYLE}</style>
+
+      <Snackbar
+        open={Boolean(saveNotice)}
+        autoHideDuration={5000}
+        onClose={() => setSaveNotice('')}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSaveNotice('')}
+          severity="success"
+          variant="filled"
+          sx={{ width: '100%', fontWeight: 600 }}
+        >
+          {saveNotice}
+        </Alert>
+      </Snackbar>
 
       {/* ── Toolbar ── */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, flexWrap: 'wrap' }}>
@@ -1397,10 +1512,12 @@ export default function IndentEditorPage() {
               <Box sx={{ flex: 1, minWidth: 160 }}>
                 <Typography sx={{ fontWeight: 800, fontSize: '0.95rem' }}>Trims & Accessories</Typography>
               </Box>
+              {canManageTrimsLibrary && (
               <Button size="small" variant="outlined" startIcon={<LibraryAdd />} onClick={() => openTrimModal(null)}
                 sx={{ fontWeight: 700, textTransform: 'none', borderColor: '#7c3aed', color: '#7c3aed' }}>
                 New Trim
               </Button>
+              )}
               <Button size="small" variant="contained" startIcon={<Add />} onClick={addTrimRow}
                 sx={{ fontWeight: 700, textTransform: 'none' }}>
                 Add Row
