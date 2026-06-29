@@ -4,7 +4,7 @@ import { Box, Typography } from '@mui/material';
 /**
  * Page header: kicker, display title, subtitle, optional actions — generous spacing for SaaS-style layouts.
  */
-const PageHeader = ({ kicker, title, subtitle, actions }) => (
+const PageHeader = ({ kicker, title, subtitle, actions, compact = false }) => (
   <Box
     sx={{
       display: 'flex',
@@ -12,7 +12,7 @@ const PageHeader = ({ kicker, title, subtitle, actions }) => (
       alignItems: 'flex-start',
       justifyContent: 'space-between',
       gap: { xs: 2, sm: 2.5 },
-      mb: { xs: 3, sm: 3.5, md: 4 },
+      mb: compact ? 0 : { xs: 3, sm: 3.5, md: 4 },
       pt: { xs: 0.5, md: 0 },
     }}
   >
@@ -33,7 +33,7 @@ const PageHeader = ({ kicker, title, subtitle, actions }) => (
       ) : null}
       <Box sx={{ position: 'relative' }}>
         <Typography
-          variant="h4"
+          variant={compact ? 'h5' : 'h4'}
           component="h1"
           sx={{
             fontWeight: 600,
@@ -46,9 +46,9 @@ const PageHeader = ({ kicker, title, subtitle, actions }) => (
         </Typography>
         <Box
           sx={{
-            mt: 1,
-            height: 3,
-            width: 72,
+            mt: compact ? 0.5 : 1,
+            height: compact ? 2 : 3,
+            width: compact ? 48 : 72,
             borderRadius: '8px',
             bgcolor: 'primary.main',
             opacity: 0.95,

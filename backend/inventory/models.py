@@ -26,6 +26,18 @@ class InventoryItem(models.Model):
     
     item_code = models.CharField(max_length=50, unique=True, db_index=True)
     name = models.CharField(max_length=200)
+    trim = models.ForeignKey(
+        'orders.TrimMaster',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='inventory_items',
+    )
+    spec_lines = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Property lines extracted from PO/bill particulars',
+    )
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     
     color = models.CharField(max_length=50, blank=True, null=True)

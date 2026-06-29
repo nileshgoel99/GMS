@@ -9,6 +9,8 @@ from .models import PurchaseOrder, PurchaseOrderItem, POReceipt, PurchaseBill
 from .po_numbering import next_supplier_po_number
 from .bill_numbering import next_purchase_bill_ref
 from .payment_due import build_bills_payables_payload, month_bounds
+from .stock_receive import reverse_purchase_bill_stock
+from inventory.models import InventoryLog
 from .serializers import (
     PurchaseOrderSerializer,
     PurchaseOrderListSerializer,
@@ -123,7 +125,7 @@ class POReceiptViewSet(viewsets.ModelViewSet):
 class PurchaseBillViewSet(viewsets.ModelViewSet):
     queryset = PurchaseBill.objects.all().select_related(
         'supplier', 'purchase_order', 'created_by',
-    ).prefetch_related('items')
+    ).prefetch_related('items__po_item', 'items__trim')
     serializer_class = PurchaseBillSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'supplier', 'purchase_order', 'bill_date']
@@ -154,9 +156,14 @@ class PurchaseBillViewSet(viewsets.ModelViewSet):
             },
         })
 
+    def perform_destroy(self, instance):
+        if InventoryLog.objects.filter(reference_type='BILL', reference_id=str(instance.id)).exists():
+            reverse_purchase_bill_stock(instance)
+        instance.delete()
+
     @action(detail=False, methods=['get'], url_path='prefill-from-po')
     def prefill_from_po(self, request):
-        """Build purchase bill draft from a supplier PO (received material)."""
+        """Build purchase bill draft from a supplier PO (partial receipts supported)."""
         po_id = request.query_params.get('po_id')
         if not po_id:
             return Response({'detail': 'po_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -167,7 +174,9 @@ class PurchaseBillViewSet(viewsets.ModelViewSet):
 
         items = []
         for idx, line in enumerate(po.items.all(), start=1):
-            qty = line.quantity_received if line.quantity_received and line.quantity_received > 0 else line.quantity_ordered
+            ordered = line.quantity_ordered or Decimal('0')
+            received_prev = line.quantity_received or Decimal('0')
+            pending = max(Decimal('0'), ordered - received_prev)
             items.append({
                 'serial_no': idx,
                 'po_item': line.id,
@@ -175,7 +184,9 @@ class PurchaseBillViewSet(viewsets.ModelViewSet):
                 'trim_name': line.trim.name if line.trim_id else '',
                 'particulars': line.particulars or (line.trim.name if line.trim_id else ''),
                 'hsn_code': line.hsn_code or '',
-                'quantity_billed': str(qty),
+                'quantity_ordered': str(ordered),
+                'quantity_received_previous': str(received_prev),
+                'quantity_billed': str(pending) if pending > 0 else '',
                 'unit': line.unit or 'PCS',
                 'unit_price': str(line.unit_price or 0),
             })

@@ -167,6 +167,7 @@ export const inventoryAPI = {
   getLowStock: () => api.get('/inventory/items/low_stock/'),
   getSummary: (id) => api.get(`/inventory/items/${id}/summary/`),
   getStatistics: () => api.get('/inventory/items/statistics/'),
+  release: (id, data) => api.post(`/inventory/items/${id}/release/`, data),
   
   getLogs: (params) => api.get('/inventory/logs/', { params }),
   createLog: (data) => api.post('/inventory/logs/', data),

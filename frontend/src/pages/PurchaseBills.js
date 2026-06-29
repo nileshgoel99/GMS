@@ -152,7 +152,7 @@ export default function PurchaseBills() {
         actions={
           <Button startIcon={<Add />} variant="contained" onClick={() => navigate('/purchase-bills/new')}
             sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
-            New Bill Entry
+            Purchase Bill
           </Button>
         }
       />

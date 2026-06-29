@@ -38,7 +38,6 @@ import {
   LocalShipping as LocalShippingIcon,
   Inventory2 as InventoryIcon,
   ManageAccounts as ManageAccountsIcon,
-  PersonOutline as PersonOutlineIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -59,7 +58,7 @@ const navGroups = [
     items: [
       { text: 'Buyers', icon: <PublicIcon />, path: '/customers', module: 'customers' },
       { text: 'Buyer POs', icon: <ReceiptLongIcon />, path: '/buyer-pos', module: 'buyer_pos' },
-      { text: 'Sales entry', icon: <PointOfSaleIcon />, path: '/sales', module: 'sales' },
+      { text: 'Sales', icon: <PointOfSaleIcon />, path: '/sales', module: 'sales' },
       { text: 'Proforma invoices', icon: <AssignmentIcon />, path: '/orders', module: 'pi' },
     ],
   },
@@ -75,7 +74,7 @@ const navGroups = [
       { text: 'Trims library', icon: <ListAltIcon />, path: '/trims', module: 'trims' },
       { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers', module: 'suppliers' },
       { text: 'Supplier POs', icon: <ShoppingCartIcon />, path: '/procurement', module: 'supplier_po' },
-      { text: 'Purchase bill entry', icon: <ReceiptLongIcon />, path: '/purchase-bills', module: 'purchase_bills' },
+      { text: 'Purchase', icon: <ReceiptLongIcon />, path: '/purchase-bills', module: 'purchase_bills' },
     ],
   },
   {
@@ -109,9 +108,9 @@ const routeMeta = {
   '/inventory': { title: 'Inventory' },
     '/procurement': { title: 'Supplier purchase orders' },
     '/procurement/new': { title: 'Raise PO' },
-    '/purchase-bills': { title: 'Purchase bill entry' },
-    '/purchase-bills/new': { title: 'New purchase bill' },
-    '/sales': { title: 'Sales entry' },
+    '/purchase-bills': { title: 'Purchase' },
+    '/purchase-bills/new': { title: 'Purchase Bill' },
+    '/sales': { title: 'Sales' },
     '/sales/new': { title: 'New sales entry' },
   '/production': { title: 'Production' },
   '/company': { title: 'Company details' },
@@ -153,6 +152,12 @@ const Layout = ({ children }) => {
   const header = useMemo(() => {
     if (location.pathname.startsWith('/orders/pi/')) {
       return { title: 'Proforma Invoice' };
+    }
+    if (location.pathname.startsWith('/purchase-bills/') && location.pathname !== '/purchase-bills/new') {
+      return { title: 'Purchase Bill' };
+    }
+    if (location.pathname === '/purchase-bills/new') {
+      return { title: 'Purchase Bill' };
     }
     if (location.pathname === '/') {
       return { title: dashboardTitleForUser(user) };
@@ -413,116 +418,6 @@ const Layout = ({ children }) => {
           </Fragment>
         ))}
       </List>
-
-      <Box sx={{
-        p: compactNav ? 1 : 2,
-        pt: compactNav ? 1 : 1.5,
-        pb: compactNav ? 1.25 : 2,
-        mt: 'auto',
-        flexShrink: 0,
-        position: 'relative',
-        zIndex: 1,
-      }}>
-        <Box
-          sx={{
-            borderRadius: '12px',
-            border: `1px solid ${alpha('#fff', 0.14)}`,
-            bgcolor: alpha('#0f1c1a', 0.72),
-            p: compactNav ? 1 : 1.75,
-          }}
-        >
-          {!compactNav ? (
-            <Typography variant="caption" sx={{ color: navChrome.textMuted, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Signed in
-            </Typography>
-          ) : null}
-          {!compactNav ? (
-            <>
-              <Typography variant="body2" sx={{ color: '#fff', fontWeight: 700, mt: 0.5 }} noWrap title={displayName}>
-                {displayName}
-              </Typography>
-              {user?.username && displayName !== user.username && (
-                <Typography variant="caption" sx={{ color: alpha('#fff', 0.65), fontWeight: 600, display: 'block' }} noWrap>
-                  @{user.username}
-                </Typography>
-              )}
-              {user?.role_label && (
-                <Typography variant="caption" sx={{ color: alpha('#fff', 0.72), fontWeight: 600, display: 'block', mt: 0.25 }}>
-                  {user.role_label}
-                </Typography>
-              )}
-            </>
-          ) : (
-            <Stack direction="row" justifyContent="center" sx={{ py: 0.5 }}>
-              <Avatar
-                sx={{
-                  width: 36,
-                  height: 36,
-                  bgcolor: alpha(theme.palette.primary.main, 0.14),
-                  color: 'primary.dark',
-                  fontWeight: 600,
-                  fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-                }}
-              >
-                {initials}
-              </Avatar>
-            </Stack>
-          )}
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={compactNav ? null : <PersonOutlineIcon />}
-            onClick={() => {
-              navigate('/profile');
-              setMobileOpen(false);
-            }}
-            sx={{
-              mt: 1.35,
-              borderColor: alpha('#fff', 0.28),
-              color: '#fff',
-              fontWeight: 600,
-              textTransform: 'none',
-              '& .MuiButton-startIcon': { color: alpha('#fff', 0.85) },
-              '&:hover': {
-                borderColor: alpha(theme.palette.primary.light, 0.65),
-                bgcolor: alpha(theme.palette.primary.main, 0.18),
-                color: '#fff',
-              },
-            }}
-          >
-            {compactNav ? <PersonOutlineIcon fontSize="small" /> : 'My profile'}
-          </Button>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={compactNav ? null : <LogoutIcon />}
-            onClick={() => {
-              logout();
-              navigate('/login');
-            }}
-            sx={{
-              mt: 1,
-              borderColor: alpha('#fff', 0.28),
-              color: '#fff',
-              fontWeight: 600,
-              textTransform: 'none',
-              '& .MuiButton-startIcon': { color: alpha('#fff', 0.85) },
-              '&:hover': {
-                borderColor: alpha(theme.palette.primary.light, 0.65),
-                bgcolor: alpha(theme.palette.primary.main, 0.18),
-                color: '#fff',
-              },
-            }}
-          >
-            {compactNav ? <LogoutIcon fontSize="small" /> : 'Sign out'}
-          </Button>
-        </Box>
-        {!compactNav ? (
-          <Typography variant="caption" sx={{ display: 'block', mt: 1.25, color: alpha('#ffffff', 0.65), px: 0.5 }}>
-            GMS · Cut &amp; sew operations
-          </Typography>
-        ) : null}
-      </Box>
     </Box>
   );
 
@@ -576,7 +471,7 @@ const Layout = ({ children }) => {
             </Typography>
           </Box>
 
-          <Stack direction="row" spacing={1.25} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' } }}>
+          <Stack direction="row" spacing={1.25} alignItems="center">
             <Box sx={{ textAlign: 'right', display: { xs: 'none', lg: 'block' } }}>
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: '0.08em' }}>
                 Operator
@@ -608,7 +503,21 @@ const Layout = ({ children }) => {
                 </Avatar>
               </IconButton>
             </Tooltip>
-            <Button variant="outlined" color="inherit" onClick={handleLogout} sx={{ borderColor: alpha(theme.palette.text.primary, 0.12) }}>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleLogout}
+              startIcon={<LogoutIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
+              sx={{
+                fontWeight: 700,
+                textTransform: 'none',
+                px: { xs: 1.5, sm: 2.25 },
+                boxShadow: `0 2px 10px ${alpha(theme.palette.error.main, 0.35)}`,
+                '&:hover': {
+                  boxShadow: `0 4px 14px ${alpha(theme.palette.error.main, 0.45)}`,
+                },
+              }}
+            >
               Sign out
             </Button>
           </Stack>

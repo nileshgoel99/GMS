@@ -6,8 +6,10 @@ import {
   TableBody, TableRow, TableCell, Divider, FormControlLabel, Radio, RadioGroup,
 } from '@mui/material';
 import { ArrowBack, Save, Add, Delete, ReceiptLong } from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
 import { procurementAPI, purchaseBillAPI } from '../services/api';
 import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
+import BillLineParticulars from '../components/procurement/BillLineParticulars';
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -16,11 +18,46 @@ const emptyLine = (serial = 1) => ({
   serial_no: serial,
   po_item: null,
   trim: null,
+  trim_name: '',
   particulars: '',
   hsn_code: '',
+  quantity_ordered: '',
+  quantity_received_previous: '',
   quantity_billed: '',
   unit: 'PCS',
   unit_price: '',
+});
+
+const fmtQty = (v) => {
+  const n = parseFloat(v);
+  if (Number.isNaN(n)) return '—';
+  return Number.isInteger(n) ? String(n) : n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+};
+
+const headCellSx = {
+  fontWeight: 700,
+  fontSize: '0.68rem',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  color: slate[600],
+  py: 1.25,
+  borderBottom: `2px solid ${slate[200]}`,
+  whiteSpace: 'nowrap',
+};
+
+const bodyCellSx = {
+  py: 1.5,
+  verticalAlign: 'top',
+  borderBottom: `1px solid ${slate[100]}`,
+};
+
+const mapLineFromApi = (row, i) => ({
+  ...emptyLine(row.serial_no || i + 1),
+  ...row,
+  quantity_billed: String(row.quantity_billed ?? ''),
+  quantity_ordered: row.quantity_ordered != null ? String(row.quantity_ordered) : '',
+  quantity_received_previous: row.quantity_received_previous != null ? String(row.quantity_received_previous) : '',
+  unit_price: String(row.unit_price ?? ''),
 });
 
 const initForm = () => ({
@@ -84,12 +121,7 @@ export default function PurchaseBillEditorPage() {
             sgst_percent: String(b.sgst_percent ?? 0),
             igst_percent: String(b.igst_percent ?? 0),
             amount_paid: String(b.amount_paid ?? 0),
-            items: (b.items || []).map((row, i) => ({
-              ...row,
-              serial_no: row.serial_no || i + 1,
-              quantity_billed: String(row.quantity_billed ?? ''),
-              unit_price: String(row.unit_price ?? ''),
-            })),
+            items: (b.items || []).map(mapLineFromApi),
           });
         }
       } catch (e) {
@@ -123,12 +155,7 @@ export default function PurchaseBillEditorPage() {
       sgst_percent: d.sgst_percent,
       igst_percent: d.igst_percent,
       received_date: d.received_date || f.received_date,
-      items: (d.items || []).map((row, i) => ({
-        ...row,
-        serial_no: row.serial_no || i + 1,
-        quantity_billed: String(row.quantity_billed ?? ''),
-        unit_price: String(row.unit_price ?? ''),
-      })),
+      items: (d.items || []).map(mapLineFromApi),
     }));
     if (!poObj.po_number && d.po_number) {
       setPos((prev) => [...prev, { id: d.purchase_order, po_number: d.po_number, vendor_name: d.supplier_name }]);
@@ -190,6 +217,16 @@ export default function PurchaseBillEditorPage() {
     const items = form.items.filter((r) => r.particulars?.trim() || r.trim);
     if (!items.length) { alert('Add at least one line item.'); return; }
 
+    for (const row of items) {
+      const billed = parseFloat(row.quantity_billed) || 0;
+      const ordered = parseFloat(row.quantity_ordered) || 0;
+      const prev = parseFloat(row.quantity_received_previous) || 0;
+      if (row.po_item && ordered > 0 && billed > ordered - prev) {
+        alert(`Qty received (${billed}) exceeds pending (${Math.max(0, ordered - prev)}) for "${row.particulars || 'line item'}".`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -230,7 +267,15 @@ export default function PurchaseBillEditorPage() {
     }
   };
 
-  const sxInput = { '& .MuiInputBase-root': { borderRadius: 1.5 } };
+  const sxInput = {
+    '& .MuiInputBase-root': { borderRadius: 1.25, fontSize: '0.82rem' },
+    '& .MuiInputBase-input': { py: 0.85, px: 1 },
+  };
+  const compactInputSx = {
+    ...sxInput,
+    '& .MuiInputBase-root': { ...sxInput['& .MuiInputBase-root'], height: 34 },
+    '& .MuiInputBase-input': { ...sxInput['& .MuiInputBase-input'], textAlign: 'right', fontWeight: 700 },
+  };
 
   if (loading) {
     return (
@@ -246,7 +291,7 @@ export default function PurchaseBillEditorPage() {
         <IconButton onClick={() => navigate('/purchase-bills')} size="small"><ArrowBack /></IconButton>
         <ReceiptLong sx={{ color: 'primary.main' }} />
         <Typography sx={{ fontWeight: 800, fontSize: '1.15rem', flex: 1 }}>
-          {isNew ? 'New Purchase Bill Entry' : `Bill: ${form.internal_ref}`}
+          {isNew ? 'Purchase Bill' : `Bill: ${form.internal_ref}`}
         </Typography>
         <Button variant="contained" size="small" startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <Save />}
           disabled={saving} onClick={handleSave}
@@ -305,48 +350,113 @@ export default function PurchaseBillEditorPage() {
       <Paper elevation={0} sx={{ ...sectionPaperSxByIndex(1), mt: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
           <Typography sx={{ ...sectionLabelSx, fontSize: '0.75rem' }}>Material Received — Line Items</Typography>
-          <Button size="small" startIcon={<Add />} onClick={addLine} sx={{ textTransform: 'none', fontWeight: 700 }}>Add Line</Button>
+          {!form.purchase_order && (
+            <Button size="small" startIcon={<Add />} onClick={addLine} sx={{ textTransform: 'none', fontWeight: 700 }}>
+              Add Line
+            </Button>
+          )}
         </Box>
-        <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small">
+        <Box sx={{ overflowX: 'auto', border: `1px solid ${slate[200]}`, borderRadius: 1.5 }}>
+          <Table size="small" sx={{ minWidth: 880 }}>
             <TableHead>
-              <TableRow sx={{ bgcolor: slate[50] }}>
-                {['#', 'Particulars', 'HSN', 'Qty Received', 'Unit', 'Rate ₹', 'Amount ₹', ''].map((h) => (
-                  <TableCell key={h || 'x'} sx={{ fontWeight: 700, fontSize: '0.72rem', whiteSpace: 'nowrap' }}>{h}</TableCell>
-                ))}
+              <TableRow sx={{ bgcolor: alpha(slate[50], 0.9) }}>
+                <TableCell sx={{ ...headCellSx, width: 36 }}>#</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 220, maxWidth: 220 }}>Item</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 72 }}>HSN</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 130 }} align="right">Quantity</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 56 }}>Unit</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 88 }} align="right">Rate</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 96 }} align="right">Amount</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 40 }} />
               </TableRow>
             </TableHead>
             <TableBody>
               {form.items.map((row, idx) => {
                 const amt = (parseFloat(row.quantity_billed) || 0) * (parseFloat(row.unit_price) || 0);
+                const ordered = parseFloat(row.quantity_ordered);
+                const prev = parseFloat(row.quantity_received_previous) || 0;
+                const pending = row.po_item
+                  ? Math.max(0, (Number.isNaN(ordered) ? 0 : ordered) - prev)
+                  : null;
+                const fromPo = Boolean(row.po_item);
+
                 return (
-                  <TableRow key={idx}>
-                    <TableCell>{row.serial_no || idx + 1}</TableCell>
-                    <TableCell sx={{ minWidth: 200 }}>
-                      <TextField size="small" fullWidth value={row.particulars}
-                        onChange={(e) => updateLine(idx, 'particulars', e.target.value)} sx={sxInput} />
+                  <TableRow key={idx} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
+                    <TableCell sx={{ ...bodyCellSx, color: slate[500], fontWeight: 700, fontSize: '0.8rem' }}>
+                      {row.serial_no || idx + 1}
                     </TableCell>
-                    <TableCell>
-                      <TextField size="small" value={row.hsn_code} onChange={(e) => updateLine(idx, 'hsn_code', e.target.value)} sx={{ width: 90, ...sxInput }} />
+                    <TableCell sx={{ ...bodyCellSx, width: 220, maxWidth: 220 }}>
+                      {fromPo || row.trim || row.particulars?.trim() ? (
+                        <BillLineParticulars row={row} />
+                      ) : (
+                        <Typography sx={{ fontSize: '0.8rem', color: 'text.disabled', fontStyle: 'italic' }}>
+                          Link a supplier PO to load items
+                        </Typography>
+                      )}
                     </TableCell>
-                    <TableCell>
-                      <TextField size="small" type="number" value={row.quantity_billed}
-                        onChange={(e) => updateLine(idx, 'quantity_billed', e.target.value)} sx={{ width: 90, ...sxInput }} />
+                    <TableCell sx={{ ...bodyCellSx, fontSize: '0.78rem', fontWeight: 600, color: slate[700] }}>
+                      {row.hsn_code || '—'}
                     </TableCell>
-                    <TableCell>
-                      <TextField size="small" value={row.unit} onChange={(e) => updateLine(idx, 'unit', e.target.value)} sx={{ width: 70, ...sxInput }} />
+                    <TableCell sx={{ ...bodyCellSx, textAlign: 'right' }}>
+                      <Box sx={{ display: 'inline-block', minWidth: 108, textAlign: 'right' }}>
+                        {fromPo && !Number.isNaN(ordered) && (
+                          <Typography sx={{ fontSize: '0.68rem', color: slate[500], mb: 0.35 }}>
+                            Ordered{' '}
+                            <Box component="span" sx={{ fontWeight: 700, color: slate[800] }}>
+                              {fmtQty(ordered)}
+                            </Box>
+                          </Typography>
+                        )}
+                        <TextField
+                          size="small"
+                          type="number"
+                          placeholder="0"
+                          value={row.quantity_billed}
+                          onChange={(e) => updateLine(idx, 'quantity_billed', e.target.value)}
+                          sx={{ width: '100%', ...compactInputSx }}
+                        />
+                        {fromPo && (
+                          <Typography sx={{ fontSize: '0.62rem', color: slate[500], mt: 0.5, lineHeight: 1.35 }}>
+                            {pending != null && (
+                              <>
+                                Pending{' '}
+                                <Box component="span" sx={{ fontWeight: 700, color: pending > 0 ? '#b45309' : slate[700] }}>
+                                  {fmtQty(pending)}
+                                </Box>
+                              </>
+                            )}
+                            {prev > 0 && (
+                              <>
+                                {pending != null ? ' · ' : ''}
+                                Received earlier{' '}
+                                <Box component="span" sx={{ fontWeight: 600 }}>{fmtQty(prev)}</Box>
+                              </>
+                            )}
+                          </Typography>
+                        )}
+                      </Box>
                     </TableCell>
-                    <TableCell>
-                      <TextField size="small" type="number" value={row.unit_price}
-                        onChange={(e) => updateLine(idx, 'unit_price', e.target.value)} sx={{ width: 100, ...sxInput }} />
+                    <TableCell sx={{ ...bodyCellSx, fontSize: '0.78rem', fontWeight: 600 }}>
+                      {row.unit || '—'}
                     </TableCell>
-                    <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }} className="font-numeric">
+                    <TableCell sx={bodyCellSx}>
+                      <TextField
+                        size="small"
+                        type="number"
+                        value={row.unit_price}
+                        onChange={(e) => updateLine(idx, 'unit_price', e.target.value)}
+                        sx={{ width: '100%', ...compactInputSx }}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ ...bodyCellSx, fontWeight: 700, whiteSpace: 'nowrap', fontSize: '0.82rem' }} align="right" className="font-numeric">
                       ₹ {amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </TableCell>
-                    <TableCell>
-                      <IconButton size="small" color="error" onClick={() => removeLine(idx)} disabled={form.items.length <= 1}>
-                        <Delete fontSize="small" />
-                      </IconButton>
+                    <TableCell sx={bodyCellSx}>
+                      {!form.purchase_order && (
+                        <IconButton size="small" color="error" onClick={() => removeLine(idx)} disabled={form.items.length <= 1}>
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      )}
                     </TableCell>
                   </TableRow>
                 );

@@ -8,6 +8,7 @@ import { alpha, useTheme } from '@mui/material/styles';
 import { purchaseBillAPI } from '../../services/api';
 import { formatDateDisplay } from '../../utils/formatDate';
 import { slate } from '../../theme/appTheme';
+import BillLineParticulars from './BillLineParticulars';
 
 const STATUS_COLOR = {
   DRAFT: 'default',
@@ -84,23 +85,37 @@ export default function PurchaseBillViewModal({ open, billId, onClose, onEdit })
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: slate[50] }}>
-                    {['#', 'Particulars', 'HSN', 'Qty', 'Unit', 'Rate', 'Amount'].map((h) => (
-                      <TableCell key={h} sx={{ fontWeight: 700, fontSize: '0.72rem' }}>{h}</TableCell>
+                    {['#', 'Item', 'HSN', 'Qty', 'Unit', 'Rate', 'Amount'].map((h) => (
+                      <TableCell key={h} sx={{ fontWeight: 700, fontSize: '0.72rem' }} align={h === 'Qty' || h === 'Rate' || h === 'Amount' ? 'right' : 'left'}>{h}</TableCell>
                     ))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {(bill.items || []).map((row, i) => (
-                    <TableRow key={row.id ?? i}>
-                      <TableCell>{row.serial_no || i + 1}</TableCell>
-                      <TableCell>{row.particulars || '—'}</TableCell>
-                      <TableCell>{row.hsn_code || '—'}</TableCell>
-                      <TableCell align="right">{row.quantity_billed}</TableCell>
-                      <TableCell>{row.unit}</TableCell>
-                      <TableCell align="right">{row.unit_price}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700 }}>{fmt(row.total_price)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {(bill.items || []).map((row, i) => {
+                    const ordered = row.quantity_ordered;
+                    const prev = row.quantity_received_previous;
+                    return (
+                      <TableRow key={row.id ?? i}>
+                        <TableCell>{row.serial_no || i + 1}</TableCell>
+                        <TableCell sx={{ width: 220, maxWidth: 220, verticalAlign: 'top' }}>
+                          <BillLineParticulars row={row} />
+                          {(ordered != null || prev != null) && (
+                            <Typography sx={{ fontSize: '0.62rem', color: slate[500], mt: 0.75 }}>
+                              {ordered != null && <>Ordered {ordered}</>}
+                              {prev != null && prev > 0 && <> · Received earlier {prev}</>}
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>{row.hsn_code || '—'}</TableCell>
+                        <TableCell align="right">
+                          <Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }}>{row.quantity_billed}</Typography>
+                        </TableCell>
+                        <TableCell>{row.unit}</TableCell>
+                        <TableCell align="right">{row.unit_price}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700 }}>{fmt(row.total_price)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </Box>

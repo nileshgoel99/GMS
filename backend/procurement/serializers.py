@@ -8,6 +8,8 @@ from .models import PurchaseOrder, PurchaseOrderItem, POReceipt, POReceiptItem, 
 from .po_numbering import next_supplier_po_number
 from .bill_numbering import next_purchase_bill_ref
 from .payment_due import compute_payment_due_date, compute_bill_due_date
+from .stock_receive import post_purchase_bill_to_stock, reverse_purchase_bill_stock
+from inventory.models import InventoryLog
 from inventory.serializers import InventoryItemListSerializer
 
 
@@ -228,16 +230,44 @@ class POReceiptSerializer(serializers.ModelSerializer):
 
 class PurchaseBillLineSerializer(serializers.ModelSerializer):
     trim_name = serializers.CharField(source='trim.name', read_only=True)
+    quantity_ordered = serializers.SerializerMethodField()
+    quantity_received_previous = serializers.SerializerMethodField()
 
     class Meta:
         model = PurchaseBillLine
-        fields = '__all__'
-        read_only_fields = ('bill', 'total_price')
+        fields = [
+            'id', 'bill', 'po_item', 'serial_no', 'trim', 'trim_name', 'particulars', 'hsn_code',
+            'quantity_billed', 'quantity_ordered', 'quantity_received_previous',
+            'unit', 'unit_price', 'total_price',
+        ]
+        read_only_fields = ('bill', 'total_price', 'quantity_ordered', 'quantity_received_previous', 'trim_name')
+
+    def get_quantity_ordered(self, obj):
+        if obj.po_item_id:
+            return obj.po_item.quantity_ordered
+        return None
+
+    def get_quantity_received_previous(self, obj):
+        if not obj.po_item_id:
+            return None
+        prev = (obj.po_item.quantity_received or Decimal('0')) - (obj.quantity_billed or Decimal('0'))
+        return max(Decimal('0'), prev)
 
     def validate(self, attrs):
         if not attrs.get('trim') and not (attrs.get('particulars') or '').strip():
             raise serializers.ValidationError('Each line needs a trim or particulars description.')
         return attrs
+
+
+def _clean_bill_line_data(item_data):
+    item_data = {**item_data}
+    for key in ('quantity_ordered', 'quantity_received_previous', 'trim_name', 'total_price', 'id', 'bill'):
+        item_data.pop(key, None)
+    return item_data
+
+
+def _should_post_bill_stock(bill):
+    return bill.status not in ('DRAFT', 'CANCELLED')
 
 
 def _default_bill_due_date(validated_data):
@@ -286,6 +316,34 @@ class PurchaseBillSerializer(serializers.ModelSerializer):
         due = compute_bill_due_date(obj)
         return due.isoformat() if due else None
 
+    def validate(self, attrs):
+        items = attrs.get('items')
+        if items is None:
+            return attrs
+
+        old_by_po = {}
+        if self.instance:
+            old_by_po = {
+                line.po_item_id: line.quantity_billed
+                for line in self.instance.items.all()
+                if line.po_item_id
+            }
+
+        for item in items:
+            po_item = item.get('po_item')
+            qty = item.get('quantity_billed')
+            if not po_item or qty is None:
+                continue
+            po_id = po_item.pk if hasattr(po_item, 'pk') else po_item
+            credit = old_by_po.get(po_id, Decimal('0'))
+            pending = (po_item.quantity_ordered or Decimal('0')) - (po_item.quantity_received or Decimal('0')) + credit
+            if qty > pending:
+                label = item.get('particulars') or getattr(getattr(po_item, 'trim', None), 'name', '') or 'PO line'
+                raise serializers.ValidationError({
+                    'items': f'Qty received ({qty}) exceeds pending ({pending}) for "{label}".',
+                })
+        return attrs
+
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
         supplier = validated_data.get('supplier')
@@ -298,14 +356,15 @@ class PurchaseBillSerializer(serializers.ModelSerializer):
             validated_data['status'] = 'OPEN'
         bill = PurchaseBill.objects.create(**validated_data)
         for idx, item_data in enumerate(items_data, start=1):
-            item_data.pop('id', None)
-            item_data.pop('bill', None)
+            item_data = _clean_bill_line_data(item_data)
             if not item_data.get('serial_no'):
                 item_data['serial_no'] = idx
             PurchaseBillLine.objects.create(bill=bill, **item_data)
         bill.recalculate_totals()
         if bill.status != 'DRAFT':
             bill.sync_payment_status()
+        if _should_post_bill_stock(bill):
+            post_purchase_bill_to_stock(bill, self.context['request'].user)
         return bill
 
     def update(self, instance, validated_data):
@@ -317,6 +376,9 @@ class PurchaseBillSerializer(serializers.ModelSerializer):
             merged = {**{f.name: getattr(instance, f.name) for f in instance._meta.fields}, **validated_data}
             validated_data['due_date'] = _default_bill_due_date(merged)
 
+        if InventoryLog.objects.filter(reference_type='BILL', reference_id=str(instance.id)).exists():
+            reverse_purchase_bill_stock(instance)
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -324,8 +386,7 @@ class PurchaseBillSerializer(serializers.ModelSerializer):
         if items_data is not None:
             instance.items.all().delete()
             for idx, item_data in enumerate(items_data, start=1):
-                item_data.pop('id', None)
-                item_data.pop('bill', None)
+                item_data = _clean_bill_line_data(item_data)
                 if not item_data.get('serial_no'):
                     item_data['serial_no'] = idx
                 PurchaseBillLine.objects.create(bill=instance, **item_data)
@@ -333,6 +394,8 @@ class PurchaseBillSerializer(serializers.ModelSerializer):
         instance.recalculate_totals()
         if instance.status != 'DRAFT' and instance.status != 'CANCELLED':
             instance.sync_payment_status()
+        if _should_post_bill_stock(instance):
+            post_purchase_bill_to_stock(instance, self.context['request'].user)
         return instance
 
 

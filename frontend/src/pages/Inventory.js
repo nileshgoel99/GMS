@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -9,454 +9,612 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  MenuItem,
   Grid,
-  IconButton,
   Chip,
   Tabs,
   Tab,
-  Tooltip,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  InputAdornment,
+  Alert,
+  Snackbar,
+  Divider,
+  Stack,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
-import { Add, Edit, Delete, History, Warning } from '@mui/icons-material';
+import {
+  Search,
+  Warning,
+  Inventory2,
+  LocalShipping,
+  Assignment,
+  Outbound,
+  History,
+} from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
 import PageHeader from '../components/PageHeader';
-import DataGridShell from '../components/DataGridShell';
-import { dataGridSx } from '../theme/appTheme';
+import InventoryItemParticulars, {
+  PropertyCards,
+  InventoryItemFull,
+} from '../components/inventory/InventoryItemParticulars';
+import { extractTrimProperties } from '../utils/extractTrimProperties';
+import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import { inventoryAPI } from '../services/api';
+
+const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
+
+const fmtQty = (v) => {
+  const n = parseFloat(v);
+  if (Number.isNaN(n)) return '—';
+  return Number.isInteger(n) ? String(n) : n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+};
+
+const headCellSx = {
+  fontWeight: 700,
+  fontSize: '0.68rem',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  color: slate[700],
+  py: 1.1,
+  bgcolor: alpha('#2563eb', 0.07),
+  borderBottom: `2px solid ${alpha('#2563eb', 0.2)}`,
+  whiteSpace: 'nowrap',
+};
+
+const rowSx = (index) => ({
+  bgcolor: index % 2 === 0 ? '#ffffff' : alpha(slate[100], 0.55),
+  transition: 'background-color 0.15s ease',
+  '&:hover': { bgcolor: alpha('#2563eb', 0.07) },
+  '&:last-child td': { borderBottom: 0 },
+});
+
+const bodyCellSx = {
+  py: 1.25,
+  verticalAlign: 'top',
+  borderBottom: `1px solid ${slate[100]}`,
+};
+
+const StatMiniCard = ({ label, value, icon, accent }) => (
+  <Paper
+    elevation={0}
+    sx={{
+      px: 1.25,
+      py: 0.85,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 1,
+      border: `1px solid ${slate[200]}`,
+      borderRadius: 1,
+      minWidth: { xs: '30%', sm: 110 },
+      flex: { xs: '1 1 30%', sm: '0 0 auto' },
+    }}
+  >
+    {icon}
+    <Box>
+      <Typography
+        sx={{ fontSize: '0.62rem', fontWeight: 600, color: slate[500], lineHeight: 1.1, textTransform: 'uppercase', letterSpacing: '0.03em' }}
+      >
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, lineHeight: 1.2, color: accent || slate[900] }}>
+        {value}
+      </Typography>
+    </Box>
+  </Paper>
+);
 
 const Inventory = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [items, setItems] = useState([]);
   const [lowStockItems, setLowStockItems] = useState([]);
-  const [selectedItem, setSelectedItem] = useState(null);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [openSummaryDialog, setOpenSummaryDialog] = useState(false);
+  const [search, setSearch] = useState('');
+  const [detailItem, setDetailItem] = useState(null);
   const [summary, setSummary] = useState(null);
-  const [formData, setFormData] = useState({
-    item_code: '',
-    name: '',
-    category: 'BUTTON',
-    color: '',
-    size: '',
-    finish: '',
-    material: '',
-    unit: 'PCS',
-    current_stock: 0,
-    reorder_level: 0,
-    unit_cost: '',
-    description: '',
-    is_active: true,
-  });
+  const [releaseItem, setReleaseItem] = useState(null);
+  const [releaseQty, setReleaseQty] = useState('');
+  const [releaseRemarks, setReleaseRemarks] = useState('');
+  const [releaseLoading, setReleaseLoading] = useState(false);
+  const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' });
 
-  useEffect(() => {
-    fetchItems();
-    fetchLowStock();
-  }, []);
-
-  const fetchItems = async () => {
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
     try {
-      const response = await inventoryAPI.getAll();
-      setItems(response.data.results || response.data);
+      const [itemsRes, lowRes, statsRes] = await Promise.all([
+        inventoryAPI.getAll({ is_active: true }),
+        inventoryAPI.getLowStock(),
+        inventoryAPI.getStatistics(),
+      ]);
+      setItems(asList(itemsRes.data));
+      setLowStockItems(asList(lowRes.data));
+      setStats(statsRes.data);
     } catch (error) {
-      console.error('Error fetching items:', error);
+      console.error('Error fetching inventory:', error);
+      setSnack({ open: true, message: 'Failed to load inventory', severity: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchLowStock = async () => {
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  const displayData = useMemo(() => {
+    const base = activeTab === 0 ? items : lowStockItems;
+    const q = search.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((row) => {
+      const hay = [
+        row.item_code,
+        row.item_name,
+        row.trim_name,
+        row.name,
+        row.category,
+        ...(row.property_lines || []).flatMap((l) => l.split(/\s·\s/)),
+        ...extractTrimProperties(row).flatMap((p) => [p.label, p.value]),
+        ...(row.pi_refs || []).flatMap((p) => [p.pi_number, p.customer]),
+        ...(row.suppliers || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [activeTab, items, lowStockItems, search]);
+
+  const openDetail = async (item) => {
+    setDetailItem(item);
     try {
-      const response = await inventoryAPI.getLowStock();
-      setLowStockItems(response.data);
-    } catch (error) {
-      console.error('Error fetching low stock items:', error);
-    }
-  };
-
-  const handleOpenDialog = (item = null) => {
-    if (item) {
-      setSelectedItem(item);
-      setFormData({
-        item_code: item.item_code,
-        name: item.name,
-        category: item.category,
-        color: item.color || '',
-        size: item.size || '',
-        finish: item.finish || '',
-        material: item.material || '',
-        unit: item.unit,
-        current_stock: item.current_stock,
-        reorder_level: item.reorder_level,
-        unit_cost: item.unit_cost || '',
-        description: item.description || '',
-        is_active: item.is_active,
-      });
-    } else {
-      setSelectedItem(null);
-      setFormData({
-        item_code: '',
-        name: '',
-        category: 'BUTTON',
-        color: '',
-        size: '',
-        finish: '',
-        material: '',
-        unit: 'PCS',
-        current_stock: 0,
-        reorder_level: 0,
-        unit_cost: '',
-        description: '',
-        is_active: true,
-      });
-    }
-    setOpenDialog(true);
-  };
-
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setSelectedItem(null);
-  };
-
-  const handleSubmit = async () => {
-    try {
-      if (selectedItem) {
-        await inventoryAPI.update(selectedItem.id, formData);
-      } else {
-        await inventoryAPI.create(formData);
-      }
-      fetchItems();
-      fetchLowStock();
-      handleCloseDialog();
-    } catch (error) {
-      console.error('Error saving item:', error);
-      alert('Error saving item');
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this item?')) {
-      try {
-        await inventoryAPI.delete(id);
-        fetchItems();
-        fetchLowStock();
-      } catch (error) {
-        console.error('Error deleting item:', error);
-        alert('Error deleting item');
-      }
-    }
-  };
-
-  const handleViewSummary = async (item) => {
-    try {
-      const response = await inventoryAPI.getSummary(item.id);
-      setSummary(response.data);
-      setOpenSummaryDialog(true);
+      const res = await inventoryAPI.getSummary(item.id);
+      setSummary(res.data);
     } catch (error) {
       console.error('Error fetching summary:', error);
-      alert('Error fetching summary');
+      setSnack({ open: true, message: 'Failed to load item details', severity: 'error' });
     }
   };
 
-  const columns = [
-    { field: 'item_code', headerName: 'Item Code', width: 130 },
-    { field: 'name', headerName: 'Name', width: 180 },
-    { field: 'category', headerName: 'Category', width: 120 },
-    { field: 'color', headerName: 'Color', width: 100 },
-    { field: 'size', headerName: 'Size', width: 100 },
-    { field: 'current_stock', headerName: 'Stock', width: 100 },
-    { field: 'unit', headerName: 'Unit', width: 80 },
-    {
-      field: 'needs_reorder',
-      headerName: 'Status',
-      width: 120,
-      renderCell: (params) => (
-        params.value ? (
-          <Chip label="Low Stock" color="error" size="small" icon={<Warning />} />
-        ) : (
-          <Chip label="OK" color="success" size="small" />
-        )
-      ),
-    },
-    {
-      field: 'actions',
-      headerName: 'Actions',
-      width: 150,
-      sortable: false,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', gap: 0.25 }}>
-          <Tooltip title="Edit item">
-            <IconButton size="small" color="primary" onClick={() => handleOpenDialog(params.row)}>
-              <Edit fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Summary & logs">
-            <IconButton size="small" color="primary" onClick={() => handleViewSummary(params.row)}>
-              <History fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete">
-            <IconButton size="small" color="error" onClick={() => handleDelete(params.row.id)}>
-              <Delete fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      ),
-    },
-  ];
+  const closeDetail = () => {
+    setDetailItem(null);
+    setSummary(null);
+  };
 
-  const displayData = activeTab === 0 ? items : lowStockItems;
+  const openRelease = (item) => {
+    setReleaseItem(item);
+    setReleaseQty('');
+    setReleaseRemarks('');
+  };
+
+  const closeRelease = () => {
+    setReleaseItem(null);
+    setReleaseQty('');
+    setReleaseRemarks('');
+  };
+
+  const handleRelease = async () => {
+    if (!releaseItem) return;
+    const qty = parseFloat(releaseQty);
+    if (!qty || qty <= 0) {
+      setSnack({ open: true, message: 'Enter a valid release quantity', severity: 'warning' });
+      return;
+    }
+    if (qty > parseFloat(releaseItem.current_stock)) {
+      setSnack({
+        open: true,
+        message: `Cannot release more than ${fmtQty(releaseItem.current_stock)} ${releaseItem.unit}`,
+        severity: 'warning',
+      });
+      return;
+    }
+
+    setReleaseLoading(true);
+    try {
+      await inventoryAPI.release(releaseItem.id, {
+        quantity: qty,
+        remarks: releaseRemarks,
+      });
+      setSnack({
+        open: true,
+        message: `Released ${fmtQty(qty)} ${releaseItem.unit} to production`,
+        severity: 'success',
+      });
+      closeRelease();
+      if (detailItem?.id === releaseItem.id) closeDetail();
+      fetchAll();
+    } catch (error) {
+      const msg = error.response?.data?.quantity || error.response?.data?.detail || 'Release failed';
+      setSnack({ open: true, message: String(msg), severity: 'error' });
+    } finally {
+      setReleaseLoading(false);
+    }
+  };
+
+  const logLabel = (type) => {
+    const map = {
+      RECEIVE: 'Received',
+      ISSUE: 'Released',
+      ORDER: 'Ordered',
+      RETURN: 'Return',
+      ADJUST: 'Adjustment',
+    };
+    return map[type] || type;
+  };
 
   return (
     <Box>
-      <PageHeader
-        kicker="Materials"
-        title="Inventory"
-        subtitle="Store-room stock for trims, fabrics, and packaging: attributes, balances, receipts from POs, and issues to production—all traceable for audit-ready operations."
-        actions={
-          <Button variant="contained" size="large" startIcon={<Add />} onClick={() => handleOpenDialog()}>
-            Add item
-          </Button>
-        }
-      />
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 1.5,
+          mb: 1.25,
+        }}
+      >
+        <PageHeader kicker="Materials" title="Inventory" compact />
+        {stats && (
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', pb: 0.5 }}>
+            <StatMiniCard
+              label="Active SKUs"
+              value={stats.total_items}
+              icon={<Inventory2 sx={{ fontSize: 20, color: slate[500] }} />}
+            />
+            <StatMiniCard
+              label="Low stock"
+              value={stats.low_stock_items}
+              accent="error.main"
+              icon={<Warning sx={{ fontSize: 20, color: 'error.main' }} />}
+            />
+            <StatMiniCard
+              label="In stock"
+              value={displayData.length}
+              icon={<LocalShipping sx={{ fontSize: 20, color: slate[500] }} />}
+            />
+          </Stack>
+        )}
+      </Box>
 
       <Paper
         elevation={0}
         sx={{
-          mb: 2,
+          mb: 1,
           borderRadius: 0,
           border: '1px solid',
           borderColor: 'divider',
-          px: 1,
-          background: (theme) => theme.palette.background.paper,
+          px: { xs: 1, md: 1.5 },
+          py: 0.5,
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 1.5,
+          alignItems: 'center',
+          justifyContent: 'space-between',
         }}
       >
         <Tabs
           value={activeTab}
-          onChange={(e, newValue) => setActiveTab(newValue)}
+          onChange={(e, v) => setActiveTab(v)}
           variant="scrollable"
           allowScrollButtonsMobile
         >
-          <Tab label="All items" />
-          <Tab label="Low stock" />
+          <Tab label={`All stock (${items.length})`} />
+          <Tab label={`Low stock (${lowStockItems.length})`} />
         </Tabs>
+        <TextField
+          size="small"
+          placeholder="Search item, PI, customer, supplier…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ minWidth: { xs: '100%', sm: 280 } }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+        />
       </Paper>
 
-      <DataGridShell sx={{ height: { xs: 560, md: 620 }, width: '100%' }}>
-        <DataGrid
-          rows={displayData}
-          columns={columns}
-          pageSize={10}
-          rowsPerPageOptions={[10, 25, 50]}
-          loading={loading}
-          disableSelectionOnClick
-          sx={{ ...dataGridSx, height: '100%' }}
-        />
-      </DataGridShell>
+      <Paper
+        elevation={0}
+        sx={{
+          border: `1px solid ${alpha('#2563eb', 0.15)}`,
+          borderRadius: 1,
+          overflow: 'auto',
+          bgcolor: '#fff',
+        }}
+      >
+        <Table size="small" stickyHeader>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ ...headCellSx, minWidth: 160 }}>Item</TableCell>
+              <TableCell sx={{ ...headCellSx, minWidth: 200 }}>Properties</TableCell>
+              <TableCell sx={{ ...headCellSx, width: 90 }}>Code</TableCell>
+              <TableCell sx={{ ...headCellSx, width: 80 }}>Category</TableCell>
+              <TableCell sx={{ ...headCellSx, width: 90, textAlign: 'right' }}>Qty</TableCell>
+              <TableCell sx={{ ...headCellSx, minWidth: 130 }}>Customer PI</TableCell>
+              <TableCell sx={{ ...headCellSx, minWidth: 120 }}>Supplier</TableCell>
+              <TableCell sx={{ ...headCellSx, width: 70 }}>Status</TableCell>
+              <TableCell sx={{ ...headCellSx, width: 150 }} align="right">
+                Actions
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={9} sx={{ py: 5, textAlign: 'center', color: slate[500] }}>
+                  Loading inventory…
+                </TableCell>
+              </TableRow>
+            ) : displayData.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} sx={{ py: 5, textAlign: 'center', color: slate[500] }}>
+                  No stock items found. Items appear here when purchase bills are saved.
+                </TableCell>
+              </TableRow>
+            ) : (
+              displayData.map((row, index) => (
+                <TableRow key={row.id} hover sx={rowSx(index)}>
+                  <TableCell sx={{ ...bodyCellSx, maxWidth: 180 }}>
+                    <InventoryItemParticulars item={row} compact />
+                  </TableCell>
+                  <TableCell sx={{ ...bodyCellSx, minWidth: 220 }}>
+                    <PropertyCards item={row} dense />
+                  </TableCell>
+                  <TableCell sx={bodyCellSx}>
+                    <Typography variant="body2" fontWeight={600} color={slate[700]}>
+                      {row.item_code}
+                    </Typography>
+                  </TableCell>
+                  <TableCell sx={bodyCellSx}>
+                    <Chip
+                      label={row.category}
+                      size="small"
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: '0.68rem',
+                        bgcolor: alpha('#6366f1', 0.1),
+                        color: '#4338ca',
+                        border: `1px solid ${alpha('#6366f1', 0.25)}`,
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ ...bodyCellSx, textAlign: 'right' }}>
+                    <Box
+                      sx={{
+                        display: 'inline-block',
+                        px: 1,
+                        py: 0.35,
+                        borderRadius: 1,
+                        bgcolor: alpha('#059669', 0.1),
+                        border: `1px solid ${alpha('#059669', 0.25)}`,
+                      }}
+                    >
+                      <Typography fontWeight={800} fontSize="0.9rem" color="#047857">
+                        {fmtQty(row.current_stock)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1 }}>
+                        {row.unit}
+                      </Typography>
+                    </Box>
+                  </TableCell>
+                  <TableCell sx={bodyCellSx}>
+                    {(row.pi_refs || []).length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        —
+                      </Typography>
+                    ) : (
+                      <Stack spacing={0.5}>
+                        {row.pi_refs.map((pi) => (
+                          <Box key={pi.pi_number}>
+                            <Typography variant="body2" fontWeight={700} lineHeight={1.3}>
+                              {pi.pi_number}
+                            </Typography>
+                            {pi.customer && (
+                              <Typography variant="caption" color="text.secondary">
+                                {pi.customer}
+                              </Typography>
+                            )}
+                          </Box>
+                        ))}
+                      </Stack>
+                    )}
+                  </TableCell>
+                  <TableCell sx={bodyCellSx}>
+                    {(row.suppliers || []).length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        —
+                      </Typography>
+                    ) : (
+                      <Stack spacing={0.5}>
+                        {row.suppliers.map((s) => (
+                          <Typography key={s} variant="body2" lineHeight={1.35}>
+                            {s}
+                          </Typography>
+                        ))}
+                      </Stack>
+                    )}
+                  </TableCell>
+                  <TableCell sx={bodyCellSx}>
+                    {row.needs_reorder ? (
+                      <Chip label="Low" color="error" size="small" icon={<Warning />} />
+                    ) : (
+                      <Chip label="OK" color="success" size="small" variant="outlined" />
+                    )}
+                  </TableCell>
+                  <TableCell sx={bodyCellSx} align="right">
+                    <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                      <Button
+                        size="small"
+                        startIcon={<History />}
+                        onClick={() => openDetail(row)}
+                      >
+                        Details
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="primary"
+                        startIcon={<Outbound />}
+                        disabled={parseFloat(row.current_stock) <= 0}
+                        onClick={() => openRelease(row)}
+                      >
+                        Release
+                      </Button>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Paper>
 
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-        <DialogTitle>
-          {selectedItem ? 'Edit Inventory Item' : 'New Inventory Item'}
+      {/* Detail dialog */}
+      <Dialog open={Boolean(detailItem)} onClose={closeDetail} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>
+          Stock details
+          {summary && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {summary.item_code} · {fmtQty(summary.current_stock)} {summary.unit} on hand
+            </Typography>
+          )}
         </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Item Code"
-                value={formData.item_code}
-                onChange={(e) => setFormData({ ...formData, item_code: e.target.value })}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                select
-                label="Category"
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              >
-                <MenuItem value="BUTTON">Button</MenuItem>
-                <MenuItem value="THREAD">Thread</MenuItem>
-                <MenuItem value="ZIPPER">Zipper</MenuItem>
-                <MenuItem value="TAPE">Tape</MenuItem>
-                <MenuItem value="POLYBAG">Polybag</MenuItem>
-                <MenuItem value="FABRIC">Fabric</MenuItem>
-                <MenuItem value="LABEL">Label</MenuItem>
-                <MenuItem value="OTHER">Other</MenuItem>
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                select
-                label="Unit"
-                value={formData.unit}
-                onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-              >
-                <MenuItem value="PCS">Pieces</MenuItem>
-                <MenuItem value="MTR">Meters</MenuItem>
-                <MenuItem value="KG">Kilograms</MenuItem>
-                <MenuItem value="ROLL">Roll</MenuItem>
-                <MenuItem value="BOX">Box</MenuItem>
-                <MenuItem value="SET">Set</MenuItem>
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Color"
-                value={formData.color}
-                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Size"
-                value={formData.size}
-                onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Finish"
-                value={formData.finish}
-                onChange={(e) => setFormData({ ...formData, finish: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Material"
-                value={formData.material}
-                onChange={(e) => setFormData({ ...formData, material: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField
-                fullWidth
-                label="Current Stock"
-                type="number"
-                value={formData.current_stock}
-                onChange={(e) => setFormData({ ...formData, current_stock: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField
-                fullWidth
-                label="Reorder Level"
-                type="number"
-                value={formData.reorder_level}
-                onChange={(e) => setFormData({ ...formData, reorder_level: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField
-                fullWidth
-                label="Unit Cost"
-                type="number"
-                value={formData.unit_cost}
-                onChange={(e) => setFormData({ ...formData, unit_cost: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Description"
-                multiline
-                rows={3}
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog} color="inherit">
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {selectedItem ? 'Save changes' : 'Create item'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={openSummaryDialog} onClose={() => setOpenSummaryDialog(false)} maxWidth="lg" fullWidth>
-        <DialogTitle>Inventory Summary - {summary?.name}</DialogTitle>
-        <DialogContent>
+        <DialogContent dividers>
           {summary && (
             <Box>
-              <Grid container spacing={3} sx={{ mt: 1, mb: 3 }}>
-                <Grid item xs={12} sm={4}>
-                  <Paper sx={{ p: 2 }}>
-                    <Typography color="textSecondary" variant="body2">Total Ordered</Typography>
-                    <Typography variant="h5">{summary.total_ordered} {summary.unit}</Typography>
-                    <Typography variant="caption">
-                      Last: {formatDateDisplay(summary.last_order_date) === '—' ? 'N/A' : formatDateDisplay(summary.last_order_date)}
+              <InventoryItemFull item={summary} />
+
+              <Grid container spacing={2} sx={{ mt: 2, mb: 3 }}>
+                <Grid item xs={4}>
+                  <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Received
+                    </Typography>
+                    <Typography variant="h6" fontWeight={700}>
+                      {fmtQty(summary.total_received)}
                     </Typography>
                   </Paper>
                 </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Paper sx={{ p: 2 }}>
-                    <Typography color="textSecondary" variant="body2">Total Received</Typography>
-                    <Typography variant="h5">{summary.total_received} {summary.unit}</Typography>
-                    <Typography variant="caption">
-                      Last: {summary.last_receipt_date ? new Date(summary.last_receipt_date).toLocaleDateString() : 'N/A'}
+                <Grid item xs={4}>
+                  <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Released
+                    </Typography>
+                    <Typography variant="h6" fontWeight={700}>
+                      {fmtQty(summary.total_released)}
                     </Typography>
                   </Paper>
                 </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Paper sx={{ p: 2 }}>
-                    <Typography color="textSecondary" variant="body2">Total Released</Typography>
-                    <Typography variant="h5">{summary.total_released} {summary.unit}</Typography>
-                    <Typography variant="caption">
-                      Last: {summary.last_release_date ? new Date(summary.last_release_date).toLocaleDateString() : 'N/A'}
+                <Grid item xs={4}>
+                  <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                    <Typography variant="caption" color="text.secondary">
+                      On hand
+                    </Typography>
+                    <Typography variant="h6" fontWeight={700} color="primary.main">
+                      {fmtQty(summary.current_stock)} {summary.unit}
                     </Typography>
                   </Paper>
                 </Grid>
               </Grid>
 
-              <Typography variant="h6" gutterBottom>Transaction History</Typography>
-              <Paper sx={{ maxHeight: 400, overflow: 'auto' }}>
-                {summary.all_logs && summary.all_logs.map((log) => (
-                  <Box key={log.id} sx={{ p: 2, borderBottom: '1px solid #eee' }}>
-                    <Grid container spacing={2}>
-                      <Grid item xs={3}>
-                        <Typography variant="body2" color="textSecondary">Type</Typography>
-                        <Typography variant="body1">{log.transaction_type}</Typography>
-                      </Grid>
-                      <Grid item xs={2}>
-                        <Typography variant="body2" color="textSecondary">Quantity</Typography>
-                        <Typography variant="body1">{log.quantity}</Typography>
-                      </Grid>
-                      <Grid item xs={2}>
-                        <Typography variant="body2" color="textSecondary">Reference</Typography>
-                        <Typography variant="body1">{log.reference_number || 'N/A'}</Typography>
-                      </Grid>
-                      <Grid item xs={3}>
-                        <Typography variant="body2" color="textSecondary">Vendor/Supplier</Typography>
-                        <Typography variant="body1">{log.vendor_supplier || 'N/A'}</Typography>
-                      </Grid>
-                      <Grid item xs={2}>
-                        <Typography variant="body2" color="textSecondary">Date</Typography>
-                        <Typography variant="body1">
-                          {new Date(log.created_at).toLocaleDateString()}
+              {(summary.pi_refs?.length > 0 || summary.suppliers?.length > 0) && (
+                <>
+                  <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Assignment fontSize="small" /> Linked PI & supplier
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+                    {summary.pi_refs?.map((pi) => (
+                      <Box key={pi.pi_number} sx={{ mb: 1 }}>
+                        <Typography fontWeight={700}>{pi.pi_number}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Customer: {pi.customer || '—'}
                         </Typography>
-                      </Grid>
-                    </Grid>
+                      </Box>
+                    ))}
+                    {summary.suppliers?.length > 0 && (
+                      <Typography variant="body2" sx={{ mt: 1 }}>
+                        Supplier: {summary.suppliers.join(', ')}
+                      </Typography>
+                    )}
+                  </Paper>
+                </>
+              )}
+
+              {summary.stock_sources?.length > 0 && (
+                <>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Receipt batches
+                  </Typography>
+                  <Paper variant="outlined" sx={{ mb: 2, overflow: 'auto' }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={headCellSx}>Date</TableCell>
+                          <TableCell sx={headCellSx}>Qty</TableCell>
+                          <TableCell sx={headCellSx}>PI</TableCell>
+                          <TableCell sx={headCellSx}>Customer</TableCell>
+                          <TableCell sx={headCellSx}>Supplier</TableCell>
+                          <TableCell sx={headCellSx}>Bill ref</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {summary.stock_sources.map((src, i) => (
+                          <TableRow key={`${src.bill_ref}-${i}`}>
+                            <TableCell>{formatDateDisplay(src.received_at)}</TableCell>
+                            <TableCell>{fmtQty(src.quantity)}</TableCell>
+                            <TableCell>{src.pi_number || '—'}</TableCell>
+                            <TableCell>{src.customer || '—'}</TableCell>
+                            <TableCell>{src.supplier || '—'}</TableCell>
+                            <TableCell>{src.bill_ref || '—'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Paper>
+                </>
+              )}
+
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" gutterBottom>
+                Transaction history
+              </Typography>
+              <Paper variant="outlined" sx={{ maxHeight: 280, overflow: 'auto' }}>
+                {(summary.all_logs || []).map((log) => (
+                  <Box
+                    key={log.id}
+                    sx={{
+                      px: 2,
+                      py: 1.25,
+                      borderBottom: `1px solid ${slate[100]}`,
+                      display: 'grid',
+                      gridTemplateColumns: '100px 1fr 80px 1fr',
+                      gap: 1,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Chip
+                      size="small"
+                      label={logLabel(log.transaction_type)}
+                      color={log.transaction_type === 'ISSUE' ? 'warning' : 'default'}
+                      variant="outlined"
+                    />
+                    <Typography variant="body2">
+                      {log.reference_number || log.vendor_supplier || '—'}
+                    </Typography>
+                    <Typography variant="body2" fontWeight={700}>
+                      {fmtQty(log.quantity)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDateDisplay(log.created_at)}
+                      {log.remarks ? ` · ${log.remarks}` : ''}
+                    </Typography>
                   </Box>
                 ))}
               </Paper>
@@ -464,11 +622,71 @@ const Inventory = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenSummaryDialog(false)} variant="contained">
-            Close
+          <Button onClick={closeDetail}>Close</Button>
+          {detailItem && parseFloat(detailItem.current_stock) > 0 && (
+            <Button
+              variant="contained"
+              startIcon={<Outbound />}
+              onClick={() => {
+                openRelease(detailItem);
+              }}
+            >
+              Release stock
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Release dialog */}
+      <Dialog open={Boolean(releaseItem)} onClose={closeRelease} maxWidth="xs" fullWidth>
+        <DialogTitle>Release to production</DialogTitle>
+        <DialogContent>
+          {releaseItem && (
+            <Box sx={{ pt: 1 }}>
+              <InventoryItemFull item={releaseItem} compact />
+              <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+                Available: <strong>{fmtQty(releaseItem.current_stock)} {releaseItem.unit}</strong>
+              </Alert>
+              <TextField
+                fullWidth
+                label="Quantity to release"
+                type="number"
+                value={releaseQty}
+                onChange={(e) => setReleaseQty(e.target.value)}
+                inputProps={{ min: 0, step: 'any' }}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Remarks (optional)"
+                multiline
+                rows={2}
+                value={releaseRemarks}
+                onChange={(e) => setReleaseRemarks(e.target.value)}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRelease} disabled={releaseLoading}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleRelease} disabled={releaseLoading}>
+            {releaseLoading ? 'Releasing…' : 'Confirm release'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={snack.open}
+        autoHideDuration={4000}
+        onClose={() => setSnack((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={snack.severity} onClose={() => setSnack((s) => ({ ...s, open: false }))}>
+          {snack.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
