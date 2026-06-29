@@ -1,9 +1,10 @@
-import React, { Fragment, useMemo, useState } from 'react';
+import React, { Fragment, useMemo, useState, useEffect, useCallback } from 'react';
 import {
   AppBar,
   Avatar,
   Box,
   Button,
+  Collapse,
   Divider,
   Drawer,
   IconButton,
@@ -12,7 +13,6 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  ListSubheader,
   Toolbar,
   Typography,
   Stack,
@@ -32,12 +32,19 @@ import {
   Logout as LogoutIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  UnfoldMore as UnfoldMoreIcon,
+  UnfoldLess as UnfoldLessIcon,
   Business as BusinessIcon,
   ReceiptLong as ReceiptLongIcon,
   PointOfSale as PointOfSaleIcon,
   LocalShipping as LocalShippingIcon,
   Inventory2 as InventoryIcon,
   ManageAccounts as ManageAccountsIcon,
+  Storefront as StorefrontIcon,
+  PrecisionManufacturing as PrecisionManufacturingIcon,
+  Warehouse as WarehouseIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -45,16 +52,31 @@ import { layoutDrawerWidth, navChrome, slate } from '../theme/appTheme';
 import { hasModuleAccess, dashboardTitleForUser } from '../config/permissions';
 
 const DRAWER_COLLAPSED_WIDTH = 88;
+const NAV_EXPANDED_KEY = 'gms.nav.expandedGroups';
+
+const defaultExpandedState = {
+  overview: true,
+  commercial: true,
+  planning: false,
+  supply: false,
+  stock: false,
+  floor: false,
+  organization: false,
+};
 
 const navGroups = [
   {
     id: 'overview',
     label: 'Overview',
+    icon: <DashboardIcon sx={{ fontSize: 16 }} />,
+    accent: '#14b8a6',
     items: [{ text: 'Dashboard', icon: <DashboardIcon />, path: '/', module: null }],
   },
   {
     id: 'commercial',
-    label: 'Merchandising & sales',
+    label: 'Sales & buyers',
+    icon: <StorefrontIcon sx={{ fontSize: 16 }} />,
+    accent: '#6366f1',
     items: [
       { text: 'Buyers', icon: <PublicIcon />, path: '/customers', module: 'customers' },
       { text: 'Buyer POs', icon: <ReceiptLongIcon />, path: '/buyer-pos', module: 'buyer_pos' },
@@ -65,11 +87,15 @@ const navGroups = [
   {
     id: 'planning',
     label: 'Planning',
+    icon: <ListAltIcon sx={{ fontSize: 16 }} />,
+    accent: '#0ea5e9',
     items: [{ text: 'Indents', icon: <ListAltIcon />, path: '/indents', module: 'indents' }],
   },
   {
     id: 'supply',
-    label: 'Materials & buying',
+    label: 'Procurement',
+    icon: <LocalShippingIcon sx={{ fontSize: 16 }} />,
+    accent: '#f59e0b',
     items: [
       { text: 'Trims library', icon: <ListAltIcon />, path: '/trims', module: 'trims' },
       { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers', module: 'suppliers' },
@@ -80,16 +106,22 @@ const navGroups = [
   {
     id: 'stock',
     label: 'Stock',
+    icon: <WarehouseIcon sx={{ fontSize: 16 }} />,
+    accent: '#10b981',
     items: [{ text: 'Inventory', icon: <InventoryIcon />, path: '/inventory', module: 'inventory' }],
   },
   {
     id: 'floor',
-    label: 'Shop floor',
+    label: 'Production',
+    icon: <PrecisionManufacturingIcon sx={{ fontSize: 16 }} />,
+    accent: '#ec4899',
     items: [{ text: 'Cutting, sewing & finishing', icon: <ManufacturingIcon />, path: '/production', module: 'production' }],
   },
   {
     id: 'organization',
     label: 'Organization',
+    icon: <BusinessIcon sx={{ fontSize: 16 }} />,
+    accent: '#94a3b8',
     items: [
       { text: 'Company details', icon: <BusinessIcon />, path: '/company', module: 'company' },
       { text: 'Users & roles', icon: <ManageAccountsIcon />, path: '/users', module: 'users' },
@@ -129,11 +161,21 @@ const pathMatchesNav = (pathname, path) => {
   return pathname === path || pathname.startsWith(`${path}/`);
 };
 
+const loadExpandedGroups = () => {
+  try {
+    const raw = localStorage.getItem(NAV_EXPANDED_KEY);
+    return raw ? { ...defaultExpandedState, ...JSON.parse(raw) } : { ...defaultExpandedState };
+  } catch {
+    return { ...defaultExpandedState };
+  }
+};
+
 const Layout = ({ children }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState(loadExpandedGroups);
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, user } = useAuth();
@@ -148,6 +190,118 @@ const Layout = ({ children }) => {
       items: group.items.filter((item) => !item.module || hasModuleAccess(user, item.module)),
     }))
     .filter((group) => group.items.length > 0), [user]);
+
+  const activeGroupId = useMemo(() => {
+    const match = visibleNavGroups.find((group) =>
+      group.items.some((item) => pathMatchesNav(location.pathname, item.path))
+    );
+    return match?.id ?? null;
+  }, [location.pathname, visibleNavGroups]);
+
+  useEffect(() => {
+    if (!activeGroupId) return;
+    setExpandedGroups((prev) => {
+      if (prev[activeGroupId]) return prev;
+      return { ...prev, [activeGroupId]: true };
+    });
+  }, [activeGroupId]);
+
+  useEffect(() => {
+    localStorage.setItem(NAV_EXPANDED_KEY, JSON.stringify(expandedGroups));
+  }, [expandedGroups]);
+
+  const toggleGroup = useCallback((groupId) => {
+    setExpandedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  }, []);
+
+  const expandAllGroups = useCallback(() => {
+    const next = {};
+    visibleNavGroups.forEach((g) => { next[g.id] = true; });
+    setExpandedGroups(next);
+  }, [visibleNavGroups]);
+
+  const collapseAllGroups = useCallback(() => {
+    const next = {};
+    visibleNavGroups.forEach((g) => {
+      next[g.id] = g.id === activeGroupId;
+    });
+    setExpandedGroups(next);
+  }, [visibleNavGroups, activeGroupId]);
+
+  const renderNavItem = (item) => {
+    const selected = pathMatchesNav(location.pathname, item.path);
+    const button = (
+      <ListItemButton
+        selected={selected}
+        onClick={() => {
+          navigate(item.path);
+          setMobileOpen(false);
+        }}
+        sx={{
+          borderRadius: '10px',
+          py: 1.05,
+          px: compactNav ? 1 : 1.35,
+          pl: compactNav ? 1 : 1.75,
+          justifyContent: compactNav ? 'center' : 'flex-start',
+          color: '#ffffff',
+          transition: 'background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease',
+          '& .MuiListItemText-primary': {
+            color: selected ? '#ffffff' : alpha('#ffffff', 0.92),
+            fontWeight: selected ? 600 : 500,
+            fontSize: '0.84rem',
+            letterSpacing: '-0.01em',
+            lineHeight: 1.35,
+          },
+          '&.Mui-selected': {
+            color: '#ffffff',
+            bgcolor: alpha(theme.palette.primary.main, 0.26),
+            borderLeft: `3px solid ${theme.palette.primary.light}`,
+            pl: compactNav ? 1 : 1.45,
+            boxShadow: `0 1px 0 ${alpha('#fff', 0.06)} inset`,
+            '& .MuiListItemText-primary': { color: '#ffffff' },
+          },
+          '&:hover': {
+            bgcolor: alpha(theme.palette.primary.main, 0.12),
+            transform: compactNav ? 'none' : 'translateX(2px)',
+          },
+        }}
+      >
+        <ListItemIcon
+          sx={{
+            minWidth: compactNav ? 0 : 40,
+            color: selected ? theme.palette.primary.light : alpha('#ffffff', 0.78),
+            justifyContent: 'center',
+            transition: 'color 0.2s ease',
+          }}
+        >
+          {item.icon}
+        </ListItemIcon>
+        {!compactNav ? (
+          <ListItemText
+            primary={item.text}
+            primaryTypographyProps={{
+              fontWeight: selected ? 600 : 500,
+              fontSize: '0.84rem',
+              letterSpacing: '-0.01em',
+              lineHeight: 1.35,
+              sx: { color: 'inherit' },
+            }}
+          />
+        ) : null}
+      </ListItemButton>
+    );
+    return (
+      <ListItem key={item.path} disablePadding sx={{ mb: 0.25 }}>
+        {compactNav ? (
+          <Tooltip title={item.text} placement="right" arrow>
+            <span>{button}</span>
+          </Tooltip>
+        ) : (
+          button
+        )}
+      </ListItem>
+    );
+  };
 
   const header = useMemo(() => {
     if (location.pathname.startsWith('/orders/pi/')) {
@@ -321,102 +475,159 @@ const Layout = ({ children }) => {
         zIndex: 1,
         py: 0.5,
       }}>
-        {visibleNavGroups.map((group) => (
-          <Fragment key={group.id}>
-            {!compactNav ? (
-              <ListSubheader
-                disableSticky
-                component="div"
-                sx={{
-                  bgcolor: 'transparent',
-                  color: alpha('#ffffff', 0.72),
-                  fontSize: '0.65rem',
-                  fontWeight: 700,
-                  letterSpacing: '0.14em',
-                  lineHeight: 2.2,
-                  mt: group.id === 'overview' ? 0 : 1,
-                  pl: 1.25,
-                  pr: 1,
-                }}
-              >
-                {group.label}
-              </ListSubheader>
-            ) : null}
-            {group.items.map((item) => {
-              const selected = pathMatchesNav(location.pathname, item.path);
-              const button = (
-                <ListItemButton
-                  selected={selected}
-                  onClick={() => {
-                    navigate(item.path);
-                    setMobileOpen(false);
-                  }}
-                  sx={{
-                    borderRadius: '10px',
-                    py: 1.2,
-                    px: compactNav ? 1 : 1.35,
-                    justifyContent: compactNav ? 'center' : 'flex-start',
-                    color: '#ffffff',
-                    transition: 'background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease',
-                    '& .MuiListItemText-primary': {
-                      color: selected ? '#ffffff' : alpha('#ffffff', 0.92),
-                      fontWeight: selected ? 600 : 500,
-                      fontSize: '0.875rem',
-                      letterSpacing: '-0.01em',
-                      lineHeight: 1.35,
-                    },
-                    '&.Mui-selected': {
-                      color: '#ffffff',
-                      bgcolor: alpha(theme.palette.primary.main, 0.26),
-                      borderLeft: `3px solid ${theme.palette.primary.light}`,
-                      pl: compactNav ? 1 : 1.05,
-                      boxShadow: `0 1px 0 ${alpha('#fff', 0.06)} inset`,
-                      '& .MuiListItemText-primary': { color: '#ffffff' },
-                    },
-                    '&:hover': {
-                      bgcolor: alpha(theme.palette.primary.main, 0.12),
-                      transform: compactNav ? 'none' : 'translateX(2px)',
-                    },
-                  }}
-                >
-                  <ListItemIcon
+        {!compactNav && visibleNavGroups.some((g) => g.items.length > 1) && (
+          <Stack
+            direction="row"
+            spacing={0.5}
+            sx={{ px: 0.75, pb: 1, pt: 0.25, justifyContent: 'flex-end' }}
+          >
+            <Button
+              size="small"
+              onClick={expandAllGroups}
+              startIcon={<UnfoldMoreIcon sx={{ fontSize: '14px !important' }} />}
+              sx={{
+                minWidth: 0,
+                px: 1,
+                py: 0.25,
+                fontSize: '0.65rem',
+                fontWeight: 700,
+                textTransform: 'none',
+                color: alpha('#fff', 0.72),
+                '&:hover': { bgcolor: alpha('#fff', 0.08), color: '#fff' },
+              }}
+            >
+              Expand
+            </Button>
+            <Button
+              size="small"
+              onClick={collapseAllGroups}
+              startIcon={<UnfoldLessIcon sx={{ fontSize: '14px !important' }} />}
+              sx={{
+                minWidth: 0,
+                px: 1,
+                py: 0.25,
+                fontSize: '0.65rem',
+                fontWeight: 700,
+                textTransform: 'none',
+                color: alpha('#fff', 0.72),
+                '&:hover': { bgcolor: alpha('#fff', 0.08), color: '#fff' },
+              }}
+            >
+              Collapse
+            </Button>
+          </Stack>
+        )}
+
+        {visibleNavGroups.map((group, groupIndex) => {
+          const isExpanded = expandedGroups[group.id] !== false;
+          const hasActiveItem = group.items.some((item) => pathMatchesNav(location.pathname, item.path));
+          const isSingleItem = group.items.length === 1;
+
+          if (isSingleItem) {
+            return (
+              <Fragment key={group.id}>
+                {!compactNav && groupIndex > 0 && (
+                  <Divider sx={{ my: 0.75, borderColor: alpha('#fff', 0.08) }} />
+                )}
+                {renderNavItem(group.items[0])}
+              </Fragment>
+            );
+          }
+
+          return (
+            <Fragment key={group.id}>
+              {!compactNav ? (
+                <>
+                  {groupIndex > 0 && (
+                    <Divider sx={{ my: 0.75, borderColor: alpha('#fff', 0.08) }} />
+                  )}
+                  <ListItemButton
+                    onClick={() => toggleGroup(group.id)}
                     sx={{
-                      minWidth: compactNav ? 0 : 44,
-                      color: selected ? theme.palette.primary.light : alpha('#ffffff', 0.78),
-                      justifyContent: 'center',
-                      transition: 'color 0.2s ease',
+                      borderRadius: '10px',
+                      py: 0.85,
+                      px: 1.1,
+                      mb: 0.25,
+                      color: alpha('#fff', 0.88),
+                      bgcolor: hasActiveItem ? alpha(group.accent, 0.12) : alpha('#fff', 0.04),
+                      border: `1px solid ${hasActiveItem ? alpha(group.accent, 0.35) : alpha('#fff', 0.08)}`,
+                      transition: 'background-color 0.2s ease, border-color 0.2s ease',
+                      '&:hover': {
+                        bgcolor: alpha(group.accent, 0.16),
+                        borderColor: alpha(group.accent, 0.4),
+                      },
                     }}
                   >
-                    {item.icon}
-                  </ListItemIcon>
-                  {!compactNav ? (
+                    <Box
+                      sx={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: '8px',
+                        display: 'grid',
+                        placeItems: 'center',
+                        mr: 1.1,
+                        flexShrink: 0,
+                        bgcolor: alpha(group.accent, 0.22),
+                        color: group.accent,
+                        border: `1px solid ${alpha(group.accent, 0.35)}`,
+                      }}
+                    >
+                      {group.icon}
+                    </Box>
                     <ListItemText
-                      primary={item.text}
+                      primary={group.label}
+                      secondary={!isExpanded ? `${group.items.length} items hidden` : undefined}
                       primaryTypographyProps={{
-                        fontWeight: selected ? 600 : 500,
-                        fontSize: '0.875rem',
-                        letterSpacing: '-0.01em',
-                        lineHeight: 1.35,
-                        sx: { color: 'inherit' },
+                        fontWeight: 700,
+                        fontSize: '0.72rem',
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                        color: hasActiveItem ? '#fff' : alpha('#fff', 0.9),
+                      }}
+                      secondaryTypographyProps={{
+                        fontSize: '0.62rem',
+                        color: alpha('#fff', 0.5),
+                        mt: 0.15,
                       }}
                     />
-                  ) : null}
-                </ListItemButton>
-              );
-              return (
-                <ListItem key={item.path} disablePadding sx={{ mb: 0.35 }}>
-                  {compactNav ? (
-                    <Tooltip title={item.text} placement="right" arrow>
-                      <span>{button}</span>
-                    </Tooltip>
-                  ) : (
-                    button
+                    <Box
+                      sx={{
+                        ml: 0.5,
+                        px: 0.65,
+                        py: 0.15,
+                        borderRadius: 999,
+                        fontSize: '0.62rem',
+                        fontWeight: 800,
+                        bgcolor: alpha(group.accent, 0.2),
+                        color: group.accent,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {group.items.length}
+                    </Box>
+                    {isExpanded ? (
+                      <ExpandLessIcon sx={{ ml: 0.5, fontSize: 18, color: alpha('#fff', 0.7) }} />
+                    ) : (
+                      <ExpandMoreIcon sx={{ ml: 0.5, fontSize: 18, color: alpha('#fff', 0.7) }} />
+                    )}
+                  </ListItemButton>
+                  <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                    <Box sx={{ pl: 0.5, pb: 0.25 }}>
+                      {group.items.map((item) => renderNavItem(item))}
+                    </Box>
+                  </Collapse>
+                </>
+              ) : (
+                <>
+                  {groupIndex > 0 && (
+                    <Divider sx={{ my: 0.5, borderColor: alpha('#fff', 0.1) }} />
                   )}
-                </ListItem>
-              );
-            })}
-          </Fragment>
-        ))}
+                  {group.items.map((item) => renderNavItem(item))}
+                </>
+              )}
+            </Fragment>
+          );
+        })}
       </List>
     </Box>
   );

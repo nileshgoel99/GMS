@@ -13,71 +13,8 @@ import PurchaseOrdersModal from '../components/dashboard/PurchaseOrdersModal';
 import PosDueToReceiveModal from '../components/dashboard/PosDueToReceiveModal';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { hasModuleAccess, dashboardTitleForUser } from '../config/permissions';
+import { hasModuleAccess } from '../config/permissions';
 import { ordersAPI, inventoryAPI, procurementAPI, productionAPI, purchaseBillAPI, salesEntryAPI } from '../services/api';
-
-const ROLE_HERO = {
-  ADMIN: {
-    overline: 'Executive overview',
-    headline: <>Manufacturing <Box component="span" sx={{ color: 'primary.main' }}>control tower</Box></>,
-    subtitle: 'Throughput, materials risk, purchasing, and production at a glance—aligned for daily operations and management review.',
-  },
-  MANAGER: {
-    overline: 'Operations',
-    headline: <>Stock & <Box component="span" sx={{ color: 'primary.main' }}>materials</Box></>,
-    subtitle: 'Inventory levels, reorder alerts, and indent workflow—your plant operations at a glance.',
-  },
-  MERCHANDISER: {
-    overline: 'Merchandising',
-    headline: <>Orders & <Box component="span" sx={{ color: 'primary.main' }}>buyer pipeline</Box></>,
-    subtitle: 'Active PIs, order status, and merchandising workflow across buyers and indents.',
-  },
-  ACCOUNTS: {
-    overline: 'Finance',
-    headline: <>Cash flow & <Box component="span" sx={{ color: 'primary.main' }}>payments</Box></>,
-    subtitle: 'Receivables to collect and payables due this month—accounts overview at a glance.',
-  },
-  PURCHASING: {
-    overline: 'Procurement',
-    headline: <>Supplier POs & <Box component="span" sx={{ color: 'primary.main' }}>receipts</Box></>,
-    subtitle: 'Purchase orders, expected deliveries, and vendor commitments for the month.',
-  },
-};
-
-const DashboardHero = ({ theme, title, overline, headline, subtitle }) => (
-  <Paper
-    elevation={0}
-    sx={{
-      mb: { xs: 2.5, md: 3 },
-      p: { xs: 2.5, sm: 3 },
-      borderRadius: '18px',
-      border: '1px solid',
-      borderColor: 'divider',
-      bgcolor: 'background.paper',
-      boxShadow: theme.shadows[1],
-    }}
-  >
-    <Typography variant="overline" color="primary" sx={{ fontWeight: 600, letterSpacing: '0.08em' }}>
-      {overline}
-    </Typography>
-    <Typography
-      variant="h3"
-      component="h1"
-      sx={{
-        mt: 0.75,
-        fontWeight: 600,
-        letterSpacing: '-0.03em',
-        lineHeight: 1.2,
-        color: 'text.primary',
-      }}
-    >
-      {headline || title}
-    </Typography>
-    <Typography variant="body1" color="text.secondary" sx={{ mt: 1.25, maxWidth: 720, fontWeight: 400, lineHeight: 1.6 }}>
-      {subtitle}
-    </Typography>
-  </Paper>
-);
 
 const DashboardLoading = ({ theme }) => (
   <Box
@@ -363,7 +300,6 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const dashboardRole = user?.is_admin ? 'ADMIN' : (user?.role || 'ADMIN');
-  const hero = ROLE_HERO[dashboardRole] || ROLE_HERO.ADMIN;
 
   const [loading, setLoading] = useState(true);
   const [receivablesOpen, setReceivablesOpen] = useState(false);
@@ -729,14 +665,6 @@ const Dashboard = () => {
 
   return (
     <Box>
-      <DashboardHero
-        theme={theme}
-        title={dashboardTitleForUser(user)}
-        overline={hero.overline}
-        headline={hero.headline}
-        subtitle={hero.subtitle}
-      />
-
       {renderRoleContent()}
 
       {showReceivables ? (
