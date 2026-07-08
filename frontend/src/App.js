@@ -28,7 +28,7 @@ import BuyerPOEditorPage from './pages/BuyerPOEditorPage';
 import GeneratePIPage from './pages/GeneratePIPage';
 import UsersPage from './pages/UsersPage';
 import ProfilePage from './pages/ProfilePage';
-import DocumentationPage from './pages/DocumentationPage';
+import DocumentationRoute from './components/DocumentationRoute';
 
 // Forces a full remount when navigating between different PO IDs (new vs edit)
 function BuyerPOEditorPageKeyed() {
@@ -254,16 +254,7 @@ function App() {
                 </PrivateRoute>
               }
             />
-            <Route
-              path="/documentation"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <DocumentationPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
+            <Route path="/documentation" element={<DocumentationRoute />} />
             <Route
               path="/users"
               element={
