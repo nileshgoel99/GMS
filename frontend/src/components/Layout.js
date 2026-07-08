@@ -42,6 +42,7 @@ import {
   LocalShipping as LocalShippingIcon,
   Inventory2 as InventoryIcon,
   ManageAccounts as ManageAccountsIcon,
+  MenuBook as MenuBookIcon,
   Storefront as StorefrontIcon,
   PrecisionManufacturing as PrecisionManufacturingIcon,
   Warehouse as WarehouseIcon,
@@ -70,7 +71,10 @@ const navGroups = [
     label: 'Overview',
     icon: <DashboardIcon sx={{ fontSize: 16 }} />,
     accent: '#14b8a6',
-    items: [{ text: 'Dashboard', icon: <DashboardIcon />, path: '/', module: null }],
+    items: [
+      { text: 'Dashboard', icon: <DashboardIcon />, path: '/', module: null },
+      { text: 'Documentation', icon: <MenuBookIcon />, path: '/documentation', module: null },
+    ],
   },
   {
     id: 'commercial',
@@ -147,11 +151,13 @@ const routeMeta = {
   '/production': { title: 'Production' },
   '/company': { title: 'Company details' },
   '/profile': { title: 'My profile' },
+  '/documentation': { title: 'Documentation' },
   '/users': { title: 'Users & roles' },
 };
 
 const pathMatchesNav = (pathname, path) => {
   if (path === '/') return pathname === '/';
+  if (path === '/documentation') return pathname === '/documentation';
   if (path === '/orders') return pathname === '/orders' || pathname.startsWith('/orders/');
   if (path === '/indents') return pathname === '/indents' || pathname.startsWith('/indents/');
   if (path === '/purchase-bills') return pathname === '/purchase-bills' || pathname.startsWith('/purchase-bills/');
