@@ -92,7 +92,7 @@ export default function PublicDocsLayout({ children, isAuthenticated = false }) 
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="xl" sx={{ py: { xs: 2, sm: 3, md: 4 } }}>
+      <Container maxWidth="xl" sx={{ py: { xs: 1.25, sm: 1.5 }, px: { xs: 2, sm: 3 } }}>
         {children}
       </Container>
     </Box>

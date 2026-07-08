@@ -22,14 +22,14 @@ export default function DocumentationRoute() {
   if (isAuthenticated) {
     return (
       <Layout>
-        <DocumentationPage />
+        <DocumentationPage viewportOffset={160} />
       </Layout>
     );
   }
 
   return (
     <PublicDocsLayout isAuthenticated={false}>
-      <DocumentationPage />
+      <DocumentationPage viewportOffset={96} />
     </PublicDocsLayout>
   );
 }

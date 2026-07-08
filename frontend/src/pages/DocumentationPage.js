@@ -3,22 +3,19 @@ import {
   Box,
   Paper,
   Typography,
-  List,
-  ListItemButton,
-  ListItemText,
   Chip,
   Stack,
   useMediaQuery,
   MenuItem,
   TextField,
 } from '@mui/material';
-import { MenuBook, PlayCircleOutline } from '@mui/icons-material';
-import { alpha, useTheme } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles';
 import PageHeader from '../components/PageHeader';
+import DocumentationGuideNav from '../components/documentation/DocumentationGuideNav';
 import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
-import { DOCUMENTATION_GUIDES, guideCategories } from '../config/documentationGuides';
+import { DOCUMENTATION_GUIDES } from '../config/documentationGuides';
 
-const ScribeEmbed = ({ src, title }) => (
+const ScribeEmbed = ({ src, title, fill = false }) => (
   <Box
     sx={{
       position: 'relative',
@@ -27,7 +24,16 @@ const ScribeEmbed = ({ src, title }) => (
       overflow: 'hidden',
       border: `1px solid ${slate[200]}`,
       bgcolor: slate[50],
-      minHeight: { xs: 360, sm: 480, md: 560 },
+      ...(fill
+        ? {
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+          }
+        : {
+            minHeight: { xs: 360, sm: 420 },
+          }),
     }}
   >
     <Box
@@ -38,16 +44,22 @@ const ScribeEmbed = ({ src, title }) => (
       sx={{
         display: 'block',
         width: '100%',
-        height: { xs: 420, sm: 520, md: 640, lg: 720 },
-        minHeight: 480,
         border: 0,
-        aspectRatio: '16 / 12',
+        ...(fill
+          ? {
+              flex: 1,
+              minHeight: { xs: 360, md: 420 },
+              height: '100%',
+            }
+          : {
+              height: { xs: 400, sm: 480 },
+            }),
       }}
     />
   </Box>
 );
 
-export default function DocumentationPage() {
+export default function DocumentationPage({ viewportOffset = 200 }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [activeId, setActiveId] = useState(DOCUMENTATION_GUIDES[0]?.id || '');
@@ -56,8 +68,6 @@ export default function DocumentationPage() {
     () => DOCUMENTATION_GUIDES.find((g) => g.id === activeId) || DOCUMENTATION_GUIDES[0],
     [activeId],
   );
-
-  const categories = useMemo(() => guideCategories(DOCUMENTATION_GUIDES), []);
 
   useEffect(() => {
     const hash = window.location.hash.replace('#', '');
@@ -71,84 +81,16 @@ export default function DocumentationPage() {
     window.history.replaceState(null, '', `#${id}`);
   };
 
-  const guideList = (
-    <List disablePadding dense={isMobile}>
-      {categories.map((category) => (
-        <Box key={category} sx={{ mb: 1.5 }}>
-          <Typography
-            sx={{
-              px: 1.25,
-              py: 0.5,
-              fontSize: '0.62rem',
-              fontWeight: 800,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: slate[500],
-            }}
-          >
-            {category}
-          </Typography>
-          {DOCUMENTATION_GUIDES.filter((g) => g.category === category).map((guide) => {
-            const selected = guide.id === activeGuide?.id;
-            return (
-              <ListItemButton
-                key={guide.id}
-                selected={selected}
-                onClick={() => selectGuide(guide.id)}
-                sx={{
-                  borderRadius: 1.5,
-                  mb: 0.35,
-                  py: 1.1,
-                  px: 1.25,
-                  alignItems: 'flex-start',
-                  border: `1px solid ${selected ? alpha(theme.palette.primary.main, 0.35) : 'transparent'}`,
-                  bgcolor: selected ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
-                  '&.Mui-selected': {
-                    bgcolor: alpha(theme.palette.primary.main, 0.1),
-                    '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.12) },
-                  },
-                }}
-              >
-                <PlayCircleOutline
-                  sx={{
-                    fontSize: 20,
-                    mr: 1.25,
-                    mt: 0.15,
-                    color: selected ? 'primary.main' : slate[400],
-                    flexShrink: 0,
-                  }}
-                />
-                <ListItemText
-                  primary={guide.title}
-                  secondary={guide.description}
-                  primaryTypographyProps={{
-                    fontSize: '0.82rem',
-                    fontWeight: selected ? 700 : 600,
-                    lineHeight: 1.35,
-                    color: selected ? slate[900] : slate[700],
-                  }}
-                  secondaryTypographyProps={{
-                    fontSize: '0.72rem',
-                    lineHeight: 1.4,
-                    mt: 0.35,
-                  }}
-                />
-              </ListItemButton>
-            );
-          })}
-        </Box>
-      ))}
-    </List>
-  );
-
   return (
-    <Box>
-      <PageHeader
-        kicker="Help"
-        title="Documentation"
-        subtitle="Video walkthroughs and step-by-step guides for everyday tasks in GMS."
-        compact
-      />
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: { md: `calc(100dvh - ${viewportOffset}px)` },
+        maxHeight: { md: `calc(100dvh - ${viewportOffset}px)` },
+      }}
+    >
+      <PageHeader kicker="Help" title="Documentation" compact />
 
       {isMobile && (
         <TextField
@@ -158,11 +100,20 @@ export default function DocumentationPage() {
           label="Select guide"
           value={activeGuide?.id || ''}
           onChange={(e) => selectGuide(e.target.value)}
-          sx={{ mb: 2 }}
+          sx={{
+            mb: 2,
+            '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#fff' },
+            '& .MuiInputLabel-root': { fontWeight: 600 },
+          }}
         >
-          {DOCUMENTATION_GUIDES.map((guide) => (
-            <MenuItem key={guide.id} value={guide.id}>
-              {guide.title}
+          {DOCUMENTATION_GUIDES.map((guide, i) => (
+            <MenuItem key={guide.id} value={guide.id} sx={{ py: 1.25 }}>
+              <Stack spacing={0.25}>
+                <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, color: 'primary.main', letterSpacing: '0.06em' }}>
+                  GUIDE {String(i + 1).padStart(2, '0')} · {guide.category.toUpperCase()}
+                </Typography>
+                <Typography sx={{ fontSize: '0.84rem', fontWeight: 700 }}>{guide.title}</Typography>
+              </Stack>
             </MenuItem>
           ))}
         </TextField>
@@ -170,57 +121,79 @@ export default function DocumentationPage() {
 
       <Box
         sx={{
+          flex: 1,
+          minHeight: 0,
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'minmax(260px, 320px) 1fr' },
-          gap: { xs: 2, md: 2.5 },
-          alignItems: 'start',
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(272px, 300px) 1fr' },
+          gap: { xs: 1.5, md: 2 },
+          alignItems: 'stretch',
+          mt: { xs: 0, md: 1 },
         }}
       >
         {!isMobile && (
-          <Paper
-            elevation={0}
-            sx={{
-              ...sectionPaperSxByIndex(0),
-              p: 1.25,
-              position: 'sticky',
-              top: 88,
-              maxHeight: 'calc(100vh - 120px)',
-              overflowY: 'auto',
-            }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ px: 0.75, mb: 1.25 }}>
-              <MenuBook sx={{ fontSize: 20, color: 'primary.main' }} />
-              <Typography variant="subtitle2" fontWeight={800}>
-                Guides
-              </Typography>
-              <Chip label={DOCUMENTATION_GUIDES.length} size="small" sx={{ ml: 'auto', fontWeight: 700 }} />
-            </Stack>
-            {guideList}
-          </Paper>
+          <DocumentationGuideNav
+            activeId={activeGuide?.id}
+            onSelect={selectGuide}
+            fillHeight
+          />
         )}
 
-        <Paper elevation={0} sx={{ ...sectionPaperSxByIndex(1), p: { xs: 1.5, sm: 2 } }}>
+        <Paper
+          elevation={0}
+          sx={{
+            ...sectionPaperSxByIndex(1),
+            p: { xs: 1.25, sm: 1.5 },
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            overflow: 'hidden',
+          }}
+        >
           {activeGuide && (
             <>
               <Stack
                 direction="row"
-                flexWrap="wrap"
                 spacing={1}
                 alignItems="center"
-                sx={{ mb: 1.5, gap: 1 }}
+                sx={{ mb: 1, flexShrink: 0, minWidth: 0, gap: 1 }}
               >
-                <Chip label={activeGuide.category} size="small" color="primary" variant="outlined" />
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                  Interactive video guide
+                <Chip
+                  label={activeGuide.category}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ fontWeight: 700, fontSize: '0.7rem', height: 24, flexShrink: 0 }}
+                />
+                <Typography
+                  variant="subtitle2"
+                  fontWeight={800}
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    lineHeight: 1.3,
+                    letterSpacing: '-0.02em',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {activeGuide.title}
                 </Typography>
               </Stack>
-              <Typography variant="h6" fontWeight={700} sx={{ mb: 0.75, lineHeight: 1.35 }}>
-                {activeGuide.title}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: 720 }}>
-                {activeGuide.description}
-              </Typography>
-              <ScribeEmbed src={activeGuide.embedUrl} title={activeGuide.title} />
+              {isMobile && (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1.25, lineHeight: 1.5, flexShrink: 0 }}
+                >
+                  {activeGuide.description}
+                </Typography>
+              )}
+              <ScribeEmbed
+                src={activeGuide.embedUrl}
+                title={activeGuide.title}
+                fill={!isMobile}
+              />
             </>
           )}
         </Paper>
