@@ -194,46 +194,74 @@ const Orders = () => {
     '& .MuiDataGrid-row.pi-row--alt:hover': {
       bgcolor: `${alpha('#0f766e', 0.12)} !important`,
     },
+    '& .MuiDataGrid-virtualScroller': {
+      overflowX: 'hidden',
+    },
+  };
+
+  const actionBtnSx = {
+    p: 0.65,
+    '& .MuiSvgIcon-root': { fontSize: 18 },
   };
 
   const columns = [
     {
-      field: 'pi_number', headerName: 'PI Number', width: 140,
+      field: 'pi_number',
+      headerName: 'PI #',
+      minWidth: 92,
+      flex: 0.85,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', fontFamily: 'monospace', color: 'primary.main' }}>
+        <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', fontFamily: 'monospace', color: 'primary.main' }}>
           {p.value}
         </Typography>
       ),
     },
     {
-      field: 'buyer_po_number', headerName: 'Buyer PO', width: 130,
+      field: 'buyer_po_number',
+      headerName: 'Buyer PO',
+      minWidth: 82,
+      flex: 0.75,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{p.value || '—'}</Typography>
+        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600 }} noWrap>{p.value || '—'}</Typography>
       ),
     },
     {
-      field: 'customer_code', headerName: 'Cust. Code', width: 100,
+      field: 'customer_code',
+      headerName: 'Code',
+      minWidth: 48,
+      flex: 0.45,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.82rem', fontFamily: 'monospace', color: 'text.secondary' }}>{p.value || '—'}</Typography>
+        <Typography sx={{ fontSize: '0.8rem', fontFamily: 'monospace', color: 'text.secondary' }} noWrap>
+          {p.value || '—'}
+        </Typography>
       ),
     },
     {
-      field: 'client_name', headerName: 'Bill To', flex: 1, minWidth: 160,
+      field: 'client_name',
+      headerName: 'Bill To',
+      minWidth: 88,
+      flex: 1.15,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{p.value || '—'}</Typography>
+        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }} noWrap>{p.value || '—'}</Typography>
       ),
     },
     {
-      field: 'lines_count', headerName: 'Lines', width: 72, type: 'number', align: 'center', headerAlign: 'center',
+      field: 'lines_count',
+      headerName: 'Lines',
+      minWidth: 48,
+      flex: 0.38,
+      type: 'number',
+      align: 'center',
+      headerAlign: 'center',
       renderCell: (p) => cell('center',
-        <Chip label={p.value ?? 0} size="small" variant="outlined" sx={{ fontWeight: 700, fontSize: '0.7rem' }} />
+        <Chip label={p.value ?? 0} size="small" variant="outlined" sx={{ fontWeight: 700, fontSize: '0.68rem', height: 24 }} />
       ),
     },
     {
       field: 'garment_type',
-      headerName: 'Items Summary',
-      flex: 1.2,
-      minWidth: 200,
+      headerName: 'Items',
+      flex: 1.25,
+      minWidth: 88,
       sortable: false,
       renderCell: (params) => {
         const raw = params.value;
@@ -241,7 +269,7 @@ const Orders = () => {
         const content = (
           <Typography
             sx={{
-              fontSize: '0.82rem',
+              fontSize: '0.8rem',
               lineHeight: 1.35,
               color: text === '—' ? 'text.disabled' : 'text.primary',
               display: '-webkit-box',
@@ -262,21 +290,31 @@ const Orders = () => {
       },
     },
     {
-      field: 'quantity', headerName: 'Total Pcs', width: 100, type: 'number', align: 'right', headerAlign: 'right',
+      field: 'quantity',
+      headerName: 'Pcs',
+      minWidth: 60,
+      flex: 0.45,
+      type: 'number',
+      align: 'right',
+      headerAlign: 'right',
       renderCell: (p) => cell('right',
-        <Typography sx={{ fontWeight: 700, fontSize: '0.82rem' }}>{p.value?.toLocaleString?.() ?? p.value ?? '—'}</Typography>
+        <Typography sx={{ fontWeight: 700, fontSize: '0.8rem' }}>{p.value?.toLocaleString?.() ?? p.value ?? '—'}</Typography>
       ),
     },
     {
-      field: 'order_date', headerName: 'PI Date', width: 110,
+      field: 'order_date',
+      headerName: 'PI Date',
+      minWidth: 84,
+      flex: 0.55,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{formatDateDisplay(p.value)}</Typography>
+        <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }} noWrap>{formatDateDisplay(p.value)}</Typography>
       ),
     },
     {
       field: 'status',
       headerName: 'Status',
-      width: 130,
+      minWidth: 92,
+      flex: 0.58,
       align: 'center',
       headerAlign: 'center',
       renderCell: (params) => cell('center',
@@ -284,59 +322,70 @@ const Orders = () => {
           label={params.value ?? '—'}
           color={STATUS_COLORS[params.value] ?? 'default'}
           size="small"
-          sx={{ fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}
+          sx={{ fontWeight: 700, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.03em', maxWidth: '100%' }}
         />
       ),
     },
     {
       field: 'actions',
-      headerName: '',
-      width: 220,
+      headerName: 'Actions',
+      minWidth: 280,
+      flex: 0.9,
       sortable: false,
       align: 'center',
       headerAlign: 'center',
       renderCell: (params) => cell('center',
-        <Box sx={{ display: 'flex', gap: 0.25, alignItems: 'center' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'nowrap',
+            gap: 0.35,
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+            py: 0.25,
+          }}
+        >
           <Tooltip title="View / Print PI">
-            <IconButton size="small" color="primary" onClick={() => navigate(`/orders/pi/${params.row.id}/view`)}>
-              <Edit fontSize="small" />
+            <IconButton size="small" color="primary" sx={actionBtnSx} onClick={() => navigate(`/orders/pi/${params.row.id}/view`)}>
+              <Edit />
             </IconButton>
           </Tooltip>
           <Tooltip title={params.row.indents_count > 0 ? 'View indents for this PI' : 'Create indent from this PI'}>
             <IconButton
               size="small"
-              sx={{ color: '#7c3aed' }}
+              sx={{ ...actionBtnSx, color: '#7c3aed' }}
               onClick={() => navigate(
                 params.row.indents_count > 0
                   ? `/indents?piId=${params.row.id}`
                   : `/indents/new?piId=${params.row.id}`,
               )}
             >
-              <Assignment fontSize="small" />
+              <Assignment />
             </IconButton>
           </Tooltip>
           {params.row.linked_po_id && (
             <>
               <Tooltip title="View linked Buyer PO">
-                <IconButton size="small" color="secondary" onClick={() => setViewPoId(params.row.linked_po_id)}>
-                  <Visibility fontSize="small" />
+                <IconButton size="small" color="secondary" sx={actionBtnSx} onClick={() => setViewPoId(params.row.linked_po_id)}>
+                  <Visibility />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Edit / Re-generate PI">
-                <IconButton size="small" sx={{ color: '#0f766e' }} onClick={() => navigate(`/buyer-pos/${params.row.linked_po_id}/generate-pi`)}>
-                  <ReceiptLong fontSize="small" />
+                <IconButton size="small" sx={{ ...actionBtnSx, color: '#0f766e' }} onClick={() => navigate(`/buyer-pos/${params.row.linked_po_id}/generate-pi`)}>
+                  <ReceiptLong />
                 </IconButton>
               </Tooltip>
             </>
           )}
           <Tooltip title="Planning sheet">
-            <IconButton size="small" color="primary" onClick={() => handleOpenPlanning(params.row)}>
-              <Description fontSize="small" />
+            <IconButton size="small" color="primary" sx={actionBtnSx} onClick={() => handleOpenPlanning(params.row)}>
+              <Description />
             </IconButton>
           </Tooltip>
           <Tooltip title="Delete">
-            <IconButton size="small" color="error" onClick={() => handleDelete(params.row.id)}>
-              <Delete fontSize="small" />
+            <IconButton size="small" color="error" sx={actionBtnSx} onClick={() => handleDelete(params.row.id)}>
+              <Delete />
             </IconButton>
           </Tooltip>
         </Box>
@@ -345,26 +394,26 @@ const Orders = () => {
   ];
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 } }}>
+    <Box>
       <PageHeader
         kicker="Commercial"
         title="Proforma Invoices"
         subtitle="PIs generated from Buyer POs. Use the Buyer POs module to create and generate a new PI."
       />
 
-      <DataGridShell>
+      <DataGridShell sx={{ width: '100%' }}>
         <DataGrid
           rows={orders}
           columns={columns}
           getRowId={(row) => row.id}
           getRowClassName={(p) => (orders.findIndex((r) => r.id === p.id) % 2 === 1 ? 'pi-row--alt' : '')}
-          rowHeight={64}
+          rowHeight={68}
           columnHeaderHeight={48}
           pageSizeOptions={[10, 25, 50]}
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
           loading={loading}
           disableRowSelectionOnClick
-          sx={piGridSx}
+          sx={{ ...piGridSx, width: '100%', border: 'none' }}
         />
       </DataGridShell>
 
