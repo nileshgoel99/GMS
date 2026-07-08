@@ -32,6 +32,14 @@ const STATUS_COLORS = {
   CANCELLED: 'error',
 };
 
+const STATUS_LABELS = {
+  DRAFT: 'Draft',
+  CONFIRMED: 'Confirmed',
+  IN_PRODUCTION: 'In Production',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled',
+};
+
 const EMPTY_PLANNING = {
   buttons_required: 0,
   buttons_type: '',
@@ -150,15 +158,16 @@ const Orders = () => {
     }
   };
 
-  const cell = (align = 'left', children) => (
+  const cell = (align = 'left', children, verticalAlign = 'center') => (
     <Box
       sx={{
         display: 'flex',
-        alignItems: 'center',
+        alignItems: verticalAlign,
         justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
         width: '100%',
         height: '100%',
         px: 0.5,
+        overflow: 'visible',
       }}
     >
       {children}
@@ -186,6 +195,8 @@ const Orders = () => {
       display: 'flex',
       alignItems: 'center',
       borderBottom: `1px solid ${slate[100]}`,
+      overflow: 'visible',
+      py: 0.75,
     },
     '& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus': { outline: 'none' },
     '& .MuiDataGrid-row.pi-row--alt': {
@@ -313,83 +324,117 @@ const Orders = () => {
     {
       field: 'status',
       headerName: 'Status',
-      minWidth: 92,
-      flex: 0.58,
+      minWidth: 128,
+      flex: 0.65,
       align: 'center',
       headerAlign: 'center',
       renderCell: (params) => cell('center',
         <Chip
-          label={params.value ?? '—'}
+          label={STATUS_LABELS[params.value] || params.value || '—'}
           color={STATUS_COLORS[params.value] ?? 'default'}
           size="small"
-          sx={{ fontWeight: 700, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.03em', maxWidth: '100%' }}
+          sx={{
+            fontWeight: 700,
+            fontSize: '0.68rem',
+            letterSpacing: '0.02em',
+            height: 'auto',
+            minHeight: 26,
+            maxWidth: 'none',
+            '& .MuiChip-label': {
+              whiteSpace: 'normal',
+              overflow: 'visible',
+              textOverflow: 'clip',
+              display: 'block',
+              px: 1,
+              py: 0.35,
+              lineHeight: 1.25,
+            },
+          }}
         />
       ),
     },
     {
       field: 'actions',
       headerName: 'Actions',
-      minWidth: 280,
-      flex: 0.9,
+      minWidth: 132,
+      flex: 0.55,
       sortable: false,
       align: 'center',
       headerAlign: 'center',
-      renderCell: (params) => cell('center',
-        <Box
-          sx={{
-            display: 'flex',
-            flexWrap: 'nowrap',
-            gap: 0.35,
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '100%',
-            py: 0.25,
-          }}
-        >
-          <Tooltip title="View / Print PI">
-            <IconButton size="small" color="primary" sx={actionBtnSx} onClick={() => navigate(`/orders/pi/${params.row.id}/view`)}>
-              <Edit />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title={params.row.indents_count > 0 ? 'View indents for this PI' : 'Create indent from this PI'}>
-            <IconButton
-              size="small"
-              sx={{ ...actionBtnSx, color: '#7c3aed' }}
-              onClick={() => navigate(
-                params.row.indents_count > 0
-                  ? `/indents?piId=${params.row.id}`
-                  : `/indents/new?piId=${params.row.id}`,
-              )}
-            >
-              <Assignment />
-            </IconButton>
-          </Tooltip>
-          {params.row.linked_po_id && (
-            <>
-              <Tooltip title="View linked Buyer PO">
-                <IconButton size="small" color="secondary" sx={actionBtnSx} onClick={() => setViewPoId(params.row.linked_po_id)}>
-                  <Visibility />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Edit / Re-generate PI">
-                <IconButton size="small" sx={{ ...actionBtnSx, color: '#0f766e' }} onClick={() => navigate(`/buyer-pos/${params.row.linked_po_id}/generate-pi`)}>
-                  <ReceiptLong />
-                </IconButton>
-              </Tooltip>
-            </>
-          )}
-          <Tooltip title="Planning sheet">
-            <IconButton size="small" color="primary" sx={actionBtnSx} onClick={() => handleOpenPlanning(params.row)}>
-              <Description />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete">
-            <IconButton size="small" color="error" sx={actionBtnSx} onClick={() => handleDelete(params.row.id)}>
-              <Delete />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      ),
+      renderCell: (params) => {
+        const actionButtons = [
+          (
+            <Tooltip key="view" title="View / Print PI">
+              <IconButton size="small" color="primary" sx={actionBtnSx} onClick={() => navigate(`/orders/pi/${params.row.id}/view`)}>
+                <Edit />
+              </IconButton>
+            </Tooltip>
+          ),
+          (
+            <Tooltip key="indent" title={params.row.indents_count > 0 ? 'View indents for this PI' : 'Create indent from this PI'}>
+              <IconButton
+                size="small"
+                sx={{ ...actionBtnSx, color: '#7c3aed' }}
+                onClick={() => navigate(
+                  params.row.indents_count > 0
+                    ? `/indents?piId=${params.row.id}`
+                    : `/indents/new?piId=${params.row.id}`,
+                )}
+              >
+                <Assignment />
+              </IconButton>
+            </Tooltip>
+          ),
+          params.row.linked_po_id ? (
+            <Tooltip key="view-po" title="View linked Buyer PO">
+              <IconButton size="small" color="secondary" sx={actionBtnSx} onClick={() => setViewPoId(params.row.linked_po_id)}>
+                <Visibility />
+              </IconButton>
+            </Tooltip>
+          ) : null,
+          params.row.linked_po_id ? (
+            <Tooltip key="regen-pi" title="Edit / Re-generate PI">
+              <IconButton size="small" sx={{ ...actionBtnSx, color: '#0f766e' }} onClick={() => navigate(`/buyer-pos/${params.row.linked_po_id}/generate-pi`)}>
+                <ReceiptLong />
+              </IconButton>
+            </Tooltip>
+          ) : null,
+          (
+            <Tooltip key="planning" title="Planning sheet">
+              <IconButton size="small" color="primary" sx={actionBtnSx} onClick={() => handleOpenPlanning(params.row)}>
+                <Description />
+              </IconButton>
+            </Tooltip>
+          ),
+          (
+            <Tooltip key="delete" title="Delete">
+              <IconButton size="small" color="error" sx={actionBtnSx} onClick={() => handleDelete(params.row.id)}>
+                <Delete />
+              </IconButton>
+            </Tooltip>
+          ),
+        ].filter(Boolean);
+
+        return cell('center',
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 32px)',
+              gap: 0.35,
+              justifyContent: 'center',
+              width: '100%',
+              py: 0.35,
+            }}
+          >
+            {actionButtons.map((btn) => (
+              <Box key={btn.key} sx={{ display: 'flex', justifyContent: 'center' }}>
+                {btn}
+              </Box>
+            ))}
+          </Box>,
+          'center',
+        );
+      },
     },
   ];
 
@@ -407,7 +452,7 @@ const Orders = () => {
           columns={columns}
           getRowId={(row) => row.id}
           getRowClassName={(p) => (orders.findIndex((r) => r.id === p.id) % 2 === 1 ? 'pi-row--alt' : '')}
-          rowHeight={68}
+          rowHeight={100}
           columnHeaderHeight={48}
           pageSizeOptions={[10, 25, 50]}
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
