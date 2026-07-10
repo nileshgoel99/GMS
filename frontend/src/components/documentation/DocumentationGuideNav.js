@@ -19,6 +19,7 @@ import { DOCUMENTATION_GUIDES, guideCategories } from '../../config/documentatio
 const CATEGORY_ACCENT = {
   Buyers: spectrum.indigo,
   'Buyer POs': spectrum.emerald,
+  'Proforma Invoices': '#0f766e',
 };
 
 const categoryAccent = (name) => CATEGORY_ACCENT[name] || spectrum.cyan;

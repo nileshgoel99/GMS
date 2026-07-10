@@ -25,6 +25,14 @@ export const DOCUMENTATION_GUIDES = [
     embedUrl:
       'https://scribehow.com/embed/How_to_Create_a_New_Buyer_Purchase_Order__bKd6HaMLRpODYbz9S5NuyA?as=video',
   },
+  {
+    id: 'raise-process-buyer-pi',
+    title: 'How to Raise and Process Buyer Proforma Invoices',
+    category: 'Proforma Invoices',
+    description: 'Raise a proforma invoice from a buyer PO and process it through the sales workflow.',
+    embedUrl:
+      'https://scribehow.com/embed/How_to_Raise_and_Process_Buyer_Proforma_Invoices__452pZvfpRgWfY4l7-WGOFA?as=video',
+  },
 ];
 
 export const guideCategories = (guides) =>
