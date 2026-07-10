@@ -21,7 +21,7 @@ import {
   Collapse,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
-import { Add, Edit, Delete, Visibility, ReceiptLong, Assignment, Autorenew } from '@mui/icons-material';
+import { Add, Edit, Delete, Visibility, ReceiptLong, Assignment, Autorenew, CheckCircleOutline } from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
@@ -626,6 +626,107 @@ export default function BuyerPOs() {
           sx={{ fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.03em' }}
         />
       ),
+    },
+    {
+      field: 'pi_id',
+      headerName: 'Proforma Invoice',
+      minWidth: 168,
+      flex: 0.95,
+      align: 'center',
+      headerAlign: 'center',
+      sortable: false,
+      renderCell: (p) => {
+        if (p.row.pi_id) {
+          return cell('center',
+            <Tooltip title="View proforma invoice">
+              <Box
+                sx={{
+                  display: 'inline-flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 0.35,
+                  px: 1.25,
+                  py: 0.65,
+                  borderRadius: 1.5,
+                  bgcolor: alpha('#0f766e', 0.07),
+                  border: `1px solid ${alpha('#0f766e', 0.22)}`,
+                  cursor: 'pointer',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease',
+                  '&:hover': {
+                    bgcolor: alpha('#0f766e', 0.11),
+                    borderColor: alpha('#0f766e', 0.38),
+                  },
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/orders/pi/${p.row.pi_id}/view`);
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <CheckCircleOutline sx={{ fontSize: 15, color: '#0f766e' }} />
+                  <Typography
+                    sx={{
+                      fontSize: '0.62rem',
+                      fontWeight: 800,
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      color: '#0f766e',
+                      lineHeight: 1,
+                    }}
+                  >
+                    PI raised
+                  </Typography>
+                </Box>
+                <Typography
+                  sx={{
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    color: slate[800],
+                    fontFamily: '"IBM Plex Mono", monospace',
+                    letterSpacing: '0.02em',
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {p.row.pi_ref || 'View invoice'}
+                </Typography>
+              </Box>
+            </Tooltip>
+          );
+        }
+
+        return cell('center',
+          <Tooltip title="Create proforma invoice from this PO">
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ReceiptLong sx={{ fontSize: 16 }} />}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/buyer-pos/${p.row.id}/generate-pi`);
+              }}
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.72rem',
+                textTransform: 'none',
+                borderRadius: 1.5,
+                py: 0.45,
+                px: 1.35,
+                borderColor: slate[300],
+                color: slate[700],
+                bgcolor: '#fff',
+                whiteSpace: 'nowrap',
+                '&:hover': {
+                  borderColor: '#0f766e',
+                  color: '#0f766e',
+                  bgcolor: alpha('#0f766e', 0.04),
+                },
+              }}
+            >
+              Raise PI
+            </Button>
+          </Tooltip>
+        );
+      },
     },
     {
       field: 'actions',
