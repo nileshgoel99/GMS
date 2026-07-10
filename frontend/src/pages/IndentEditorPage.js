@@ -16,6 +16,7 @@ import { hasModuleAccess } from '../config/permissions';
 import { ordersAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
+import { normalizeGarmentSize } from '../utils/normalizeGarmentSize';
 import AddTrimModal from '../components/trims/AddTrimModal';
 import { formatTrimPropertyLabel, isGarmentSizeTrimProperty, isNumericTrimProperty } from '../components/trims/trimConstants';
 
@@ -110,7 +111,7 @@ const rowQtyForColor = (color, colorQty, totalQty) => {
   return totalQty;
 };
 
-const normalizeMatchKey = (value) => String(value || '').trim().toLowerCase();
+const normalizeMatchKey = (value) => normalizeGarmentSize(value);
 
 const findTrimPropertyValue = (propertyValues, pattern) => {
   const entry = Object.entries(propertyValues || {}).find(([k]) => pattern.test(String(k).trim()));
@@ -122,7 +123,9 @@ const getTrimColorFromRow = (row) =>
   findTrimPropertyValue(row.property_values, /^colou?r$/i) || (row.color_variant?.trim() || '');
 
 const getTrimGarmentSizeFromRow = (row) =>
-  findTrimPropertyValue(row.property_values, /^garment\s*size$/i) || (row.size_variant?.trim() || '');
+  normalizeGarmentSize(
+    findTrimPropertyValue(row.property_values, /^garment\s*size$/i) || (row.size_variant?.trim() || ''),
+  );
 
 const piLineMatchesColor = (line, color) =>
   normalizeMatchKey(line.color) === normalizeMatchKey(color);
@@ -468,9 +471,10 @@ const buildSizeTable = (piLines) => {
     if (!sb.length) return;
     const sizeMap = {};
     sb.forEach(({ size, qty }) => {
-      if (!size) return;
-      allSizes.add(size);
-      sizeMap[size] = (sizeMap[size] || 0) + (parseInt(qty, 10) || 0);
+      const normalizedSize = normalizeGarmentSize(size);
+      if (!normalizedSize) return;
+      allSizes.add(normalizedSize);
+      sizeMap[normalizedSize] = (sizeMap[normalizedSize] || 0) + (parseInt(qty, 10) || 0);
     });
     rows.push({
       id: line.id,
@@ -498,8 +502,10 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
   const sizeBreakdown = piLines.reduce((acc, line) => {
     if (line.size_breakdown?.length) {
       line.size_breakdown.forEach(({ size, qty }) => {
-        if (!acc[size]) acc[size] = {};
-        acc[size][line.color || 'Total'] = (acc[size][line.color || 'Total'] || 0) + (qty || 0);
+        const normalizedSize = normalizeGarmentSize(size);
+        if (!normalizedSize) return;
+        if (!acc[normalizedSize]) acc[normalizedSize] = {};
+        acc[normalizedSize][line.color || 'Total'] = (acc[normalizedSize][line.color || 'Total'] || 0) + (qty || 0);
       });
     }
     return acc;
@@ -601,7 +607,11 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
               {piLines.map((line, li) => {
                 if (!line.size_breakdown?.length) return null;
                 const sizeMap = {};
-                line.size_breakdown.forEach(({ size, qty }) => { sizeMap[size] = qty; });
+                line.size_breakdown.forEach(({ size, qty }) => {
+                  const normalizedSize = normalizeGarmentSize(size);
+                  if (!normalizedSize) return;
+                  sizeMap[normalizedSize] = (sizeMap[normalizedSize] || 0) + (parseInt(qty, 10) || 0);
+                });
                 const lineTotal = line.quantity_pcs;
                 return (
                   <Box component="tr" key={li}>
@@ -756,7 +766,8 @@ export default function IndentEditorPage() {
     const sizes = new Set();
     activeLines.forEach((line) => {
       (line.size_breakdown || []).forEach(({ size }) => {
-        if (size) sizes.add(size);
+        const normalizedSize = normalizeGarmentSize(size);
+        if (normalizedSize) sizes.add(normalizedSize);
       });
     });
     return sortSizes(sizes);
@@ -916,7 +927,8 @@ export default function IndentEditorPage() {
   const setTrimField = (i, field, value) => {
     setTrimLines((prev) => {
       const next = [...prev];
-      const updated = { ...next[i], [field]: value };
+      const nextValue = field === 'size_variant' ? normalizeGarmentSize(value) : value;
+      const updated = { ...next[i], [field]: nextValue };
       if (field === 'consumption_per_pc' || field === 'color_variant' || field === 'size_variant') {
         updated.total_consumption = trimRowTotal(updated, activeLines, colorQty, totalQty);
       }
@@ -952,7 +964,8 @@ export default function IndentEditorPage() {
   const setTrimPropertyValue = (i, propName, value) => {
     setTrimLines((prev) => {
       const next = [...prev];
-      const row = { ...next[i], property_values: { ...(next[i].property_values || {}), [propName]: value } };
+      const nextValue = isGarmentSizeTrimProperty(propName) ? normalizeGarmentSize(value) : value;
+      const row = { ...next[i], property_values: { ...(next[i].property_values || {}), [propName]: nextValue } };
       row.total_consumption = trimRowTotal(row, activeLines, colorQty, totalQty);
       next[i] = row;
       return next;

@@ -36,6 +36,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, customersAPI } from '../services/api';
+import { normalizeGarmentSize, normalizeSizeBreakdownEntries } from '../utils/normalizeGarmentSize';
 import { slate, warm, spectrum } from '../theme/appTheme';
 
 // ── Status config ────────────────────────────────────────────────────────────
@@ -228,7 +229,11 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
   const setSizeQty  = (si, val) =>
     onChange({ size_breakdown: line.size_breakdown.map((r, i) => i === si ? { ...r, qty: val } : r) });
   const setSizeName = (si, val) =>
-    onChange({ size_breakdown: line.size_breakdown.map((r, i) => i === si ? { ...r, size: val } : r) });
+    onChange({
+      size_breakdown: line.size_breakdown.map((r, i) =>
+        i === si ? { ...r, size: normalizeGarmentSize(val) } : r
+      ),
+    });
   const addSize   = () => onChange({ size_breakdown: [...line.size_breakdown, { size: '', qty: '' }] });
   const removeSize = (si) =>
     onChange({ size_breakdown: line.size_breakdown.filter((_, i) => i !== si) });
@@ -837,7 +842,12 @@ export default function BuyerPOEditorPage() {
             color:          l.color || '',
             customer_ref:   l.customer_ref || '',
             size_breakdown: l.size_breakdown?.length
-              ? l.size_breakdown.map((s) => ({ size: s.size, qty: s.qty != null ? String(s.qty) : '' }))
+              ? normalizeSizeBreakdownEntries(
+                  l.size_breakdown.map((s) => ({
+                    size: s.size,
+                    qty: s.qty != null ? String(s.qty) : '',
+                  })),
+                ).map((s) => ({ size: s.size, qty: s.qty != null ? String(s.qty) : '' }))
               : [{ size: '', qty: '' }],
             uom:           l.uom || 'PCS',
             unit_price:    l.unit_price != null ? String(l.unit_price) : '',
@@ -910,9 +920,9 @@ export default function BuyerPOEditorPage() {
         fabric:         l.fabric,
         color:          l.color,
         customer_ref:   l.customer_ref,
-        size_breakdown: l.size_breakdown
-          .filter((r) => r.size)
-          .map((r) => ({ size: r.size, qty: parseInt(r.qty) || 0 })),
+        size_breakdown: normalizeSizeBreakdownEntries(
+          l.size_breakdown.filter((r) => r.size),
+        ),
         uom:           l.uom || 'PCS',
         unit_price:    l.unit_price !== '' ? parseFloat(l.unit_price) : null,
         discount:      l.discount !== '' ? parseFloat(l.discount) : null,

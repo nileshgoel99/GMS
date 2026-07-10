@@ -19,6 +19,7 @@ from .models import (
     SalesEntry,
     SalesEntryLine,
 )
+from .size_utils import normalize_size_breakdown_list
 
 
 # ---------------------------------------------------------------------------
@@ -34,6 +35,14 @@ class ProformaInvoiceLineSerializer(serializers.ModelSerializer):
             'unit_price_usd', 'line_value_usd', 'created_at', 'updated_at',
         ]
         read_only_fields = ('id', 'created_at', 'updated_at')
+
+    def validate_size_breakdown(self, value):
+        return normalize_size_breakdown_list(value)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['size_breakdown'] = normalize_size_breakdown_list(data.get('size_breakdown'))
+        return data
 
 
 def _sync_client_fields_from_customer(customer):
@@ -64,6 +73,7 @@ def _normalize_lines_payload(lines_data):
         row.setdefault('material', '')
         row.setdefault('color', '')
         row.setdefault('size_breakdown', [])
+        row['size_breakdown'] = normalize_size_breakdown_list(row['size_breakdown'])
         row.setdefault('quantity_pcs', 0)
         row.setdefault('unit_price_usd', None)
         row.setdefault('line_value_usd', None)
@@ -483,6 +493,14 @@ class BuyerPOLineSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ('id',)
 
+    def validate_size_breakdown(self, value):
+        return normalize_size_breakdown_list(value)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['size_breakdown'] = normalize_size_breakdown_list(data.get('size_breakdown'))
+        return data
+
 
 class BuyerPOListSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
@@ -538,6 +556,7 @@ class BuyerPOSerializer(serializers.ModelSerializer):
         po.lines.all().delete()
         for i, line_data in enumerate(lines_data, start=1):
             line_data.pop('id', None)
+            line_data['size_breakdown'] = normalize_size_breakdown_list(line_data.get('size_breakdown'))
             sizes = line_data.get('size_breakdown') or []
             if sizes:
                 line_data['quantity'] = sum(s.get('qty', 0) for s in sizes)

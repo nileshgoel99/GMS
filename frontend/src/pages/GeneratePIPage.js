@@ -7,6 +7,7 @@ import { alpha } from '@mui/material/styles';
 import { ArrowBack, Print, Edit, CheckCircle, Autorenew } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, companyAPI } from '../services/api';
+import { normalizeGarmentSize } from '../utils/normalizeGarmentSize';
 import { slate } from '../theme/appTheme';
 
 // ── Number to words ───────────────────────────────────────────────────────────
@@ -64,9 +65,11 @@ function groupLines(lines) {
     (line.size_breakdown || []).forEach((sb) => {
       const qty = parseInt(sb.qty) || 0;
       if (!qty) return;
-      const existing = grp.sizes.find((s) => s.size.toUpperCase() === (sb.size || '').toUpperCase());
+      const size = normalizeGarmentSize(sb.size);
+      if (!size) return;
+      const existing = grp.sizes.find((s) => s.size === size);
       if (existing) existing.qty += qty;
-      else grp.sizes.push({ size: sb.size, qty });
+      else grp.sizes.push({ size, qty });
     });
     grp.quantity += parseInt(line.quantity) || 0;
   });

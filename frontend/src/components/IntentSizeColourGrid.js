@@ -1,6 +1,7 @@
 import React from 'react';
 import { TextField, IconButton, Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
 import { Delete } from '@mui/icons-material';
+import { normalizeGarmentSize, normalizeSizeMapKeys } from '../utils/normalizeGarmentSize';
 
 export const SIZE_KEYS = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
 
@@ -20,9 +21,13 @@ export const normalizeSizeRowsFromApi = (raw) => {
   return raw.map((row) => {
     const base = Object.fromEntries(SIZE_KEYS.map((k) => [k, 0]));
     const incoming = row.sizes && typeof row.sizes === 'object' ? row.sizes : {};
+    const normalizedIncoming = normalizeSizeMapKeys(incoming);
+    SIZE_KEYS.forEach((k) => {
+      if (normalizedIncoming[k]) base[k] = normalizedIncoming[k];
+    });
     return {
       color: String(row.color || 'Colour').slice(0, 80),
-      sizes: { ...base, ...incoming },
+      sizes: base,
     };
   });
 };
