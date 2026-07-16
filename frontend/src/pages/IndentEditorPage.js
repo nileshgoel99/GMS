@@ -16,7 +16,7 @@ import { hasModuleAccess } from '../config/permissions';
 import { ordersAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
-import { normalizeGarmentSize } from '../utils/normalizeGarmentSize';
+import { normalizeGarmentSize, sortGarmentSizes } from '../utils/normalizeGarmentSize';
 import AddTrimModal from '../components/trims/AddTrimModal';
 import { formatTrimPropertyLabel, isGarmentSizeTrimProperty, isNumericTrimProperty } from '../components/trims/trimConstants';
 
@@ -197,7 +197,7 @@ const BOM_CELL_PAD_Y = (BOM_ROW_TOTAL - BOM_ROW_H) / 2;
 const BOM_TABLE_MIN_W = 1420;
 
 const FABRIC_COLS = [
-  { label: 'Material *', width: 240, align: 'left' },
+  { label: 'Fabric composition *', width: 280, align: 'left' },
   { label: 'Color', width: 120, align: 'left' },
   { label: 'GSM', width: 90, align: 'right' },
   { label: 'Roll W (CMS)', width: 110, align: 'right' },
@@ -447,12 +447,20 @@ const buildColorQty = (piLines) => {
   return map;
 };
 
-const sortSizes = (sizes) => [...sizes].sort((a, b) => {
-  const na = parseFloat(a);
-  const nb = parseFloat(b);
-  if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
-  return String(a).localeCompare(String(b), undefined, { numeric: true });
-});
+const piLineFabricComposition = (line) => String(line?.material || line?.fabric || '').trim();
+
+const collectFabricCompositionOptions = (piLines, fabricRows) => {
+  const options = new Set();
+  (piLines || []).forEach((line) => {
+    const composition = piLineFabricComposition(line);
+    if (composition) options.add(composition);
+  });
+  (fabricRows || []).forEach((row) => {
+    const material = String(row?.material || '').trim();
+    if (material) options.add(material);
+  });
+  return [...options].sort((a, b) => a.localeCompare(b));
+};
 
 const formatLineSizes = (line) => {
   const sb = line?.size_breakdown || [];
@@ -480,11 +488,12 @@ const buildSizeTable = (piLines) => {
       id: line.id,
       color: line.color || '—',
       itemName: line.item_name || '—',
+      fabricComposition: piLineFabricComposition(line),
       sizeMap,
       total: line.quantity_pcs || Object.values(sizeMap).reduce((s, v) => s + v, 0),
     });
   });
-  return { sizes: sortSizes(allSizes), rows };
+  return { sizes: sortGarmentSizes(allSizes), rows };
 };
 
 // ── Table cell sx ─────────────────────────────────────────────────────────────
@@ -510,7 +519,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
     }
     return acc;
   }, {});
-  const sizes = Object.keys(sizeBreakdown);
+  const sizes = sortGarmentSizes(Object.keys(sizeBreakdown));
 
   const companyName = company?.company_legal_name || 'JB INTERNATIONAL';
 
@@ -770,8 +779,12 @@ export default function IndentEditorPage() {
         if (normalizedSize) sizes.add(normalizedSize);
       });
     });
-    return sortSizes(sizes);
+    return sortGarmentSizes(sizes);
   }, [activeLines]);
+  const fabricCompositionOptions = useMemo(
+    () => collectFabricCompositionOptions(pi?.lines, fabricLines),
+    [pi, fabricLines],
+  );
 
   const getTrimMaster = (row) => (row.trim ? trimsList.find((t) => t.id === row.trim) : null);
 
@@ -1213,6 +1226,7 @@ export default function IndentEditorPage() {
                 {pi.lines.map((line) => {
                   const selected = selectedLineIds.includes(line.id);
                   const sizeText = formatLineSizes(line);
+                  const fabricComposition = piLineFabricComposition(line);
                   return (
                     <Box
                       key={line.id}
@@ -1236,6 +1250,11 @@ export default function IndentEditorPage() {
                         <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, lineHeight: 1.35, wordBreak: 'break-word' }}>
                           {line.item_name}
                         </Typography>
+                        {fabricComposition && (
+                          <Typography sx={{ fontSize: '0.68rem', color: slate[600], mt: 0.35, lineHeight: 1.4, fontWeight: 600 }}>
+                            Fabric composition: {fabricComposition}
+                          </Typography>
+                        )}
                         <Typography sx={{ fontSize: '0.72rem', color: slate[500], mt: 0.25, lineHeight: 1.35 }}>
                           {[
                             line.color,
@@ -1367,6 +1386,11 @@ export default function IndentEditorPage() {
                                 <Typography sx={{ fontSize: '0.62rem', color: slate[500], fontWeight: 500, lineHeight: 1.3, mt: 0.15 }}>
                                   {row.itemName}
                                 </Typography>
+                                {row.fabricComposition && (
+                                  <Typography sx={{ fontSize: '0.6rem', color: slate[500], fontWeight: 500, lineHeight: 1.35, mt: 0.2 }}>
+                                    {row.fabricComposition}
+                                  </Typography>
+                                )}
                               </TableCell>
                               {sizeTable.sizes.map((size) => (
                                 <TableCell key={size} align="center" sx={{ fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums', px: 0.75, py: 0.75 }}>
@@ -1439,9 +1463,30 @@ export default function IndentEditorPage() {
                     <TableRow key={i} hover>
                       <TableCell sx={bodyCell('left')}>
                         <Box sx={bomCellInner('left')}>
-                          <TextField size="small" fullWidth value={row.material}
-                            onChange={(e) => setFabricField(i, 'material', e.target.value)}
-                            placeholder="e.g. 80% Polyester 20% Cotton" sx={bomFieldSx('left')} />
+                          <Autocomplete
+                            freeSolo
+                            options={fabricCompositionOptions}
+                            value={row.material}
+                            onChange={(_, v) => setFabricField(i, 'material', v || '')}
+                            onInputChange={(_, v) => setFabricField(i, 'material', v)}
+                            sx={{ m: 0, width: '100%' }}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                size="small"
+                                fullWidth
+                                placeholder="Select from PI or type new fabric"
+                                sx={bomFieldSx('left')}
+                              />
+                            )}
+                            renderOption={(props, option) => (
+                              <Box component="li" {...props} key={option}>
+                                <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, lineHeight: 1.35 }}>
+                                  {option}
+                                </Typography>
+                              </Box>
+                            )}
+                          />
                         </Box>
                       </TableCell>
                       <TableCell sx={bodyCell('left')}>
