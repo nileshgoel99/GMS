@@ -99,12 +99,12 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
     <Dialog open onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
       {/* ── Header banner ── */}
       <Box sx={{ bgcolor: slate[900], px: 3, py: 2.5, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.45), mb: 0.25 }}>
             Purchase Order
           </Typography>
-          <Typography sx={{ fontFamily: '"IBM Plex Mono", monospace', fontWeight: 900, fontSize: '1.3rem', color: '#fff', letterSpacing: '0.02em' }}>
-            {po?.po_number || '…'}
+          <Typography sx={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff', letterSpacing: '-0.01em' }}>
+            Buyer PO details
           </Typography>
         </Box>
         {po && (
@@ -116,7 +116,7 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
               fontWeight: 800,
               fontSize: '0.7rem',
               letterSpacing: '0.04em',
-              ml: 'auto',
+              flexShrink: 0,
               ...(statusColor(po.status) === 'default' && {
                 bgcolor: alpha('#fff', 0.15),
                 color: '#fff',
@@ -125,7 +125,7 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
             }}
           />
         )}
-        <IconButton size="small" onClick={onClose} sx={{ color: alpha('#fff', 0.5), '&:hover': { color: '#fff' } }}>
+        <IconButton size="small" onClick={onClose} sx={{ color: alpha('#fff', 0.5), flexShrink: 0, '&:hover': { color: '#fff' } }}>
           ✕
         </IconButton>
       </Box>
@@ -140,6 +140,7 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
             {/* ── PO Identity row ── */}
             <Box sx={{ bgcolor: '#fff', px: 3, py: 2.5, borderBottom: `1px solid ${slate[100]}` }}>
               <Grid container spacing={3}>
+                <Grid item xs={12} sm={6} md={3}><F label="PO Number"       value={po.po_number} mono /></Grid>
                 <Grid item xs={6} sm={3}><F label="PO Date"         value={formatDateDisplay(po.po_date)} /></Grid>
                 <Grid item xs={6} sm={3}><F label="Ex-Factory Date" value={formatDateDisplay(po.ex_factory_date)} /></Grid>
                 <Grid item xs={6} sm={3}><F label="Currency"        value={po.currency} /></Grid>
