@@ -231,6 +231,16 @@ class IndentTrimLine(models.Model):
     unit = models.CharField(max_length=20, default='PCS')
     total_consumption = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     total_unit = models.CharField(max_length=20, blank=True, default='')
+    parts = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            'Optional multi-part consumption breakdown for trims made of several '
+            'components sharing one colour/qty basis, e.g. Velcro Hook & Loop: '
+            '[{"label": "Hook", "consumption_per_pc": "0.28", "unit": "MTRS", '
+            '"total_consumption": "1124.2", "total_unit": "MTRS"}, {"label": "Loop", ...}]'
+        ),
+    )
     remarks = models.CharField(max_length=200, blank=True, default='', help_text='e.g. in stock')
     sort_order = models.PositiveIntegerField(default=0)
 

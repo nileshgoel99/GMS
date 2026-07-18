@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Box, Button, TextField, IconButton, Typography, Grid, MenuItem,
@@ -28,10 +28,11 @@ export const emptyTrimForm = () => ({
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 
-export default function AddTrimModal({ open, onClose, onSaved }) {
+export default function AddTrimModal({ open, onClose, onSaved, initialName = '' }) {
   const [form, setForm] = useState(emptyTrimForm());
   const [saving, setSaving] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
+  const wasOpen = useRef(false);
 
   const loadSuppliers = useCallback(async () => {
     try {
@@ -43,8 +44,12 @@ export default function AddTrimModal({ open, onClose, onSaved }) {
   }, []);
 
   useEffect(() => {
-    if (open) loadSuppliers();
-  }, [open, loadSuppliers]);
+    if (open && !wasOpen.current) {
+      loadSuppliers();
+      setForm({ ...emptyTrimForm(), name: initialName || '' });
+    }
+    wasOpen.current = open;
+  }, [open, initialName, loadSuppliers]);
 
   const handleClose = () => {
     if (!saving) {

@@ -31,6 +31,16 @@ const buildColorQty = (piLines) => {
 };
 
 const val = (v) => (v != null && String(v).trim() !== '' ? v : '—');
+const isInStockRemark = (remarks) => String(remarks || '').trim().toLowerCase() === 'in stock';
+
+const InStockBadge = ({ checked }) => (
+  <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6 }}>
+    <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: checked ? '#16a34a' : '#94a3b8', flexShrink: 0 }} />
+    <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: checked ? '#15803d' : '#64748b' }}>
+      {checked ? 'In stock' : 'Not in stock'}
+    </Typography>
+  </Box>
+);
 
 const viewHeadSx = {
   fontWeight: 700,
@@ -226,7 +236,7 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                         { h: 'Cons./pc', a: 'right', w: '10%' },
                         { h: 'Unit', a: 'center', w: '8%' },
                         { h: 'Total', a: 'right', w: '10%' },
-                        { h: 'Remarks', a: 'left', w: '22%' },
+                        { h: 'In Stock', a: 'center', w: '22%' },
                       ].map((col) => (
                         <TableCell key={col.h} sx={{ ...viewHeadSx, textAlign: col.a, width: col.w }}>{col.h}</TableCell>
                       ))}
@@ -247,7 +257,7 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                           <TableCell sx={viewCellSx('right')}>{val(row.consumption_per_pc)}</TableCell>
                           <TableCell sx={{ ...viewCellSx('center'), fontWeight: 600 }}>{val(row.unit)}</TableCell>
                           <TableCell sx={{ ...viewCellSx('right'), fontWeight: 700 }}>{val(row.total_consumption)}</TableCell>
-                          <TableCell sx={viewCellSx('left')}>{val(row.remarks)}</TableCell>
+                          <TableCell sx={viewCellSx('center')}><InStockBadge checked={isInStockRemark(row.remarks)} /></TableCell>
                         </TableRow>
                       ))
                     )}
@@ -271,7 +281,7 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                         { h: 'Unit', a: 'center', w: '7%' },
                         { h: 'Total', a: 'right', w: '9%' },
                         { h: 'Tot. Unit', a: 'center', w: '8%' },
-                        { h: 'Remarks', a: 'left', w: '15%' },
+                        { h: 'In Stock', a: 'center', w: '15%' },
                       ].map((col) => (
                         <TableCell key={col.h} sx={{ ...viewHeadSx, textAlign: col.a, width: col.w }}>{col.h}</TableCell>
                       ))}
@@ -293,11 +303,30 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                           </TableCell>
                           <TableCell sx={viewCellSx('left')}>{formatTrimVariant(row)}</TableCell>
                           <TableCell sx={viewCellSx('left')}>{supplierForTrim(row)}</TableCell>
-                          <TableCell sx={viewCellSx('right')}>{val(row.consumption_per_pc)}</TableCell>
-                          <TableCell sx={{ ...viewCellSx('center'), fontWeight: 600 }}>{val(row.unit)}</TableCell>
-                          <TableCell sx={{ ...viewCellSx('right'), fontWeight: 700 }}>{val(row.total_consumption)}</TableCell>
-                          <TableCell sx={{ ...viewCellSx('center'), fontWeight: 600 }}>{val(row.total_unit || row.unit)}</TableCell>
-                          <TableCell sx={viewCellSx('left')}>{val(row.remarks)}</TableCell>
+                          {row.parts?.length ? (
+                            <>
+                              <TableCell sx={{ ...viewCellSx('right'), whiteSpace: 'pre-line' }}>
+                                {row.parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${val(p.consumption_per_pc)}`).join('\n')}
+                              </TableCell>
+                              <TableCell sx={{ ...viewCellSx('center'), fontWeight: 600, whiteSpace: 'pre-line' }}>
+                                {row.parts.map((p) => val(p.unit)).join('\n')}
+                              </TableCell>
+                              <TableCell sx={{ ...viewCellSx('right'), fontWeight: 700, whiteSpace: 'pre-line' }}>
+                                {row.parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${val(p.total_consumption)}`).join('\n')}
+                              </TableCell>
+                              <TableCell sx={{ ...viewCellSx('center'), fontWeight: 600, whiteSpace: 'pre-line' }}>
+                                {row.parts.map((p) => val(p.total_unit || p.unit)).join('\n')}
+                              </TableCell>
+                            </>
+                          ) : (
+                            <>
+                              <TableCell sx={viewCellSx('right')}>{val(row.consumption_per_pc)}</TableCell>
+                              <TableCell sx={{ ...viewCellSx('center'), fontWeight: 600 }}>{val(row.unit)}</TableCell>
+                              <TableCell sx={{ ...viewCellSx('right'), fontWeight: 700 }}>{val(row.total_consumption)}</TableCell>
+                              <TableCell sx={{ ...viewCellSx('center'), fontWeight: 600 }}>{val(row.total_unit || row.unit)}</TableCell>
+                            </>
+                          )}
+                          <TableCell sx={viewCellSx('center')}><InStockBadge checked={isInStockRemark(row.remarks)} /></TableCell>
                         </TableRow>
                       ))
                     )}

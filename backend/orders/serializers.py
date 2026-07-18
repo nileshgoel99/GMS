@@ -325,7 +325,7 @@ class IndentTrimLineSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'trim', 'trim_name', 'category', 'color_variant', 'size_variant',
             'property_values',
-            'consumption_per_pc', 'unit', 'total_consumption', 'total_unit', 'remarks', 'sort_order',
+            'consumption_per_pc', 'unit', 'total_consumption', 'total_unit', 'parts', 'remarks', 'sort_order',
         ]
         read_only_fields = ('id',)
 
@@ -401,7 +401,7 @@ class IndentSerializer(serializers.ModelSerializer):
                 'color_variant': tl.color_variant, 'size_variant': tl.size_variant,
                 'property_values': tl.property_values or {},
                 'consumption_per_pc': str(tl.consumption_per_pc),
-                'unit': tl.unit, 'total_unit': tl.total_unit, 'remarks': tl.remarks,
+                'unit': tl.unit, 'total_unit': tl.total_unit, 'parts': tl.parts or [], 'remarks': tl.remarks,
             }
             for tl in indent.trim_lines.all()
         ]
