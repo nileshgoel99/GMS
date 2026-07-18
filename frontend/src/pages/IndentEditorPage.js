@@ -936,6 +936,29 @@ export default function IndentEditorPage() {
   const [sizeBreakdownOpen, setSizeBreakdownOpen] = useState(true);
   const [saveNotice, setSaveNotice] = useState('');
 
+  const resetBomFormState = () => {
+    setFabricLines([emptyFabric()]);
+    setTrimLines([emptyTrim()]);
+    setPcsPerCarton('');
+    setCartonPly('');
+    setCartonDims('');
+    setCartonDimUnit('CMS');
+    setPreparedBy('');
+    setReceivedBy('');
+    setApprovedBy('');
+    setNotes('');
+    setAutoFilled(false);
+  };
+
+  const resetNewIndentForm = () => {
+    resetBomFormState();
+    setPi(null);
+    setSelectedLineIds([]);
+    setIndent(null);
+    setIndentDate(new Date().toISOString().split('T')[0]);
+    setStatus('DRAFT');
+  };
+
   const activeLines = useMemo(() => {
     if (!pi?.lines) return [];
     if (!selectedLineIds.length) return pi.lines;
@@ -1016,6 +1039,7 @@ export default function IndentEditorPage() {
     (async () => {
       try {
         if (isNew) {
+          resetNewIndentForm();
           const [trims, piArr] = await Promise.all([loadIndentTrims(), loadIndentPiOptions()]);
           setTrimsList(trims);
           setPiList(piArr);
@@ -1024,7 +1048,6 @@ export default function IndentEditorPage() {
             const piData = await loadIndentPiContext(piIdFromUrl);
             setPi(piData);
             setSelectedLineIds((piData.lines || []).map((l) => l.id));
-            await tryAutoFillForLines(piData.lines || []);
           }
           const numRes = await ordersAPI.getNextIndentNumber();
           setIndentNumber(numRes.data.indent_number);
@@ -1094,12 +1117,18 @@ export default function IndentEditorPage() {
     }
   };
 
+  const loadItemTemplate = async () => {
+    if (!activeLines.length) return;
+    await tryAutoFillForLines(activeLines);
+  };
+
   const loadFullPi = async (piSummary) => {
     if (!piSummary?.id) return null;
     return loadIndentPiContext(piSummary.id);
   };
 
   const handlePiSelect = async (piSummary) => {
+    resetBomFormState();
     if (!piSummary) {
       setPi(null);
       setSelectedLineIds([]);
@@ -1109,8 +1138,6 @@ export default function IndentEditorPage() {
     setPi(piData);
     const lineIds = (piData?.lines || []).map((l) => l.id);
     setSelectedLineIds(lineIds);
-    setAutoFilled(false);
-    if (piData) await tryAutoFillForLines(piData.lines);
   };
 
   const toggleLine = (lineId) => {
@@ -1458,13 +1485,36 @@ export default function IndentEditorPage() {
                 {autoFilled && (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
                     <AutoAwesome sx={{ fontSize: 12, color: '#f59e0b' }} />
-                    <Typography sx={{ fontSize: '0.68rem', color: '#92400e', fontWeight: 600 }}>Auto-filled</Typography>
+                    <Typography sx={{ fontSize: '0.68rem', color: '#92400e', fontWeight: 600 }}>Template loaded</Typography>
                   </Box>
                 )}
               </Box>
             </Grid>
           )}
         </Grid>
+
+        {isNew && pi && (
+          <Box sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<AutoAwesome />}
+              onClick={loadItemTemplate}
+              sx={{
+                fontWeight: 700,
+                textTransform: 'none',
+                borderColor: '#d97706',
+                color: '#92400e',
+                '&:hover': { borderColor: '#b45309', bgcolor: alpha('#f59e0b', 0.06) },
+              }}
+            >
+              Load saved BOM for this item
+            </Button>
+            <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
+              Optional — fills fabric &amp; trims from the last saved indent for this item name.
+            </Typography>
+          </Box>
+        )}
 
         {/* PI line items + size breakdown */}
         {pi?.lines?.length > 0 && (
