@@ -24,10 +24,23 @@ import { formatTrimPropertyLabel, isGarmentSizeTrimProperty, isNumericTrimProper
 // ── Print styles ─────────────────────────────────────────────────────────────
 const PRINT_STYLE = `
 @media print {
-  body > * { visibility: hidden !important; }
-  #indent-print-root, #indent-print-root * { visibility: visible !important; }
-  #indent-print-root { position: fixed; top: 0; left: 0; width: 100%; }
+  body * { visibility: hidden !important; }
+  #indent-print-root,
+  #indent-print-root * { visibility: visible !important; }
+  #indent-print-root {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    display: block !important;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   @page { margin: 12mm; size: A4; }
+}
+@media screen {
+  #indent-print-root { display: none !important; }
 }
 `;
 
@@ -899,7 +912,6 @@ export default function IndentEditorPage() {
   const [company,  setCompany]  = useState(null);
   const [piList,   setPiList]   = useState([]);
   const [trimsList, setTrimsList] = useState([]);
-  const [showPrint, setShowPrint] = useState(false);
 
   // Form state
   const [indent,       setIndent]      = useState(null);
@@ -1379,7 +1391,7 @@ export default function IndentEditorPage() {
         </Typography>
         {!isNew && (
           <Button startIcon={<Print />} variant="outlined" size="small"
-            onClick={() => { setShowPrint(true); setTimeout(() => window.print(), 200); }}
+            onClick={() => window.print()}
             sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
             Print
           </Button>
@@ -2230,8 +2242,8 @@ export default function IndentEditorPage() {
         onSaved={handleTrimCreated}
       />
 
-      {/* ── Hidden print root ── */}
-      <Box id="indent-print-root" sx={{ display: 'none' }}>
+      {/* ── Hidden print root (hidden on screen via PRINT_STYLE, not display:none) ── */}
+      <Box id="indent-print-root">
         <IndentDocument
           pi={pi}
           selectedLines={activeLines}
