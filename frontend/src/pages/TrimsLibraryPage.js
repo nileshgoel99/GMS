@@ -13,20 +13,25 @@ import { dataGridSx, slate } from '../theme/appTheme';
 import { ordersAPI, suppliersAPI } from '../services/api';
 import {
   TRIM_PROPERTY_NAME_SUGGESTIONS,
+  TRIM_CATEGORY_SUGGESTIONS,
+  TRIM_UNIT_OPTIONS as UNIT_OPTIONS,
   isNumericTrimProperty,
+  isCartonBoxCategory,
   normalizeTrimPropertyName,
   formatTrimPropertyLabel,
+  applyCartonBoxCategoryToForm,
+  defaultValuesFromCartonBox,
+  cartonBoxFromDefaultValues,
+  emptyCartonDefaults,
+  formatCartonBoxSummary,
 } from '../components/trims/trimConstants';
-
-const CATEGORY_SUGGESTIONS = [
-  'Fabric', 'Tape', 'Button', 'Velcro', 'Zipper', 'Thread', 'Label',
-  'Polybag', 'Waist Band', 'Hook & Loop', 'Sticker', 'Other',
-];
-
-const UNIT_OPTIONS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GROSS', 'CMS', 'CM', 'MM', 'INCH', 'GMS', ''];
+import CartonBoxDefaultsFields from '../components/trims/CartonBoxDefaultsFields';
 
 const emptyProperty = () => ({ name: '', unit: '' });
-const emptyForm = () => ({ name: '', category: '', default_unit: 'PCS', notes: '', properties: [], supplier: null });
+const emptyForm = () => ({
+  name: '', category: '', default_unit: 'PCS', notes: '', properties: [], supplier: null,
+  cartonDefaults: emptyCartonDefaults(),
+});
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 
@@ -76,6 +81,9 @@ export default function TrimsLibraryPage() {
       notes: row.notes || '',
       properties: (row.properties || []).map((p) => ({ name: p.name || '', unit: p.unit || '' })),
       supplier: row.supplier || null,
+      cartonDefaults: isCartonBoxCategory(row.category)
+        ? cartonBoxFromDefaultValues(row.default_property_values || {})
+        : emptyCartonDefaults(),
     });
     setDrawer(true);
   };
@@ -99,15 +107,30 @@ export default function TrimsLibraryPage() {
     setForm((f) => ({ ...f, properties: f.properties.filter((_, i) => i !== idx) }));
   };
 
+  const handleCategoryChange = (category) => {
+    setForm((f) => applyCartonBoxCategoryToForm({ ...f, category }));
+  };
+
   const handleSave = async () => {
     if (!form.name.trim()) { alert('Trim name is required.'); return; }
     const properties = form.properties
       .filter((p) => p.name.trim())
       .map((p) => ({ name: p.name.trim(), unit: (p.unit || '').trim() }));
+    const default_property_values = isCartonBoxCategory(form.category)
+      ? defaultValuesFromCartonBox(form.cartonDefaults)
+      : {};
 
     setSaving(true);
     try {
-      const payload = { ...form, properties, supplier: form.supplier || null };
+      const payload = {
+        name: form.name,
+        category: form.category,
+        default_unit: form.default_unit,
+        notes: form.notes,
+        properties,
+        supplier: form.supplier || null,
+        default_property_values,
+      };
       if (editing) {
         await ordersAPI.updateTrim(editing.id, payload);
       } else {
@@ -171,7 +194,7 @@ export default function TrimsLibraryPage() {
       renderCell: (p) => cell('left',
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <LibraryBooks sx={{ fontSize: 16, color: 'primary.main', opacity: 0.7 }} />
-          <Typography sx={{ fontWeight: 600, fontSize: '0.85rem' }}>{p.value}</Typography>
+          <Typography sx={{ fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>{p.value}</Typography>
         </Box>
       ),
     },
@@ -189,6 +212,14 @@ export default function TrimsLibraryPage() {
       field: 'properties', headerName: 'Properties', flex: 2, minWidth: 200, sortable: false,
       renderCell: (p) => {
         const props = p.value || [];
+        const defaults = p.row.default_property_values || {};
+        if (isCartonBoxCategory(p.row.category) && formatCartonBoxSummary(defaults)) {
+          return cell('left',
+            <Typography sx={{ fontSize: '0.78rem', color: '#92400e', fontWeight: 600 }}>
+              {formatCartonBoxSummary(defaults)}
+            </Typography>,
+          );
+        }
         if (!props.length) {
           return cell('left', <Typography sx={{ fontSize: '0.8rem', color: 'text.disabled' }}>—</Typography>);
         }
@@ -280,16 +311,16 @@ export default function TrimsLibraryPage() {
             <TextField
               fullWidth size="small" label="Trim Name *"
               value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. 5 CM WIDE Reflective Tape D6101"
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value.toUpperCase() }))}
+              placeholder="e.g. 5 CM WIDE REFLECTIVE TAPE D6101"
             />
           </Grid>
           <Grid item xs={12} sm={6}>
             <Autocomplete
               freeSolo
-              options={CATEGORY_SUGGESTIONS}
+              options={TRIM_CATEGORY_SUGGESTIONS}
               value={form.category}
-              onInputChange={(_, v) => setForm((f) => ({ ...f, category: v }))}
+              onInputChange={(_, v) => handleCategoryChange(v)}
               renderInput={(params) => <TextField {...params} size="small" fullWidth label="Category" />}
             />
           </Grid>
@@ -385,6 +416,12 @@ export default function TrimsLibraryPage() {
               </Table>
             )}
           </Grid>
+
+          {isCartonBoxCategory(form.category) && (
+            <Grid item xs={12}>
+              <CartonBoxDefaultsFields values={form.cartonDefaults} onChange={(cartonDefaults) => setForm((f) => ({ ...f, cartonDefaults }))} />
+            </Grid>
+          )}
 
           <Grid item xs={12}>
             <TextField fullWidth size="small" multiline minRows={2} label="Notes"

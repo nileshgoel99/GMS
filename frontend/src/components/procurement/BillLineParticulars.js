@@ -10,9 +10,10 @@ export { parseParticulars as parseBillParticulars };
 export default function BillLineParticulars({ row }) {
   const parsed = parseParticulars(row.particulars);
   const name = (row.trim_name || parsed.name || row.particulars || '').trim() || '—';
-  const properties = parsed.properties.length
+  const properties = (parsed.properties.length
     ? parsed.properties
-    : (parsed.name && row.trim_name && parsed.name !== row.trim_name ? [parsed.name] : []);
+    : (parsed.name && row.trim_name && parsed.name !== row.trim_name ? [parsed.name] : [])
+  ).filter((line) => !line.startsWith('_pi_fabric_key:'));
 
   return (
     <Box sx={{ py: 0.5, pr: 1 }}>

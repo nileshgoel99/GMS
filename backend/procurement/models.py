@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import models
 from django.contrib.auth.models import User
@@ -66,6 +66,12 @@ class PurchaseOrder(models.Model):
     cgst_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     sgst_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     igst_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    round_off = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Adjustment to round grand total to nearest rupee',
+    )
     total_amount = models.DecimalField(max_digits=14, decimal_places=2, blank=True, null=True)
 
     payment_terms = models.CharField(max_length=500, blank=True, null=True)
@@ -124,10 +130,14 @@ class PurchaseOrder(models.Model):
             self.sgst_amount = (subtotal * sgst_pct / Decimal('100')).quantize(Decimal('0.01'))
             self.igst_amount = Decimal('0')
 
-        self.total_amount = (self.subtotal + self.cgst_amount + self.sgst_amount + self.igst_amount).quantize(Decimal('0.01'))
+        raw_total = (self.subtotal + self.cgst_amount + self.sgst_amount + self.igst_amount).quantize(Decimal('0.01'))
+        rounded_total = raw_total.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        self.round_off = (rounded_total - raw_total).quantize(Decimal('0.01'))
+        self.total_amount = rounded_total
         if save:
             self.save(update_fields=[
-                'subtotal', 'cgst_amount', 'sgst_amount', 'igst_amount', 'total_amount', 'updated_at',
+                'subtotal', 'cgst_amount', 'sgst_amount', 'igst_amount',
+                'round_off', 'total_amount', 'updated_at',
             ])
 
     def update_status(self):

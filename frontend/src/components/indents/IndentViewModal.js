@@ -33,6 +33,31 @@ const buildColorQty = (piLines) => {
 const val = (v) => (v != null && String(v).trim() !== '' ? v : '—');
 const isInStockRemark = (remarks) => String(remarks || '').trim().toLowerCase() === 'in stock';
 
+const cartonDimUnitLabel = (unit) => (unit === 'INCH' ? 'Inches' : 'CMS');
+
+const cartonBoxesForIndent = (indent) => {
+  if (Array.isArray(indent?.carton_boxes) && indent.carton_boxes.length) return indent.carton_boxes;
+  if (indent?.pcs_per_carton || indent?.carton_ply || indent?.carton_dimensions) {
+    return [{
+      pcs_per_carton: indent.pcs_per_carton,
+      carton_ply: indent.carton_ply,
+      carton_dimensions: indent.carton_dimensions,
+      carton_dimensions_unit: indent.carton_dimensions_unit || 'CMS',
+    }];
+  }
+  return [];
+};
+
+const formatCartonBoxSummary = (box) => {
+  const parts = [];
+  if (box?.pcs_per_carton) parts.push(`${box.pcs_per_carton} pcs/box`);
+  if (box?.carton_ply) parts.push(box.carton_ply);
+  if (box?.carton_dimensions) {
+    parts.push(`${box.carton_dimensions} (${cartonDimUnitLabel(box.carton_dimensions_unit || 'CMS')})`);
+  }
+  return parts.length ? parts.join(' · ') : '—';
+};
+
 const InStockBadge = ({ checked }) => (
   <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6 }}>
     <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: checked ? '#16a34a' : '#94a3b8', flexShrink: 0 }} />
@@ -207,16 +232,50 @@ export default function IndentViewModal({ open, indentId, onClose }) {
             )}
 
             {/* Carton & sign-off */}
+            {cartonBoxesForIndent(indent).length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography sx={{ fontWeight: 800, fontSize: '0.9rem', mb: 1 }}>Carton Box</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {cartonBoxesForIndent(indent).map((box, i) => (
+                    <Box
+                      key={i}
+                      sx={{
+                        p: 1.25,
+                        border: `1px solid ${slate[200]}`,
+                        borderRadius: 1.5,
+                        bgcolor: alpha('#b45309', 0.03),
+                      }}
+                    >
+                      {cartonBoxesForIndent(indent).length > 1 && (
+                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#92400e', mb: 0.75 }}>
+                          Carton {i + 1}
+                        </Typography>
+                      )}
+                      <Grid container spacing={2}>
+                        {box.trim_name && (
+                          <Grid item xs={12} sm={4}>
+                            <InfoItem label="Carton Trim" value={box.trim_name} />
+                          </Grid>
+                        )}
+                        <Grid item xs={4} sm={2}><InfoItem label="Pcs/Box" value={box.pcs_per_carton} /></Grid>
+                        <Grid item xs={4} sm={2}><InfoItem label="Carton PLY" value={box.carton_ply} /></Grid>
+                        <Grid item xs={4} sm={3}>
+                          <InfoItem
+                            label={`Dimensions (${box.carton_dimensions_unit === 'INCH' ? 'Inches' : 'CMS'})`}
+                            value={box.carton_dimensions}
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={5}>
+                          <InfoItem label="Summary" value={formatCartonBoxSummary(box)} />
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
             <Grid container spacing={2}>
-              <Grid item xs={4} sm={2}><InfoItem label="Pcs/Box" value={indent.pcs_per_carton} /></Grid>
-              <Grid item xs={4} sm={2}><InfoItem label="Carton PLY" value={indent.carton_ply} /></Grid>
-              <Grid item xs={4} sm={3}>
-                <InfoItem
-                  label={`Dimensions (${indent.carton_dimensions_unit === 'INCH' ? 'Inches' : 'CMS'})`}
-                  value={indent.carton_dimensions}
-                />
-              </Grid>
-              <Grid item xs={12} sm={5}><InfoItem label="Prepared By" value={indent.prepared_by} /></Grid>
+              <Grid item xs={12} sm={4}><InfoItem label="Prepared By" value={indent.prepared_by} /></Grid>
               <Grid item xs={6} sm={4}><InfoItem label="Received By" value={indent.received_by} /></Grid>
               <Grid item xs={6} sm={4}><InfoItem label="Approved By" value={indent.approved_by} /></Grid>
             </Grid>
@@ -296,7 +355,7 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                       (indent.trim_lines || []).filter((r) => r.trim_name?.trim()).map((row, i) => (
                         <TableRow key={i} hover>
                           <TableCell sx={viewCellSx('left')}>
-                            <Typography sx={{ fontWeight: 600, fontSize: '0.85rem' }}>{row.trim_name}</Typography>
+                            <Typography sx={{ fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>{row.trim_name}</Typography>
                             {row.category && (
                               <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>{row.category}</Typography>
                             )}

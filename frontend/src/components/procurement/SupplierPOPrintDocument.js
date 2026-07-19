@@ -1,5 +1,7 @@
 import React from 'react';
 import { formatDateDisplay } from '../../utils/formatDate';
+import { supplyTypeLabel } from '../../utils/gstSupplyType';
+import { parseParticulars } from '../../utils/parseParticulars';
 
 /** Brand palette — Gold #F3E21A · Rich Black #000000 · Navy #1E3A5F */
 const BRAND = {
@@ -20,7 +22,53 @@ const FONT = {
 };
 
 const SECTION_GAP = 14;
-const ITEMS_FIRST_PAGE = 5;
+
+/**
+ * Item-count caps per print page, tuned to the A4 layout below.
+ * - ONE_PAGE: header + meta + parties + items + footer, all on a single page (no continuation).
+ * - FIRST: header + meta + parties + items, no footer (more pages follow).
+ * - MIDDLE: items table only (no header/footer), more pages still follow.
+ * - LAST: items table + footer (final page of a multi-page PO).
+ */
+const ITEMS_PER_PAGE = {
+  ONE_PAGE: 11,
+  FIRST: 18,
+  MIDDLE: 26,
+  LAST: 18,
+};
+
+/** Splits line items across print pages, so we never overflow (and clip) a single A4 page. */
+function paginatePoItems(allItems) {
+  const total = allItems.length;
+  if (total <= ITEMS_PER_PAGE.ONE_PAGE) {
+    return [{ items: allItems, startIndex: 0, isFirst: true, isLast: true, moreCount: 0 }];
+  }
+
+  const pages = [];
+  let remaining = allItems;
+  let startIndex = 0;
+
+  const firstCount = Math.min(ITEMS_PER_PAGE.FIRST, remaining.length);
+  pages.push({ items: remaining.slice(0, firstCount), startIndex, isFirst: true, isLast: false });
+  remaining = remaining.slice(firstCount);
+  startIndex += firstCount;
+
+  while (remaining.length > ITEMS_PER_PAGE.LAST) {
+    const count = Math.min(ITEMS_PER_PAGE.MIDDLE, remaining.length - ITEMS_PER_PAGE.LAST);
+    pages.push({ items: remaining.slice(0, count), startIndex, isFirst: false, isLast: false });
+    remaining = remaining.slice(count);
+    startIndex += count;
+  }
+
+  pages.push({ items: remaining, startIndex, isFirst: false, isLast: true });
+
+  return pages.map((page, i) => ({
+    ...page,
+    moreCount: i < pages.length - 1
+      ? pages.slice(i + 1).reduce((sum, p) => sum + p.items.length, 0)
+      : 0,
+  }));
+}
 
 export const SUPPLIER_PO_PRINT_STYLE = `
 @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
@@ -95,22 +143,18 @@ const fmtMoney = (n) => {
   return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const computePaymentDueDate = (po) => {
-  if (po.payment_due_date) return po.payment_due_date;
-  const terms = po.payment_terms || '';
-  const match = terms.match(/(\d+)\s*days?/i);
-  if (!match || !po.order_date) return null;
-  const [y, m, d] = po.order_date.split('-').map(Number);
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + parseInt(match[1], 10));
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-};
-
 const lineTotal = (row) => {
   const q = parseFloat(row.quantity_ordered);
   const p = parseFloat(row.unit_price);
   if (Number.isNaN(q) || Number.isNaN(p)) return 0;
   return q * p;
+};
+
+const applyRoundOff = ({ subtotal, cgst, sgst, igst }) => {
+  const rawTotal = subtotal + cgst + sgst + igst;
+  const roundedTotal = Math.round(rawTotal);
+  const roundOff = Math.round((roundedTotal - rawTotal) * 100) / 100;
+  return { subtotal, cgst, sgst, igst, roundOff, total: roundedTotal };
 };
 
 const calcTotals = (po) => {
@@ -120,13 +164,13 @@ const calcTotals = (po) => {
   if (po.tax_mode === 'IGST') {
     const pct = parseFloat(po.igst_percent) || 0;
     const igst = Math.round(sub * pct) / 100;
-    return { subtotal: sub, cgst: 0, sgst: 0, igst, total: sub + igst };
+    return applyRoundOff({ subtotal: sub, cgst: 0, sgst: 0, igst });
   }
   const cgstPct = parseFloat(po.cgst_percent) || 0;
   const sgstPct = parseFloat(po.sgst_percent) || 0;
   const cgst = Math.round(sub * cgstPct) / 100;
   const sgst = Math.round(sub * sgstPct) / 100;
-  return { subtotal: sub, cgst, sgst, igst: 0, total: sub + cgst + sgst };
+  return applyRoundOff({ subtotal: sub, cgst, sgst, igst: 0 });
 };
 
 function PrintSection({ children, last = false }) {
@@ -219,9 +263,16 @@ const MetaChip = ({ label, value }) => (
 
 const getItemLabel = (row, trimsMap) => {
   const trim = row.trim ? trimsMap[row.trim] : null;
-  const name = row.particulars || trim?.name || '—';
-  const props = row.property_label || '';
-  return props ? `${name} — ${props.replace(/\n/g, ' · ')}` : name;
+  const parsed = parseParticulars(row.particulars);
+  const name = parsed.name || trim?.name || row.particulars || '—';
+  const propsFromParticulars = parsed.properties
+    .filter((line) => !line.startsWith('_pi_fabric_key:'))
+    .join(' · ');
+  const props = (row.property_label || propsFromParticulars || '')
+    .replace(/\n/g, ' · ')
+    .replace(/_pi_fabric_key:[^·]+( · )?/g, '')
+    .trim();
+  return props ? `${name} — ${props}` : name;
 };
 
 function PoHeader({ po, company, companyName, addrLine, contactLine }) {
@@ -271,7 +322,7 @@ function PoHeader({ po, company, companyName, addrLine, contactLine }) {
   );
 }
 
-function PoMeta({ po, paymentDue, piLabel }) {
+function PoMeta({ po, piLabel }) {
   return (
     <div style={{
       display: 'grid',
@@ -285,10 +336,8 @@ function PoMeta({ po, paymentDue, piLabel }) {
     >
       <MetaChip label="Order Date" value={formatDateDisplay(po.order_date)} />
       <MetaChip label="Delivery" value={formatDateDisplay(po.expected_delivery_date)} />
-      <MetaChip label="Payment Due" value={formatDateDisplay(paymentDue)} />
       <MetaChip label="Payment Terms" value={po.payment_terms} />
-      <MetaChip label="Buyer PO Ref" value={po.reference_number} />
-      {piLabel && <MetaChip label="PI Ref" value={piLabel} />}
+      <MetaChip label="PI Ref" value={piLabel || '—'} />
       {po.delivery_terms && <MetaChip label="Delivery Terms" value={po.delivery_terms} />}
       {po.transport_paid_by && (
         <MetaChip
@@ -296,7 +345,7 @@ function PoMeta({ po, paymentDue, piLabel }) {
           value={po.transport_paid_by === 'SUPPLIER' ? 'Paid by Supplier' : 'Paid by Buyer'}
         />
       )}
-      <MetaChip label="Tax Mode" value={po.tax_mode === 'IGST' ? 'IGST' : 'CGST + SGST'} />
+      <MetaChip label="Supply Type" value={supplyTypeLabel(po.tax_mode)} />
     </div>
   );
 }
@@ -326,7 +375,7 @@ function PoParties({ po }) {
   );
 }
 
-function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = false, poNumber }) {
+function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = false, poNumber, moreCount = 0 }) {
   return (
     <div>
       {showContinuation && (
@@ -381,6 +430,26 @@ function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = fals
           )}
         </tbody>
       </table>
+      {moreCount > 0 && (
+        <div
+          className="po-print-no-break"
+          style={{
+            marginTop: 8,
+            padding: '8px 14px',
+            background: BRAND.navyLight,
+            border: `1px dashed ${BRAND.navy}`,
+            borderRadius: 6,
+            fontSize: '7.8pt',
+            fontStyle: 'italic',
+            fontWeight: 600,
+            color: BRAND.navy,
+            fontFamily: FONT.body,
+            textAlign: 'right',
+          }}
+        >
+          + {moreCount} more line item{moreCount === 1 ? '' : 's'} on next page →
+        </div>
+      )}
     </div>
   );
 }
@@ -427,6 +496,7 @@ function PoFooter({ po, totals, companyName, company }) {
               ...(po.tax_mode === 'IGST'
                 ? [[`IGST ${po.igst_percent || 0}%`, totals.igst]]
                 : [[`CGST ${po.cgst_percent || 0}%`, totals.cgst], [`SGST ${po.sgst_percent || 0}%`, totals.sgst]]),
+              ['Round Off', totals.roundOff],
             ].map(([label, amt]) => (
               <div key={label} style={{
                 display: 'flex',
@@ -589,8 +659,7 @@ export default function SupplierPOPrintDocument({ po, company, trimsMap = {} }) 
 
   const totals = calcTotals(po);
   const companyName = company?.legal_name || 'J.B. International';
-  const paymentDue = computePaymentDueDate(po);
-  const piLabel = po.pi_number || (po.pi && typeof po.pi === 'object' ? po.pi.pi_number : null);
+  const piLabel = po.pi_number || (typeof po.pi === 'object' && po.pi?.pi_number) || null;
 
   const addrLine = [
     company?.address_line1,
@@ -605,37 +674,35 @@ export default function SupplierPOPrintDocument({ po, company, trimsMap = {} }) 
   ].filter(Boolean).join(' · ');
 
   const allItems = po.items || [];
-  const hasContinuation = allItems.length > ITEMS_FIRST_PAGE;
-  const firstPageItems = hasContinuation ? allItems.slice(0, ITEMS_FIRST_PAGE) : allItems;
-  const continuationItems = hasContinuation ? allItems.slice(ITEMS_FIRST_PAGE) : [];
-
+  const pages = paginatePoItems(allItems);
   const headerProps = { po, company, companyName, addrLine, contactLine };
-
-  if (!hasContinuation) {
-    return (
-      <PrintPage company={company} companyName={companyName}>
-        <PrintSection><PoHeader {...headerProps} /></PrintSection>
-        <PrintSection><PoMeta po={po} paymentDue={paymentDue} piLabel={piLabel} /></PrintSection>
-        <PrintSection><PoParties po={po} /></PrintSection>
-        <PrintSection><PoItemsTable items={firstPageItems} trimsMap={trimsMap} startIndex={0} /></PrintSection>
-        <PoFooter po={po} totals={totals} companyName={companyName} company={company} />
-      </PrintPage>
-    );
-  }
 
   return (
     <>
-      <PrintPage company={company} companyName={companyName}>
-        <PrintSection><PoHeader {...headerProps} /></PrintSection>
-        <PrintSection><PoMeta po={po} paymentDue={paymentDue} piLabel={piLabel} /></PrintSection>
-        <PrintSection><PoParties po={po} /></PrintSection>
-        <PrintSection last><PoItemsTable items={firstPageItems} trimsMap={trimsMap} startIndex={0} /></PrintSection>
-      </PrintPage>
-
-      <PrintPage company={company} companyName={companyName}>
-        <PrintSection><PoItemsTable items={continuationItems} trimsMap={trimsMap} startIndex={ITEMS_FIRST_PAGE} showContinuation poNumber={po.po_number} /></PrintSection>
-        <PoFooter po={po} totals={totals} companyName={companyName} company={company} />
-      </PrintPage>
+      {pages.map((page) => (
+        <PrintPage key={page.startIndex} company={company} companyName={companyName}>
+          {page.isFirst && (
+            <>
+              <PrintSection><PoHeader {...headerProps} /></PrintSection>
+              <PrintSection><PoMeta po={po} piLabel={piLabel} /></PrintSection>
+              <PrintSection><PoParties po={po} /></PrintSection>
+            </>
+          )}
+          <PrintSection last={!page.isLast}>
+            <PoItemsTable
+              items={page.items}
+              trimsMap={trimsMap}
+              startIndex={page.startIndex}
+              showContinuation={!page.isFirst}
+              poNumber={po.po_number}
+              moreCount={page.moreCount}
+            />
+          </PrintSection>
+          {page.isLast && (
+            <PoFooter po={po} totals={totals} companyName={companyName} company={company} />
+          )}
+        </PrintPage>
+      ))}
     </>
   );
 }

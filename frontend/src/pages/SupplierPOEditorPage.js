@@ -1,37 +1,141 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Box, Button, Typography, TextField, MenuItem, Grid, Paper,
   IconButton, Autocomplete, CircularProgress, Table, TableHead,
   TableBody, TableRow, TableCell, Divider, FormControlLabel, Radio, RadioGroup,
-  InputAdornment,
+  InputAdornment, Tooltip, Chip, ToggleButton, ToggleButtonGroup, Popover,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
   ArrowBack, Save, Print, Add, Delete, LocalShipping, Sync,
-  Storefront, ReceiptLong, PinDrop,
+  Storefront, ReceiptLong, PinDrop, LibraryAdd, Checkroom, Category,
 } from '@mui/icons-material';
 import { ordersAPI, procurementAPI, suppliersAPI, companyAPI } from '../services/api';
-import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
+import { slate, sectionPaperSxByIndex, warm } from '../theme/appTheme';
+import { resolveTaxModeFromStates } from '../utils/gstSupplyType';
 import { formatDateDisplay } from '../utils/formatDate';
-import { isNumericTrimProperty } from '../components/trims/trimConstants';
+import {
+  isNumericTrimProperty,
+  isCartonDimUnitProperty,
+  isCartonDimensionsProperty,
+  TRIM_UNIT_OPTIONS,
+} from '../components/trims/trimConstants';
 import SupplierPOPrintDocument, { SUPPLIER_PO_PRINT_STYLE } from '../components/procurement/SupplierPOPrintDocument';
+import AddTrimModal from '../components/trims/AddTrimModal';
+import AddSupplierModal from '../components/suppliers/AddSupplierModal';
 
 const DEFAULT_COMMENTS = `This purchase order is subject to seller's acceptance of the attached terms and conditions.
 Please sign below and return acknowledgement of this purchase order. Please notify us immediately if you are unable to supply.`;
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 
-const emptyLine = (serial = 1) => ({
+const isFabricCategory = (category) => /^fabric$/i.test(String(category || '').trim());
+
+const FABRIC_PO_NAME = 'Fabric';
+const FABRIC_PO_PROPERTY_FIELDS = [
+  'Fabric Material Composition',
+  'Fabric Weight',
+  'Finish / Coating',
+  'Width',
+  'Color',
+  'Certification',
+];
+
+const emptyFabricPropertyValues = () => {
+  const vals = {};
+  FABRIC_PO_PROPERTY_FIELDS.forEach((name) => { vals[name] = ''; });
+  return vals;
+};
+
+const isStandardFabricProperty = (name) => FABRIC_PO_PROPERTY_FIELDS.includes(name);
+const PI_FABRIC_KEY_FIELD = '_pi_fabric_key';
+
+const formatFabricPropertyLabel = (propertyValues, customFields = [], piFabricOptionKey = '') => {
+  const lines = [];
+  const emit = (name) => {
+    const value = propertyValues?.[name];
+    if (value == null || String(value).trim() === '') return;
+    lines.push(`${name}: ${String(value).trim()}`);
+  };
+  FABRIC_PO_PROPERTY_FIELDS.forEach(emit);
+  customFields.forEach(emit);
+  Object.keys(propertyValues || {}).forEach((name) => {
+    if (isStandardFabricProperty(name) || customFields.includes(name)) return;
+    emit(name);
+  });
+  if (piFabricOptionKey) lines.push(`${PI_FABRIC_KEY_FIELD}: ${piFabricOptionKey}`);
+  return lines.join('\n');
+};
+
+const parseFabricPropertyLabel = (propertyLabel) => {
+  const values = emptyFabricPropertyValues();
+  const customFields = [];
+  let piFabricOptionKey = '';
+  const label = (propertyLabel || '').trim();
+  if (!label) return { values, customFields, piFabricOptionKey };
+  label.split('\n').forEach((line) => {
+    const trimmed = line.trim();
+    const sep = trimmed.indexOf(':');
+    if (sep === -1) return;
+    const name = trimmed.slice(0, sep).trim();
+    const value = trimmed.slice(sep + 1).trim();
+    if (!name) return;
+    if (name === PI_FABRIC_KEY_FIELD) {
+      piFabricOptionKey = value;
+      return;
+    }
+    values[name] = value;
+    if (!isStandardFabricProperty(name) && !customFields.includes(name)) {
+      customFields.push(name);
+    }
+  });
+  return { values, customFields, piFabricOptionKey };
+};
+
+const matchPiFabricOption = (row, options) => {
+  if (!options?.length) return null;
+  if (row?.pi_fabric_option_key) {
+    const byKey = options.find((o) => o._optionKey === row.pi_fabric_option_key);
+    if (byKey) return byKey;
+  }
+  const pv = row?.property_values || {};
+  const comp = String(pv['Fabric Material Composition'] || '').trim().toLowerCase();
+  if (!comp) return null;
+  return options.find((o) => {
+    const mapped = mapPiFabricToPropertyValues(o);
+    if (String(mapped['Fabric Material Composition'] || '').trim().toLowerCase() !== comp) return false;
+    const color = String(pv.Color || '').trim().toLowerCase();
+    const matchColor = String(mapped.Color || '').trim().toLowerCase();
+    if (color && matchColor && color !== matchColor) return false;
+    const weight = String(pv['Fabric Weight'] || '').trim().toLowerCase();
+    const matchWeight = String(mapped['Fabric Weight'] || '').trim().toLowerCase();
+    if (weight && matchWeight && weight !== matchWeight) return false;
+    return true;
+  }) || null;
+};
+
+const mapPiFabricToPropertyValues = (line) => ({
+  'Fabric Material Composition': line?.material || '',
+  'Fabric Weight': line?.gsm ? `${line.gsm} GSM` : '',
+  'Finish / Coating': '',
+  'Width': line?.roll_width ? `${line.roll_width} CMS` : '',
+  'Color': line?.color || '',
+  'Certification': '',
+});
+
+const emptyLine = (serial = 1, { unit = 'PCS', fabric = false } = {}) => ({
   serial_no: serial,
   trim: null,
-  particulars: '',
-  property_values: {},
+  particulars: fabric ? FABRIC_PO_NAME : '',
+  property_values: fabric ? emptyFabricPropertyValues() : {},
+  fabric_custom_fields: fabric ? [] : [],
+  pi_fabric_option_key: '',
   property_label: '',
   from_pi: false,
   hsn_code: '',
   quantity_ordered: '',
-  unit: 'PCS',
+  unit: fabric ? 'MTRS' : unit,
   unit_price: '',
   notes: '',
 });
@@ -80,6 +184,35 @@ const formatPiTrimProperties = (line, trimMaster) => {
 
   if (parts.length) return parts.join(' · ');
   return [line?.color_variant, line?.size_variant].filter(Boolean).join(' / ');
+};
+
+/**
+ * Reverses formatPiTrimProperties()'s "Name: Value Unit · Name2: Value2" string back into a
+ * { propName: value } map, so previously-saved property values can repopulate the editable
+ * fields when a saved PO is reopened. Without this, re-editing a line drops any property the
+ * user doesn't retype, because the fields would otherwise start blank.
+ */
+const parsePropertyLabelToValues = (propertyLabel, trimMaster) => {
+  const values = {};
+  const label = (propertyLabel || '').trim();
+  if (!label) return values;
+  const schema = trimMaster?.properties || [];
+  label.split('·').forEach((part) => {
+    const trimmed = part.trim();
+    const sep = trimmed.indexOf(':');
+    if (sep === -1) return;
+    const name = trimmed.slice(0, sep).trim();
+    let value = trimmed.slice(sep + 1).trim();
+    const propSchema = schema.find((p) => p.name === name);
+    if (propSchema?.unit && !isNumericTrimProperty(name)) {
+      const unitSuffix = ` ${propSchema.unit}`;
+      if (value.endsWith(unitSuffix)) {
+        value = value.slice(0, -unitSuffix.length).trim();
+      }
+    }
+    values[name] = value;
+  });
+  return values;
 };
 
 const resolvePiTrimOrderQty = (line, piTotalPcs) => {
@@ -158,6 +291,79 @@ function PiTrimOptionContent({ line, trimMaster }) {
   );
 }
 
+const formatPiFabricProperties = (line) => {
+  const parts = [];
+  if (line?.color) parts.push(`Color: ${line.color}`);
+  if (line?.gsm) parts.push(`GSM: ${line.gsm}`);
+  if (line?.roll_width) parts.push(`Roll Width: ${line.roll_width} CMS`);
+  return parts.join(' · ');
+};
+
+const formatPiFabricConsumption = (line, piTotalPcs) => {
+  const unit = line?.unit || 'MTRS';
+  const parts = [];
+  if (line?.consumption_per_pc != null && String(line.consumption_per_pc).trim() !== '') {
+    parts.push(`Cons./pc: ${formatQty(line.consumption_per_pc)} ${unit}`.trim());
+  }
+  if (piTotalPcs > 0) {
+    parts.push(`PI Qty: ${formatQty(piTotalPcs)} pcs`);
+  }
+  const orderQty = resolvePiTrimOrderQty(line, piTotalPcs);
+  if (orderQty) {
+    parts.push(`Order Qty: ${formatQty(orderQty)} ${unit}`.trim());
+  }
+  return parts.join(' · ');
+};
+
+const buildPiFabricDisplay = (line) => {
+  const piTotalPcs = line?._piTotalPcs ?? 0;
+  const properties = formatPiFabricProperties(line);
+  const consumption = formatPiFabricConsumption(line, piTotalPcs);
+  const summary = [properties, consumption, line?.remarks ? `Remarks: ${line.remarks}` : ''].filter(Boolean).join('\n');
+  return {
+    properties,
+    consumption,
+    summary,
+    orderQty: resolvePiTrimOrderQty(line, piTotalPcs),
+    unit: line?.unit || 'MTRS',
+    piTotalPcs,
+  };
+};
+
+const formatPiFabricOptionLabel = (line) => {
+  const name = line?.material || 'Fabric';
+  const props = formatPiFabricProperties(line);
+  return props ? `${name} — ${props}` : name;
+};
+
+function PiFabricOptionContent({ line }) {
+  const display = buildPiFabricDisplay(line);
+  const name = line.material || 'Fabric';
+
+  return (
+    <Box sx={{ py: 0.5, width: '100%' }}>
+      <Typography sx={{ fontSize: '0.84rem', fontWeight: 800, color: slate[800], lineHeight: 1.3 }}>
+        {name}
+      </Typography>
+      {display.properties && (
+        <Typography sx={{ fontSize: '0.72rem', color: slate[700], mt: 0.5, lineHeight: 1.45, fontWeight: 600 }}>
+          {display.properties}
+        </Typography>
+      )}
+      {display.consumption && (
+        <Typography sx={{ fontSize: '0.68rem', color: '#0f766e', mt: 0.35, lineHeight: 1.4, fontWeight: 700 }}>
+          {display.consumption}
+        </Typography>
+      )}
+      {line._indentNumber && (
+        <Typography sx={{ fontSize: '0.62rem', color: slate[400], mt: 0.35 }}>
+          {line._indentNumber}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
 function LibraryTrimOptionContent({ trim }) {
   const propNames = (trim.properties || []).map((p) => p.name).filter(Boolean);
   return (
@@ -173,6 +379,200 @@ function LibraryTrimOptionContent({ trim }) {
   );
 }
 
+/** Slim per-row hover strip between PO line items — click anywhere to insert a new line below. */
+function AddRowDivider({ onAdd }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <TableRow onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <TableCell colSpan={7} sx={{ p: 0, border: 'none' }}>
+        <Box
+          onClick={onAdd}
+          sx={{
+            height: hover ? 24 : 7,
+            cursor: 'pointer',
+            transition: 'height 0.14s ease, background-color 0.14s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundImage: `repeating-linear-gradient(45deg, ${alpha('#4f46e5', hover ? 0.22 : 0.1)} 0px, ${alpha('#4f46e5', hover ? 0.22 : 0.1)} 5px, ${alpha('#4f46e5', hover ? 0.08 : 0.02)} 5px, ${alpha('#4f46e5', hover ? 0.08 : 0.02)} 10px)`,
+          }}
+        >
+          {hover && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, color: '#4338ca' }}>
+              <Add sx={{ fontSize: 14 }} />
+              <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.02em' }}>
+                Add line
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function FabricPiPickControl({ row, options, loading, piSelected, onSelect }) {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+  const selected = matchPiFabricOption(row, options);
+  const pickDisabled = !piSelected || loading || options.length === 0;
+  const pickTitle = !piSelected
+    ? 'Select a PI in order details first'
+    : loading
+      ? 'Loading fabric lines from PI…'
+      : options.length === 0
+        ? 'No fabric lines found on PI indent'
+        : 'Pre-fill from a PI indent fabric line — you can still edit values below';
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+      <Typography sx={{ fontWeight: 800, fontSize: '0.84rem', textTransform: 'uppercase', color: slate[800] }}>
+        {FABRIC_PO_NAME}
+      </Typography>
+      <Tooltip title={pickTitle}>
+        <span>
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={pickDisabled}
+            startIcon={loading ? <CircularProgress size={12} /> : <ReceiptLong sx={{ fontSize: 15 }} />}
+            onClick={(e) => setAnchorEl(e.currentTarget)}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '0.72rem',
+              py: 0.2,
+              px: 1,
+              minHeight: 28,
+              borderRadius: 1.5,
+              borderColor: alpha('#0f766e', 0.45),
+              color: '#0f766e',
+              '&:hover': { borderColor: '#0f766e', bgcolor: alpha('#0f766e', 0.06) },
+            }}
+          >
+            Pick from PI indent
+          </Button>
+        </span>
+      </Tooltip>
+      {selected && (
+        <Chip
+          size="small"
+          variant="outlined"
+          label={`PI: ${formatPiFabricOptionLabel(selected)}`}
+          sx={{
+            maxWidth: 240,
+            height: 24,
+            fontSize: '0.65rem',
+            fontWeight: 600,
+            borderColor: alpha('#0f766e', 0.35),
+            color: '#0f766e',
+            '& .MuiChip-label': { px: 1 },
+          }}
+        />
+      )}
+      <Popover
+        open={open}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        PaperProps={{ sx: { mt: 0.5, borderRadius: 1.5, width: { xs: 320, sm: 420 } } }}
+      >
+        <Box sx={{ p: 1.5 }}>
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: slate[600], mb: 1 }}>
+            Select a fabric line to pre-fill — edit any field after picking
+          </Typography>
+          <Autocomplete
+            autoFocus
+            openOnFocus
+            options={options}
+            loading={loading}
+            groupBy={() => 'From PI indent — Fabric'}
+            getOptionLabel={(o) => formatPiFabricOptionLabel(o)}
+            isOptionEqualToValue={(o, v) => o._optionKey === v._optionKey}
+            value={selected}
+            onChange={(_, v) => {
+              if (v && v._kind === 'fabric') {
+                onSelect(v);
+                setAnchorEl(null);
+              }
+            }}
+            renderOption={(props, option) => (
+              <Box component="li" {...props} key={option._optionKey}>
+                <PiFabricOptionContent line={option} />
+              </Box>
+            )}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                size="small"
+                fullWidth
+                placeholder="Search PI fabric…"
+                sx={{ '& .MuiInputBase-root': { borderRadius: 1.5 } }}
+              />
+            )}
+          />
+        </Box>
+      </Popover>
+    </Box>
+  );
+}
+
+function FabricPropertyFields({ row, onChange, onAddProperty, onRemoveProperty, onRenameProperty }) {
+  const customFields = row.fabric_custom_fields || [];
+  return (
+    <Box sx={{ mt: 1.25 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, rowGap: 1.5 }}>
+        {FABRIC_PO_PROPERTY_FIELDS.map((name) => (
+          <TextField
+            key={name}
+            size="small"
+            label={name}
+            value={row.property_values?.[name] || ''}
+            onChange={(e) => onChange(name, e.target.value)}
+            sx={{ flex: '1 1 180px', minWidth: 150, '& .MuiInputBase-root': { borderRadius: 1.5 } }}
+          />
+        ))}
+      </Box>
+      {customFields.length > 0 && (
+        <Box sx={{ mt: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {customFields.map((name) => (
+            <Box key={name} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
+              <TextField
+                size="small"
+                label="Property name"
+                value={name}
+                onChange={(e) => onRenameProperty(name, e.target.value)}
+                sx={{ flex: '1 1 160px', minWidth: 130, '& .MuiInputBase-root': { borderRadius: 1.5 } }}
+              />
+              <TextField
+                size="small"
+                label="Value"
+                value={row.property_values?.[name] || ''}
+                onChange={(e) => onChange(name, e.target.value)}
+                sx={{ flex: '2 1 200px', minWidth: 150, '& .MuiInputBase-root': { borderRadius: 1.5 } }}
+              />
+              <Tooltip title="Remove property">
+                <IconButton size="small" color="error" onClick={() => onRemoveProperty(name)} sx={{ mt: 0.25 }}>
+                  <Delete fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          ))}
+        </Box>
+      )}
+      <Button
+        size="small"
+        startIcon={<Add />}
+        onClick={onAddProperty}
+        sx={{ mt: 1.25, textTransform: 'none', fontWeight: 700, borderRadius: 1.5 }}
+      >
+        Add property
+      </Button>
+    </Box>
+  );
+}
+
 function TrimPropertyFields({ row, trimMaster, onChange }) {
   const props = trimMaster?.properties || [];
   if (!props.length) {
@@ -184,24 +584,45 @@ function TrimPropertyFields({ row, trimMaster, onChange }) {
         placeholder="e.g. Color, size, variant…"
         value={row.property_values?.Spec || ''}
         onChange={(e) => onChange('Spec', e.target.value)}
-        sx={{ mt: 0.75, '& .MuiInputBase-root': { borderRadius: 1.5 } }}
+        sx={{ '& .MuiInputBase-root': { borderRadius: 1.5 } }}
       />
     );
   }
   return (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.75 }}>
-      {props.map((prop) => (
-        <TextField
-          key={prop.name}
-          size="small"
-          label={prop.unit ? `${prop.name} (${prop.unit})` : prop.name}
-          value={row.property_values?.[prop.name] || ''}
-          onChange={(e) => onChange(prop.name, e.target.value)}
-          type={isNumericTrimProperty(prop.name) ? 'number' : 'text'}
-          inputProps={isNumericTrimProperty(prop.name) ? { min: 0, step: '1' } : undefined}
-          sx={{ flex: '1 1 130px', minWidth: 110, '& .MuiInputBase-root': { borderRadius: 1.5 } }}
-        />
-      ))}
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, rowGap: 1.5 }}>
+      {props.map((prop) => {
+        if (isCartonDimUnitProperty(prop.name)) {
+          return (
+            <Autocomplete
+              key={prop.name}
+              freeSolo
+              options={TRIM_UNIT_OPTIONS}
+              value={row.property_values?.[prop.name] || ''}
+              onInputChange={(_, v) => onChange(prop.name, v)}
+              onChange={(_, v) => onChange(prop.name, v || '')}
+              sx={{ flex: '1 1 130px', minWidth: 110 }}
+              renderInput={(params) => (
+                <TextField {...params} size="small" label="Dim. Unit" sx={{ '& .MuiInputBase-root': { borderRadius: 1.5 } }} />
+              )}
+            />
+          );
+        }
+        const label = isCartonDimensionsProperty(prop.name)
+          ? 'Dimensions (L × W × H)'
+          : (prop.unit ? `${prop.name} (${prop.unit})` : prop.name);
+        return (
+          <TextField
+            key={prop.name}
+            size="small"
+            label={label}
+            value={row.property_values?.[prop.name] || ''}
+            onChange={(e) => onChange(prop.name, e.target.value)}
+            type={isNumericTrimProperty(prop.name) ? 'number' : 'text'}
+            inputProps={isNumericTrimProperty(prop.name) ? { min: 0, step: '1' } : undefined}
+            sx={{ flex: '1 1 130px', minWidth: 110, '& .MuiInputBase-root': { borderRadius: 1.5 } }}
+          />
+        );
+      })}
     </Box>
   );
 }
@@ -217,7 +638,11 @@ const parseParticulars = (text) => {
   };
 };
 
-const buildParticularsForSave = (row) => {
+const buildParticularsForSave = (row, fabricMode = false) => {
+  if (fabricMode) {
+    const props = formatFabricPropertyLabel(row.property_values, row.fabric_custom_fields, row.pi_fabric_option_key);
+    return props ? `${FABRIC_PO_NAME}\n${props}` : FABRIC_PO_NAME;
+  }
   const name = (row.particulars || '').trim();
   const props = (row.property_label || '').trim();
   if (name && props) return `${name}\n${props}`;
@@ -255,6 +680,7 @@ const emptyForm = () => ({
   bill_to: '',
   ship_to: '',
   pi: null,
+  pi_number: '',
   buyer_po: null,
   reference_number: '',
   order_date: new Date().toISOString().split('T')[0],
@@ -430,25 +856,46 @@ const lineTotal = (row) => {
   return q * p;
 };
 
+const applyRoundOff = ({ subtotal, cgst, sgst, igst }) => {
+  const rawTotal = subtotal + cgst + sgst + igst;
+  const roundedTotal = Math.round(rawTotal);
+  const roundOff = Math.round((roundedTotal - rawTotal) * 100) / 100;
+  return { subtotal, cgst, sgst, igst, roundOff, total: roundedTotal };
+};
+
 const calcPreview = (form) => {
   const subtotal = form.items.reduce((s, r) => s + lineTotal(r), 0);
   const sub = Math.round(subtotal * 100) / 100;
   if (form.tax_mode === 'IGST') {
     const pct = parseFloat(form.igst_percent) || 0;
     const igst = Math.round(sub * pct) / 100;
-    return { subtotal: sub, cgst: 0, sgst: 0, igst, total: sub + igst };
+    return applyRoundOff({ subtotal: sub, cgst: 0, sgst: 0, igst });
   }
   const cgstPct = parseFloat(form.cgst_percent) || 0;
   const sgstPct = parseFloat(form.sgst_percent) || 0;
   const cgst = Math.round(sub * cgstPct) / 100;
   const sgst = Math.round(sub * sgstPct) / 100;
-  return { subtotal: sub, cgst, sgst, igst: 0, total: sub + cgst + sgst };
+  return applyRoundOff({ subtotal: sub, cgst, sgst, igst: 0 });
 };
 
 export default function SupplierPOEditorPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isNew = id === 'new';
+  const isFabricMode = (searchParams.get('mode') || '').toLowerCase() === 'fabric';
+  const [fabricPoDetected, setFabricPoDetected] = useState(false);
+  const effectiveFabricMode = isFabricMode || fabricPoDetected;
+  const lineDefaults = useMemo(
+    () => ({ unit: 'MTRS', fabric: effectiveFabricMode }),
+    [effectiveFabricMode],
+  );
+
+  const setPoMode = (mode) => {
+    if (!isNew) return;
+    if (mode === 'fabric') setSearchParams({ mode: 'fabric' });
+    else setSearchParams({});
+  };
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -462,6 +909,11 @@ export default function SupplierPOEditorPage() {
   const [piTrimsLoading, setPiTrimsLoading] = useState(false);
   const [piTotalPcs, setPiTotalPcs] = useState(0);
   const [poNumberLoading, setPoNumberLoading] = useState(false);
+  const [trimModalOpen, setTrimModalOpen] = useState(false);
+  const [trimModalTargetRow, setTrimModalTargetRow] = useState(null);
+  const [trimModalInitialName, setTrimModalInitialName] = useState('');
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+  const defaultDocTitleRef = useRef(document.title);
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -470,6 +922,24 @@ export default function SupplierPOEditorPage() {
     document.head.appendChild(style);
     return () => style.remove();
   }, []);
+
+  // Browser uses document.title as the default PDF / print save name.
+  useEffect(() => {
+    const setPrintTitle = () => {
+      const poNumber = form.po_number?.trim();
+      if (poNumber) document.title = poNumber;
+    };
+    const restoreTitle = () => {
+      document.title = defaultDocTitleRef.current;
+    };
+    window.addEventListener('beforeprint', setPrintTitle);
+    window.addEventListener('afterprint', restoreTitle);
+    return () => {
+      window.removeEventListener('beforeprint', setPrintTitle);
+      window.removeEventListener('afterprint', restoreTitle);
+      restoreTitle();
+    };
+  }, [form.po_number]);
 
   const trimsMap = useMemo(() => {
     const m = {};
@@ -503,22 +973,38 @@ export default function SupplierPOEditorPage() {
       const trimMasterById = {};
       trims.forEach((t) => { trimMasterById[t.id] = t; });
 
-      const lines = [];
+      // Trim and fabric lines are collected into separate passes (rather than interleaved
+      // per-indent) so each kind stays contiguous in the options list — required for the
+      // Autocomplete's groupBy to render "From PI indent — Trim" / "— Fabric" as two
+      // distinct sections instead of repeating headers.
+      const trimEntries = [];
+      const fabricEntries = [];
       detailRes.forEach((res) => {
         const indent = res.data;
         (indent.trim_lines || []).forEach((tl, idx) => {
           const trimMaster = tl.trim ? trimMasterById[tl.trim] : null;
-          lines.push({
+          trimEntries.push({
             ...tl,
-            _optionKey: `pi-${indent.id}-${tl.id || idx}`,
+            _kind: 'trim',
+            _optionKey: `pi-trim-${indent.id}-${tl.id || idx}`,
             _indentNumber: indent.indent_number,
             _label: tl.trim_name || 'Trim',
             _trimMaster: trimMaster,
             _piTotalPcs: totalPcs,
           });
         });
+        (indent.fabric_lines || []).forEach((fl, idx) => {
+          fabricEntries.push({
+            ...fl,
+            _kind: 'fabric',
+            _optionKey: `pi-fabric-${indent.id}-${fl.id || idx}`,
+            _indentNumber: indent.indent_number,
+            _label: fl.material || 'Fabric',
+            _piTotalPcs: totalPcs,
+          });
+        });
       });
-      setPiTrimOptions(lines);
+      setPiTrimOptions([...trimEntries, ...fabricEntries]);
     } catch (e) {
       console.error(e);
       setPiTrimOptions([]);
@@ -532,19 +1018,72 @@ export default function SupplierPOEditorPage() {
     loadPiTrims(form.pi);
   }, [form.pi, loadPiTrims]);
 
-  const hasPiTrims = piTrimOptions.length > 0;
+  // Mode filter applies only when raising a new PO. Editing keeps the full picker so
+  // existing fabric/trim lines remain selectable.
+  const filteredPiOptions = useMemo(() => {
+    if (!isNew && !effectiveFabricMode) return piTrimOptions;
+    return effectiveFabricMode
+      ? piTrimOptions.filter((o) => o._kind === 'fabric')
+      : piTrimOptions.filter((o) => o._kind !== 'fabric');
+  }, [piTrimOptions, effectiveFabricMode, isNew]);
+
+  // Re-link saved fabric rows to PI indent options once PI fabric lines are loaded.
+  useEffect(() => {
+    if (!form.pi || !filteredPiOptions.length) return;
+    setForm((f) => {
+      let changed = false;
+      const items = f.items.map((row) => {
+        if (row.particulars !== FABRIC_PO_NAME) return row;
+        const matched = matchPiFabricOption(row, filteredPiOptions);
+        if (!matched) return row;
+        if (row.pi_fabric_option_key === matched._optionKey && row.from_pi) return row;
+        changed = true;
+        return {
+          ...row,
+          pi_fabric_option_key: matched._optionKey,
+          from_pi: true,
+        };
+      });
+      return changed ? { ...f, items } : f;
+    });
+  }, [form.pi, filteredPiOptions]);
+
+  const filteredLibraryTrims = useMemo(() => {
+    if (!isNew) return trims;
+    return isFabricMode
+      ? trims.filter((t) => isFabricCategory(t.category))
+      : trims.filter((t) => !isFabricCategory(t.category));
+  }, [trims, isFabricMode, isNew]);
+
+  const hasPiTrims = filteredPiOptions.length > 0;
   const trimOptions = useMemo(() => {
-    const library = trims.map((t) => ({ ...t, _source: 'library' }));
-    if (hasPiTrims) return [...piTrimOptions, ...library];
+    const library = filteredLibraryTrims.map((t) => ({ ...t, _source: 'library' }));
+    if (hasPiTrims) return [...filteredPiOptions, ...library];
     return library;
-  }, [piTrimOptions, trims, hasPiTrims]);
+  }, [filteredPiOptions, filteredLibraryTrims, hasPiTrims]);
 
   const trimOptionGroup = (option) => {
-    if (option._optionKey) return 'From PI indent';
-    return 'Trim library (additional items)';
+    if (option.__create) return isFabricMode ? 'Add new fabric' : 'Add new trim';
+    if (option._optionKey) return option._kind === 'fabric' ? 'From PI indent — Fabric' : 'From PI indent — Trim';
+    return isFabricMode ? 'Fabric library (additional items)' : 'Trim library (additional items)';
   };
 
-  const totals = useMemo(() => calcPreview(form), [form]);
+  const getParticularOptionLabel = (o) => {
+    if (o._kind === 'fabric') return formatPiFabricOptionLabel(o);
+    if (o._optionKey) return formatPiTrimOptionLabel(o, o._trimMaster || trimsMap[o.trim]);
+    return o.name || '';
+  };
+
+  /** Appends a "Create '<typed name>'" option when no library trim matches the typed name. */
+  const filterParticularOptions = (options, { inputValue }) => {
+    const input = inputValue.trim();
+    const filtered = !input ? options : options.filter((o) => getParticularOptionLabel(o).toLowerCase().includes(input.toLowerCase()));
+    const existsInLibrary = filteredLibraryTrims.some((t) => t.name.toLowerCase() === input.toLowerCase());
+    if (input && !existsInLibrary) {
+      filtered.push({ __create: true, name: input });
+    }
+    return filtered;
+  };
 
   const fetchNextPoNumber = useCallback(async () => {
     setPoNumberLoading(true);
@@ -567,18 +1106,21 @@ export default function SupplierPOEditorPage() {
       ordersAPI.getBuyerPOs(),
       companyAPI.getProfile(),
     ]);
+    const trimsList = asList(trimRes.data);
     setSuppliers(asList(supRes.data));
-    setTrims(asList(trimRes.data));
+    setTrims(trimsList);
     setPiList(asList(piRes.data));
     setBuyerPoList(asList(bpoRes.data));
     setCompany(coRes.data);
-    return coRes.data;
+    return { company: coRes.data, trimsList };
   }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        const co = await loadMasters();
+        const { company: co, trimsList } = await loadMasters();
+        const trimMasterById = {};
+        trimsList.forEach((t) => { trimMasterById[t.id] = t; });
         if (isNew) {
           const nextPoNumber = await fetchNextPoNumber();
           setForm((f) => ({
@@ -586,10 +1128,53 @@ export default function SupplierPOEditorPage() {
             bill_to: resolveBillTo(co),
             ship_to: resolveShipTo(co),
             po_number: nextPoNumber,
+            items: isFabricMode ? [emptyLine(1, lineDefaults)] : f.items,
           }));
         } else {
           const res = await procurementAPI.getById(id);
           const d = res.data;
+          const mappedItems = d.items?.length
+            ? d.items.map((row, i) => {
+              const parsed = parseParticulars(row.particulars);
+              const trimMaster = row.trim ? trimMasterById[row.trim] : null;
+              const isFabricLine = parsed.name.toUpperCase() === FABRIC_PO_NAME.toUpperCase()
+                || FABRIC_PO_PROPERTY_FIELDS.some((field) => parsed.property_label.includes(`${field}:`));
+              if (isFabricLine) {
+                const parsedFabric = parseFabricPropertyLabel(parsed.property_label);
+                return {
+                  serial_no: row.serial_no || i + 1,
+                  trim: null,
+                  particulars: FABRIC_PO_NAME,
+                  property_values: parsedFabric.values,
+                  fabric_custom_fields: parsedFabric.customFields,
+                  pi_fabric_option_key: parsedFabric.piFabricOptionKey || '',
+                  property_label: parsed.property_label,
+                  from_pi: Boolean(parsedFabric.piFabricOptionKey) || isPiSourcedLabel(parsed.property_label),
+                  hsn_code: row.hsn_code || '',
+                  quantity_ordered: row.quantity_ordered,
+                  unit: 'MTRS',
+                  unit_price: row.unit_price ?? '',
+                  notes: row.notes || '',
+                };
+              }
+              return {
+                serial_no: row.serial_no || i + 1,
+                trim: row.trim,
+                particulars: parsed.name,
+                property_values: parsePropertyLabelToValues(parsed.property_label, trimMaster),
+                property_label: parsed.property_label,
+                from_pi: isPiSourcedLabel(parsed.property_label),
+                hsn_code: row.hsn_code || '',
+                quantity_ordered: row.quantity_ordered,
+                unit: row.unit || 'PCS',
+                unit_price: row.unit_price ?? '',
+                notes: row.notes || '',
+              };
+            })
+            : [emptyLine(1, lineDefaults)];
+          if (mappedItems.some((row) => row.particulars === FABRIC_PO_NAME)) {
+            setFabricPoDetected(true);
+          }
           setForm({
             po_number: d.po_number,
             supplier: d.supplier,
@@ -601,6 +1186,7 @@ export default function SupplierPOEditorPage() {
             bill_to: d.bill_to || resolveBillTo(co),
             ship_to: d.ship_to || resolveShipTo(co),
             pi: d.pi,
+            pi_number: d.pi_number || '',
             buyer_po: d.buyer_po,
             reference_number: d.reference_number || '',
             order_date: d.order_date,
@@ -618,24 +1204,7 @@ export default function SupplierPOEditorPage() {
             supplier_ack_date: d.supplier_ack_date || '',
             status: d.status || 'DRAFT',
             notes: d.notes || '',
-            items: d.items?.length
-              ? d.items.map((row, i) => {
-                const parsed = parseParticulars(row.particulars);
-                return {
-                  serial_no: row.serial_no || i + 1,
-                  trim: row.trim,
-                  particulars: parsed.name,
-                  property_values: {},
-                  property_label: parsed.property_label,
-                  from_pi: isPiSourcedLabel(parsed.property_label),
-                  hsn_code: row.hsn_code || '',
-                  quantity_ordered: row.quantity_ordered,
-                  unit: row.unit || 'PCS',
-                  unit_price: row.unit_price ?? '',
-                  notes: row.notes || '',
-                };
-              })
-              : [emptyLine(1)],
+            items: mappedItems,
           });
         }
       } catch (e) {
@@ -644,7 +1213,38 @@ export default function SupplierPOEditorPage() {
         setLoading(false);
       }
     })();
-  }, [id, isNew, loadMasters, fetchNextPoNumber]);
+  }, [id, isNew, isFabricMode, lineDefaults, loadMasters, fetchNextPoNumber]);
+
+  // Keep blank fabric rows on Fabric particulars + MTRS unit when switching modes.
+  useEffect(() => {
+    if (!isNew) return;
+    if (effectiveFabricMode) {
+      setForm((f) => ({
+        ...f,
+        items: f.items.map((row) => (
+          row.trim || (row.particulars || '').trim()
+            ? { ...row, particulars: FABRIC_PO_NAME, unit: 'MTRS' }
+            : {
+              ...row,
+              particulars: FABRIC_PO_NAME,
+              unit: 'MTRS',
+              property_values: row.property_values && Object.keys(row.property_values).length
+                ? row.property_values
+                : emptyFabricPropertyValues(),
+            }
+        )),
+      }));
+      return;
+    }
+    setForm((f) => ({
+      ...f,
+      items: f.items.map((row) => (
+        row.trim || (row.particulars || '').trim()
+          ? row
+          : { ...row, unit: 'PCS', particulars: '' }
+      )),
+    }));
+  }, [effectiveFabricMode, isNew]);
 
   const refreshPoNumber = async () => {
     const nextPoNumber = await fetchNextPoNumber();
@@ -653,12 +1253,44 @@ export default function SupplierPOEditorPage() {
     }
   };
 
+  const deriveTaxMode = useCallback((supplier, companyProfile = company) => (
+    resolveTaxModeFromStates({
+      companyState: companyProfile?.region_state,
+      supplierState: supplier?.state_province,
+    })
+  ), [company]);
+
+  // Keep Intra/Inter in sync whenever company profile or selected supplier is available.
+  useEffect(() => {
+    if (!company || !form.supplier) return;
+    const supplier = suppliers.find((s) => s.id === form.supplier);
+    if (!supplier) return;
+    const mode = deriveTaxMode(supplier);
+    if (!mode) return;
+    setForm((f) => (f.tax_mode === mode ? f : { ...f, tax_mode: mode }));
+  }, [company, form.supplier, suppliers, deriveTaxMode]);
+
+  const selectedSupplier = useMemo(
+    () => suppliers.find((s) => s.id === form.supplier) || null,
+    [suppliers, form.supplier],
+  );
+  const autoTaxMode = useMemo(
+    () => (selectedSupplier ? deriveTaxMode(selectedSupplier) : null),
+    [selectedSupplier, deriveTaxMode],
+  );
+  const effectiveTaxMode = autoTaxMode || form.tax_mode;
+  const totals = useMemo(
+    () => calcPreview({ ...form, tax_mode: effectiveTaxMode }),
+    [form, effectiveTaxMode],
+  );
+
   const selectSupplier = (supplier) => {
     if (!supplier) {
       setForm((f) => ({ ...f, supplier: null }));
       return;
     }
     const addr = [supplier.address, supplier.city, supplier.state_province, supplier.postal_code, supplier.country].filter(Boolean).join('\n');
+    const taxMode = deriveTaxMode(supplier);
     setForm((f) => ({
       ...f,
       supplier: supplier.id,
@@ -667,7 +1299,14 @@ export default function SupplierPOEditorPage() {
       vendor_email: supplier.email || '',
       vendor_phone: supplier.phone || '',
       attention: supplier.contact_person || f.attention,
+      ...(taxMode ? { tax_mode: taxMode } : {}),
     }));
+  };
+
+  const handleSupplierCreated = (newSupplier) => {
+    setSuppliers((prev) => [...prev, newSupplier].sort((a, b) => a.name.localeCompare(b.name)));
+    selectSupplier(newSupplier);
+    setSupplierModalOpen(false);
   };
 
   const resolveBuyerPoForPi = (pi) => {
@@ -690,6 +1329,7 @@ export default function SupplierPOEditorPage() {
     setForm((f) => ({
       ...f,
       pi: pi?.id || null,
+      pi_number: pi?.pi_number || '',
       buyer_po: buyerPo?.id || null,
       reference_number: buyerPo?.po_number || '',
     }));
@@ -707,12 +1347,29 @@ export default function SupplierPOEditorPage() {
     if (!trim) return;
     setForm((f) => {
       const items = [...f.items];
+      // Pre-fill property values (e.g. Dim. Unit, Dimensions) from the most recent other
+      // row that used this same trim, so repeat line items don't need re-typing them.
+      const priorRow = items
+        .map((row, i) => ({ row, i }))
+        .reverse()
+        .find(({ row, i }) => i !== idx && row.trim === trim.id)?.row;
+      const property_values = initPropertyValues(trim.properties);
+      if (priorRow?.property_values) {
+        Object.keys(property_values).forEach((key) => {
+          const priorValue = priorRow.property_values[key];
+          if (priorValue != null && String(priorValue).trim() !== '') {
+            property_values[key] = priorValue;
+          }
+        });
+      }
       items[idx] = {
         ...items[idx],
         trim: trim.id,
         particulars: trim.name,
-        property_values: initPropertyValues(trim.properties),
-        property_label: '',
+        property_values,
+        // Recompute from the (possibly pre-filled) values above — leaving this blank would
+        // silently drop sticky-prefilled properties from the saved particulars text.
+        property_label: formatPiTrimProperties({ property_values }, trim),
         from_pi: false,
         hsn_code: (trim.hsn_code || '').trim(),
         unit: trim.default_unit || items[idx].unit,
@@ -729,6 +1386,91 @@ export default function SupplierPOEditorPage() {
       const property_values = { ...(row.property_values || {}), [propName]: value };
       const property_label = formatPiTrimProperties({ property_values }, trimMaster);
       items[idx] = { ...row, property_values, property_label, from_pi: false };
+      return { ...f, items };
+    });
+  };
+
+  const setFabricLineProperty = (idx, propName, value) => {
+    setForm((f) => {
+      const items = [...f.items];
+      const row = items[idx];
+      const property_values = { ...(row.property_values || {}), [propName]: value };
+      const property_label = formatFabricPropertyLabel(property_values, row.fabric_custom_fields, row.pi_fabric_option_key);
+      items[idx] = {
+        ...row,
+        particulars: FABRIC_PO_NAME,
+        property_values,
+        property_label,
+        unit: 'MTRS',
+      };
+      return { ...f, items };
+    });
+  };
+
+  const addFabricCustomProperty = (idx) => {
+    setForm((f) => {
+      const items = [...f.items];
+      const row = items[idx];
+      const customFields = [...(row.fabric_custom_fields || [])];
+      let name = 'Custom property';
+      let n = 1;
+      while (customFields.includes(name) || isStandardFabricProperty(name)) {
+        name = `Custom property ${n++}`;
+      }
+      customFields.push(name);
+      const property_values = { ...(row.property_values || {}), [name]: '' };
+      items[idx] = {
+        ...row,
+        particulars: FABRIC_PO_NAME,
+        fabric_custom_fields: customFields,
+        property_values,
+        property_label: formatFabricPropertyLabel(property_values, customFields, row.pi_fabric_option_key),
+        unit: 'MTRS',
+      };
+      return { ...f, items };
+    });
+  };
+
+  const removeFabricCustomProperty = (idx, propName) => {
+    setForm((f) => {
+      const items = [...f.items];
+      const row = items[idx];
+      const customFields = (row.fabric_custom_fields || []).filter((n) => n !== propName);
+      const property_values = { ...(row.property_values || {}) };
+      delete property_values[propName];
+      items[idx] = {
+        ...row,
+        particulars: FABRIC_PO_NAME,
+        fabric_custom_fields: customFields,
+        property_values,
+        property_label: formatFabricPropertyLabel(property_values, customFields, row.pi_fabric_option_key),
+        unit: 'MTRS',
+      };
+      return { ...f, items };
+    });
+  };
+
+  const renameFabricCustomProperty = (idx, oldName, newName) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    if (isStandardFabricProperty(trimmed)) return;
+    setForm((f) => {
+      const items = [...f.items];
+      const row = items[idx];
+      const customFields = row.fabric_custom_fields || [];
+      if (customFields.includes(trimmed)) return f;
+      const nextCustomFields = customFields.map((n) => (n === oldName ? trimmed : n));
+      const property_values = { ...(row.property_values || {}) };
+      property_values[trimmed] = property_values[oldName] ?? '';
+      delete property_values[oldName];
+      items[idx] = {
+        ...row,
+        particulars: FABRIC_PO_NAME,
+        fabric_custom_fields: nextCustomFields,
+        property_values,
+        property_label: formatFabricPropertyLabel(property_values, nextCustomFields, row.pi_fabric_option_key),
+        unit: 'MTRS',
+      };
       return { ...f, items };
     });
   };
@@ -753,6 +1495,29 @@ export default function SupplierPOEditorPage() {
     });
   };
 
+  const selectPiFabricLine = (idx, line) => {
+    const display = buildPiFabricDisplay(line);
+    const property_values = mapPiFabricToPropertyValues(line);
+    const property_label = formatFabricPropertyLabel(property_values, [], line._optionKey);
+    setForm((f) => {
+      const items = [...f.items];
+      items[idx] = {
+        ...items[idx],
+        trim: null,
+        particulars: FABRIC_PO_NAME,
+        property_values,
+        fabric_custom_fields: items[idx].fabric_custom_fields || [],
+        pi_fabric_option_key: line._optionKey || '',
+        property_label,
+        from_pi: true,
+        hsn_code: items[idx].hsn_code || '',
+        unit: 'MTRS',
+        quantity_ordered: display.orderQty || items[idx].quantity_ordered,
+      };
+      return { ...f, items };
+    });
+  };
+
   const clearLineTrim = (idx) => {
     setForm((f) => {
       const items = [...f.items];
@@ -768,17 +1533,40 @@ export default function SupplierPOEditorPage() {
     });
   };
 
-  const addLine = () => setForm((f) => ({ ...f, items: [...f.items, emptyLine(f.items.length + 1)] }));
+  const addLine = () => setForm((f) => ({
+    ...f,
+    items: [...f.items, emptyLine(f.items.length + 1, lineDefaults)],
+  }));
+  const insertLineAfter = (idx) => setForm((f) => {
+    const items = [...f.items.slice(0, idx + 1), emptyLine(1, lineDefaults), ...f.items.slice(idx + 1)];
+    return { ...f, items: items.map((row, i) => ({ ...row, serial_no: i + 1 })) };
+  });
   const removeLine = (idx) => setForm((f) => ({
     ...f,
     items: f.items.filter((_, i) => i !== idx).map((row, i) => ({ ...row, serial_no: i + 1 })),
   }));
 
+  const openTrimModal = (idx, initialName = '') => {
+    setTrimModalTargetRow(idx);
+    setTrimModalInitialName(initialName);
+    setTrimModalOpen(true);
+  };
+
+  const handleTrimCreated = (newTrim) => {
+    setTrims((prev) => [...prev, newTrim].sort((a, b) => a.name.localeCompare(b.name)));
+    if (trimModalTargetRow != null) {
+      selectTrim(trimModalTargetRow, newTrim);
+    }
+    setTrimModalOpen(false);
+    setTrimModalTargetRow(null);
+    setTrimModalInitialName('');
+  };
+
   const handleSave = async () => {
     const poNumber = form.po_number.trim();
     if (!poNumber) { alert('PO number is required.'); return; }
     if (!form.supplier && !form.vendor_name.trim()) { alert('Select a supplier.'); return; }
-    const items = form.items.filter((r) => r.particulars?.trim() || r.trim);
+    const items = form.items.filter((r) => r.particulars?.trim() || r.trim || effectiveFabricMode);
     if (!items.length) { alert('Add at least one line item.'); return; }
 
     setSaving(true);
@@ -786,6 +1574,7 @@ export default function SupplierPOEditorPage() {
       const payload = {
         ...form,
         po_number: poNumber,
+        tax_mode: effectiveTaxMode,
         supplier: form.supplier,
         pi: form.pi,
         buyer_po: form.buyer_po,
@@ -796,11 +1585,11 @@ export default function SupplierPOEditorPage() {
         status: 'ORDERED',
         items: items.map((row, i) => ({
           serial_no: row.serial_no || i + 1,
-          trim: row.trim,
-          particulars: buildParticularsForSave(row),
+          trim: effectiveFabricMode ? null : row.trim,
+          particulars: buildParticularsForSave(row, effectiveFabricMode),
           hsn_code: row.hsn_code.trim(),
           quantity_ordered: parseFloat(row.quantity_ordered) || 0,
-          unit: row.unit || 'PCS',
+          unit: effectiveFabricMode ? 'MTRS' : (row.unit || 'PCS'),
           unit_price: parseFloat(row.unit_price) || 0,
           notes: row.notes || '',
         })),
@@ -828,7 +1617,10 @@ export default function SupplierPOEditorPage() {
   };
 
   const supplierText = useMemo(() => supplierBlock(form), [form]);
-  const printPo = useMemo(() => ({ ...form, items: form.items }), [form]);
+  const printPo = useMemo(() => {
+    const piNumber = form.pi_number || piList.find((p) => p.id === form.pi)?.pi_number || '';
+    return { ...form, pi_number: piNumber, items: form.items };
+  }, [form, piList]);
 
   const sxInput = { '& .MuiInputBase-root': { borderRadius: 1.5 } };
 
@@ -844,10 +1636,37 @@ export default function SupplierPOEditorPage() {
     <Box sx={{ p: { xs: 1.5, sm: 2.5 } }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, flexWrap: 'wrap' }}>
         <IconButton onClick={() => navigate('/procurement')} size="small"><ArrowBack /></IconButton>
-        <LocalShipping sx={{ color: 'primary.main' }} />
+        {effectiveFabricMode ? <Checkroom sx={{ color: 'primary.main' }} /> : <LocalShipping sx={{ color: 'primary.main' }} />}
         <Typography sx={{ fontWeight: 800, fontSize: '1.15rem', flex: 1 }}>
-          {isNew ? 'Raise Purchase Order' : `PO: ${form.po_number}`}
+          {isNew
+            ? (isFabricMode ? 'Raise Fabric Purchase Order' : 'Raise Trim Purchase Order')
+            : `PO: ${form.po_number}`}
         </Typography>
+        {isNew && (
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={isFabricMode ? 'fabric' : 'trim'}
+            onChange={(_, v) => { if (v) setPoMode(v); }}
+            sx={{
+              mr: 0.5,
+              '& .MuiToggleButton-root': {
+                textTransform: 'none',
+                fontWeight: 700,
+                fontSize: '0.78rem',
+                px: 1.5,
+                py: 0.5,
+                borderRadius: '8px !important',
+              },
+            }}
+          >
+            <ToggleButton value="trim"><Category sx={{ fontSize: 16, mr: 0.5 }} />Trim</ToggleButton>
+            <ToggleButton value="fabric"><Checkroom sx={{ fontSize: 16, mr: 0.5 }} />Fabric</ToggleButton>
+          </ToggleButtonGroup>
+        )}
+        {!isNew && effectiveFabricMode && (
+          <Chip label="Fabric PO" size="small" color="primary" variant="outlined" sx={{ fontWeight: 700 }} />
+        )}
         {form.po_number && (
           <Button startIcon={<Print />} variant="outlined" size="small" onClick={() => window.print()}
             sx={{ fontWeight: 700, textTransform: 'none' }}>Print</Button>
@@ -905,13 +1724,25 @@ export default function SupplierPOEditorPage() {
               InputLabelProps={{ shrink: true }} sx={sxInput} />
           </Grid>
           <Grid item xs={12} sm={6} md={4}>
-            <Autocomplete
-              options={suppliers}
-              getOptionLabel={(o) => o.name || ''}
-              value={suppliers.find((s) => s.id === form.supplier) || null}
-              onChange={(_, v) => selectSupplier(v)}
-              renderInput={(params) => <TextField {...params} size="small" fullWidth label="Supplier *" sx={sxInput} />}
-            />
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+              <Autocomplete
+                options={suppliers}
+                getOptionLabel={(o) => o.name || ''}
+                value={suppliers.find((s) => s.id === form.supplier) || null}
+                onChange={(_, v) => selectSupplier(v)}
+                sx={{ flex: 1, minWidth: 0 }}
+                renderInput={(params) => <TextField {...params} size="small" fullWidth label="Supplier *" sx={sxInput} />}
+              />
+              <Tooltip title="Create new supplier">
+                <IconButton
+                  size="small"
+                  onClick={() => setSupplierModalOpen(true)}
+                  sx={{ mt: 0.25, color: 'primary.main', flexShrink: 0 }}
+                >
+                  <Storefront fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
           </Grid>
           <Grid item xs={6} sm={3} md={2}>
             <TextField fullWidth size="small" label="Attention" value={form.attention}
@@ -1046,19 +1877,27 @@ export default function SupplierPOEditorPage() {
       {/* Line items */}
       <Paper elevation={0} sx={sectionPaperSxByIndex(2)}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.25, flexWrap: 'wrap', gap: 1 }}>
-          <Typography sx={{ fontWeight: 800, fontSize: '0.8rem', flex: 1 }}>Line Items</Typography>
+          <Typography sx={{ fontWeight: 800, fontSize: '0.8rem', flex: 1 }}>
+            {effectiveFabricMode ? 'Fabric Line Items' : 'Trim Line Items'}
+          </Typography>
           {form.pi && (
             <Typography sx={{ fontSize: '0.68rem', color: slate[500], fontWeight: 600 }}>
               {piTrimsLoading
-                ? 'Loading trims from PI…'
+                ? (effectiveFabricMode ? 'Loading fabrics from PI…' : 'Loading trims from PI…')
                 : hasPiTrims
-                  ? `${piTrimOptions.length} PI variant(s) · ${trims.length} library trim(s) · PI total ${formatQty(piTotalPcs)} pcs`
-                  : `No PI indents — ${trims.length} library trim(s) available`}
+                  ? (effectiveFabricMode
+                    ? `${filteredPiOptions.length} PI fabric line(s) · PI total ${formatQty(piTotalPcs)} pcs`
+                    : `${filteredPiOptions.length} PI trim variant(s) · ${filteredLibraryTrims.length} library trim(s) · PI total ${formatQty(piTotalPcs)} pcs`)
+                  : (effectiveFabricMode
+                    ? 'No PI fabric lines — enter fabric details below'
+                    : `No PI trim lines — ${filteredLibraryTrims.length} library trim(s) available`)}
             </Typography>
           )}
           {!form.pi && (
             <Typography sx={{ fontSize: '0.68rem', color: slate[500], fontWeight: 600 }}>
-              {trims.length} trim(s) from library — select a PI to include indent variants
+              {effectiveFabricMode
+                ? 'Enter fabric details below — select a PI to pre-fill from indent'
+                : `${filteredLibraryTrims.length} trim(s) from library — select a PI to include indent variants`}
             </Typography>
           )}
           <Button size="small" startIcon={<Add />} onClick={addLine} sx={{ textTransform: 'none', fontWeight: 700 }}>Add Row</Button>
@@ -1078,12 +1917,12 @@ export default function SupplierPOEditorPage() {
               <TableRow sx={{ bgcolor: alpha(slate[900], 0.05) }}>
                 {[
                   { h: 'S.No', w: 52 },
-                  { h: 'Particulars (Trim)', w: 340 },
+                  { h: effectiveFabricMode ? 'Particulars' : 'Particulars (Trim)', w: 340 },
                   { h: 'HSN Code', w: 128 },
-                  { h: 'Qty', w: 132 },
+                  { h: effectiveFabricMode ? 'Qty (Meters)' : 'Qty', w: 132 },
                   { h: 'Unit Price', w: 110 },
                   { h: 'Total', w: 110 },
-                  { h: '', w: 48 },
+                  { h: '', w: 76 },
                 ].map(({ h, w }) => (
                   <TableCell key={h || 'actions'} sx={{ fontWeight: 700, fontSize: '0.75rem', width: w, minWidth: w }}>
                     {h}
@@ -1095,29 +1934,48 @@ export default function SupplierPOEditorPage() {
               {form.items.map((row, i) => {
                 const hsnMissing = Boolean(row.trim && !row.hsn_code?.trim());
                 return (
+                <React.Fragment key={i}>
                 <TableRow
-                  key={i}
                   sx={{
-                    bgcolor: i % 2 === 1 ? alpha('#1E3A5F', 0.05) : '#ffffff',
+                    bgcolor: i % 2 === 1 ? warm[100] : '#ffffff',
+                    '&:hover': { bgcolor: i % 2 === 1 ? warm[200] : alpha(warm[100], 0.55) },
                     '&:last-child td': { borderBottom: 'none' },
                   }}
                 >
-                  <TableCell sx={{ width: 52, verticalAlign: 'top', pt: 1.25 }}>{i + 1}</TableCell>
-                  <TableCell sx={{ minWidth: 340, verticalAlign: 'top' }}>
+                  <TableCell sx={{ width: 52, verticalAlign: 'top', pt: 1.25, py: 1.5 }}>{i + 1}</TableCell>
+                  <TableCell sx={{ minWidth: 340, verticalAlign: 'top', py: 1.5 }}>
+                    {effectiveFabricMode ? (
+                      <Box>
+                        <FabricPiPickControl
+                          row={row}
+                          options={filteredPiOptions}
+                          loading={piTrimsLoading}
+                          piSelected={Boolean(form.pi)}
+                          onSelect={(line) => selectPiFabricLine(i, line)}
+                        />
+                        <FabricPropertyFields
+                          row={row}
+                          onChange={(propName, value) => setFabricLineProperty(i, propName, value)}
+                          onAddProperty={() => addFabricCustomProperty(i)}
+                          onRemoveProperty={(propName) => removeFabricCustomProperty(i, propName)}
+                          onRenameProperty={(oldName, newName) => renameFabricCustomProperty(i, oldName, newName)}
+                        />
+                      </Box>
+                    ) : (
+                    <>
                     <Autocomplete
                       freeSolo
                       options={trimOptions}
                       loading={piTrimsLoading}
                       groupBy={trimOptionGroup}
+                      filterOptions={filterParticularOptions}
                       componentsProps={{
                         paper: { sx: { minWidth: hasPiTrims ? 440 : 320 } },
                       }}
                       getOptionLabel={(o) => {
                         if (typeof o === 'string') return o;
-                        if (o._optionKey) {
-                          return formatPiTrimOptionLabel(o, o._trimMaster || trimsMap[o.trim]);
-                        }
-                        return o.name || '';
+                        if (o.__create) return o.name || '';
+                        return getParticularOptionLabel(o);
                       }}
                       isOptionEqualToValue={(o, v) => {
                         if (typeof v === 'string') return false;
@@ -1145,11 +2003,30 @@ export default function SupplierPOEditorPage() {
                       }}
                       onChange={(_, v) => {
                         if (v && typeof v === 'object') {
-                          if (v._optionKey) selectPiTrimLine(i, v);
+                          if (v.__create) openTrimModal(i, v.name);
+                          else if (v._kind === 'fabric') selectPiFabricLine(i, v);
+                          else if (v._optionKey) selectPiTrimLine(i, v);
                           else selectTrim(i, v);
                         } else if (!v) clearLineTrim(i);
                       }}
                       renderOption={(props, option) => {
+                        if (option.__create) {
+                          return (
+                            <Box component="li" {...props} key="create-trim" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: '#7c3aed' }}>
+                              <LibraryAdd sx={{ fontSize: 17 }} />
+                              <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: 'inherit' }}>
+                                Create "{option.name}"
+                              </Typography>
+                            </Box>
+                          );
+                        }
+                        if (option._kind === 'fabric') {
+                          return (
+                            <Box component="li" {...props} key={option._optionKey}>
+                              <PiFabricOptionContent line={option} />
+                            </Box>
+                          );
+                        }
                         const isPiLine = Boolean(option._optionKey);
                         if (!isPiLine) {
                           return (
@@ -1170,7 +2047,24 @@ export default function SupplierPOEditorPage() {
                           {...params}
                           size="small"
                           fullWidth
-                          placeholder={hasPiTrims ? 'PI variant or library trim…' : 'Select trim from library'}
+                          placeholder={
+                            isFabricMode
+                              ? (hasPiTrims ? 'PI fabric or library fabric…' : 'Select fabric from library')
+                              : (hasPiTrims ? 'PI trim or library trim…' : 'Select trim from library')
+                          }
+                          InputProps={{
+                            ...params.InputProps,
+                            endAdornment: (
+                              <>
+                                {params.InputProps.endAdornment}
+                                <Tooltip title={isFabricMode ? 'Create new fabric' : 'Create new trim'}>
+                                  <IconButton size="small" onClick={() => openTrimModal(i, row.particulars)} sx={{ color: '#7c3aed', mr: 0.5 }}>
+                                    <LibraryAdd fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </>
+                            ),
+                          }}
                         />
                       )}
                     />
@@ -1201,11 +2095,15 @@ export default function SupplierPOEditorPage() {
                       </Box>
                     )}
                     {row.trim && !row.from_pi && (
-                      <TrimPropertyFields
-                        row={row}
-                        trimMaster={trimsMap[row.trim]}
-                        onChange={(propName, value) => setLineProperty(i, propName, value)}
-                      />
+                      <Box sx={{ mt: 1.5 }}>
+                        <TrimPropertyFields
+                          row={row}
+                          trimMaster={trimsMap[row.trim]}
+                          onChange={(propName, value) => setLineProperty(i, propName, value)}
+                        />
+                      </Box>
+                    )}
+                    </>
                     )}
                   </TableCell>
                   <TableCell sx={{ width: 128, minWidth: 128, verticalAlign: 'top', pt: 1.25 }}>
@@ -1250,6 +2148,11 @@ export default function SupplierPOEditorPage() {
                         '& .MuiOutlinedInput-root': { bgcolor: alpha(slate[50], 0.8) },
                       }}
                     />
+                    {effectiveFabricMode && (
+                      <Typography sx={{ fontSize: '0.62rem', color: slate[500], fontWeight: 600, textAlign: 'right', mt: 0.5 }}>
+                        Meters
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell sx={{ width: 110, minWidth: 110, verticalAlign: 'top', pt: 1.25 }}>
                     <TextField
@@ -1271,12 +2174,23 @@ export default function SupplierPOEditorPage() {
                       {lineTotal(row).toFixed(2)}
                     </Typography>
                   </TableCell>
-                  <TableCell sx={{ width: 48, verticalAlign: 'top', pt: 1 }}>
-                    <IconButton size="small" color="error" onClick={() => removeLine(i)} disabled={form.items.length <= 1}>
-                      <Delete fontSize="small" />
-                    </IconButton>
+                  <TableCell sx={{ width: 76, verticalAlign: 'top', pt: 1 }}>
+                    <Box sx={{ display: 'flex', gap: 0.25 }}>
+                      <Tooltip title="Insert row below">
+                        <IconButton size="small" color="primary" onClick={() => insertLineAfter(i)}>
+                          <Add fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Remove row">
+                        <IconButton size="small" color="error" onClick={() => removeLine(i)} disabled={form.items.length <= 1}>
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   </TableCell>
                 </TableRow>
+                <AddRowDivider onAdd={() => insertLineAfter(i)} />
+                </React.Fragment>
                 );
               })}
             </TableBody>
@@ -1286,12 +2200,8 @@ export default function SupplierPOEditorPage() {
         {/* Tax summary */}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5 }}>
           <Box sx={{ width: { xs: '100%', sm: 320 } }}>
-            <RadioGroup row value={form.tax_mode} onChange={(e) => setForm((f) => ({ ...f, tax_mode: e.target.value }))} sx={{ mb: 0.75 }}>
-              <FormControlLabel value="CGST_SGST" control={<Radio size="small" />} label={<Typography variant="body2">CGST + SGST</Typography>} />
-              <FormControlLabel value="IGST" control={<Radio size="small" />} label={<Typography variant="body2">IGST</Typography>} />
-            </RadioGroup>
             <Grid container spacing={1} sx={{ mb: 0.75 }}>
-              {form.tax_mode === 'IGST' ? (
+              {effectiveTaxMode === 'IGST' ? (
                 <Grid item xs={6}>
                   <TextField size="small" fullWidth label="IGST %" value={form.igst_percent}
                     onChange={(e) => setForm((f) => ({ ...f, igst_percent: e.target.value }))} />
@@ -1311,7 +2221,7 @@ export default function SupplierPOEditorPage() {
             </Grid>
             <Box sx={{ p: 1.5, bgcolor: alpha('#0f766e', 0.06), borderRadius: 1.5, border: `1px solid ${slate[200]}` }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}><Typography variant="body2">Sub Total</Typography><Typography variant="body2" fontWeight={700}>{totals.subtotal.toFixed(2)}</Typography></Box>
-              {form.tax_mode === 'IGST' ? (
+              {effectiveTaxMode === 'IGST' ? (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}><Typography variant="body2">IGST</Typography><Typography variant="body2">{totals.igst.toFixed(2)}</Typography></Box>
               ) : (
                 <>
@@ -1319,6 +2229,10 @@ export default function SupplierPOEditorPage() {
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}><Typography variant="body2">SGST</Typography><Typography variant="body2">{totals.sgst.toFixed(2)}</Typography></Box>
                 </>
               )}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="body2">Round Off</Typography>
+                <Typography variant="body2">{totals.roundOff.toFixed(2)}</Typography>
+              </Box>
               <Divider sx={{ my: 1 }} />
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography fontWeight={800}>Total</Typography><Typography fontWeight={800}>{totals.total.toFixed(2)}</Typography></Box>
             </Box>
@@ -1352,6 +2266,44 @@ export default function SupplierPOEditorPage() {
           Print view includes signature blocks for company and supplier acknowledgement.
         </Typography>
       </Paper>
+
+      {/* Bottom actions */}
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 1.5,
+        flexWrap: 'wrap',
+        py: 2,
+        px: { xs: 0, sm: 0.5 },
+        mb: 1,
+        borderTop: `1px solid ${slate[200]}`,
+      }}>
+        {form.po_number && (
+          <Button startIcon={<Print />} variant="outlined" size="small" onClick={() => window.print()}
+            sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>Print</Button>
+        )}
+        <Button variant="contained" size="small" startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <Save />}
+          disabled={saving} onClick={handleSave}
+          sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 3 }}>
+          {saving ? 'Saving…' : 'Place Order'}
+        </Button>
+      </Box>
+
+      <AddSupplierModal
+        open={supplierModalOpen}
+        onClose={() => setSupplierModalOpen(false)}
+        onSaved={handleSupplierCreated}
+      />
+
+      <AddTrimModal
+        open={trimModalOpen}
+        initialName={trimModalInitialName}
+        initialCategory={isFabricMode ? 'Fabric' : ''}
+        initialUnit={isFabricMode ? 'MTRS' : 'PCS'}
+        onClose={() => { setTrimModalOpen(false); setTrimModalTargetRow(null); setTrimModalInitialName(''); }}
+        onSaved={handleTrimCreated}
+      />
 
       <Box id="supplier-po-print-root">
         <SupplierPOPrintDocument po={printPo} company={company} trimsMap={trimsMap} />

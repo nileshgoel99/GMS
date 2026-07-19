@@ -4,7 +4,7 @@ import {
   Box, Button, Typography, IconButton, Chip, Tooltip,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { Add, Edit, Delete, LocalShipping, Visibility, ReceiptLong } from '@mui/icons-material';
+import { Add, Edit, Delete, LocalShipping, Visibility, ReceiptLong, Checkroom } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
@@ -23,6 +23,14 @@ const STATUS_COLORS = {
 };
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
+
+/** Taller rows when supplier names wrap to multiple lines. */
+const estimatePoRowHeight = (vendorName = '') => {
+  const text = String(vendorName || '').trim();
+  if (text.length <= 26) return 64;
+  const lines = Math.ceil(text.length / 26);
+  return Math.min(64 + (lines - 1) * 24, 128);
+};
 
 export default function Procurement() {
   const navigate = useNavigate();
@@ -55,9 +63,10 @@ export default function Procurement() {
     }
   };
 
-  const cell = (align = 'left', children) => (
+  const cell = (align = 'left', children, { multiline = false } = {}) => (
     <Box sx={{
-      display: 'flex', alignItems: 'center', width: '100%', height: '100%', px: 0.5,
+      display: 'flex', alignItems: multiline ? 'flex-start' : 'center', width: '100%', height: '100%', px: 0.5,
+      py: multiline ? 0.75 : 0,
       justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
     }}>
       {children}
@@ -86,6 +95,20 @@ export default function Procurement() {
         textOverflow: 'clip',
       },
     },
+    '& .MuiDataGrid-cell[data-field="vendor_name"]': {
+      overflow: 'visible',
+      whiteSpace: 'normal',
+      lineHeight: 1.45,
+      alignItems: 'flex-start',
+      py: 0.75,
+      '& .MuiTypography-root': {
+        whiteSpace: 'normal',
+        wordBreak: 'break-word',
+        overflow: 'visible',
+        textOverflow: 'clip',
+        lineHeight: 1.45,
+      },
+    },
     '& .MuiDataGrid-row.po-row--alt': {
       bgcolor: `${alpha('#0f766e', 0.07)} !important`,
     },
@@ -99,12 +122,15 @@ export default function Procurement() {
       ),
     },
     {
-      field: 'vendor_name', headerName: 'Supplier', flex: 1.5, minWidth: 160,
+      field: 'vendor_name', headerName: 'Supplier', flex: 1.8, minWidth: 200,
       renderCell: (p) => cell('left',
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <LocalShipping sx={{ fontSize: 16, color: 'primary.main', opacity: 0.7 }} />
-          <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{p.value}</Typography>
-        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0, width: '100%' }}>
+          <LocalShipping sx={{ fontSize: 16, color: 'primary.main', opacity: 0.7, mt: 0.15, flexShrink: 0 }} />
+          <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.45 }}>
+            {p.value || '—'}
+          </Typography>
+        </Box>,
+        { multiline: true },
       ),
     },
     {
@@ -214,12 +240,39 @@ export default function Procurement() {
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
       <PageHeader
         title="Supplier Purchase Orders"
-        subtitle="Raise POs to trim and material suppliers with GST breakdown and print-ready layout"
+        subtitle="Raise POs to trim and fabric suppliers with GST breakdown and print-ready layout"
         actions={
-          <Button startIcon={<Add />} variant="contained" onClick={() => navigate('/procurement/new')}
-            sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
-            Raise PO
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button
+              startIcon={<Add />}
+              variant="contained"
+              onClick={() => navigate('/procurement/new')}
+              sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}
+            >
+              Raise Trim PO
+            </Button>
+            <Button
+              startIcon={<Checkroom />}
+              variant="contained"
+              onClick={() => navigate('/procurement/new?mode=fabric')}
+              sx={{
+                fontWeight: 800,
+                textTransform: 'none',
+                borderRadius: 1.5,
+                color: '#fff',
+                border: `1px solid ${alpha('#0d9488', 0.45)}`,
+                boxShadow: `0 2px 10px ${alpha('#0f766e', 0.35)}`,
+                backgroundColor: '#0f766e',
+                backgroundImage: `repeating-linear-gradient(135deg, ${alpha('#fff', 0.08)} 0px, ${alpha('#fff', 0.08)} 4px, transparent 4px, transparent 10px)`,
+                '&:hover': {
+                  backgroundColor: '#0d9488',
+                  boxShadow: `0 4px 14px ${alpha('#0f766e', 0.45)}`,
+                },
+              }}
+            >
+              Raise Fabric PO
+            </Button>
+          </Box>
         }
       />
 
@@ -228,7 +281,7 @@ export default function Procurement() {
           rows={rows}
           columns={columns}
           loading={loading}
-          rowHeight={64}
+          getRowHeight={(params) => estimatePoRowHeight(params.model.vendor_name)}
           columnHeaderHeight={48}
           getRowClassName={(p) => (rows.findIndex((r) => r.id === p.id) % 2 === 1 ? 'po-row--alt' : '')}
           sx={gridSx}

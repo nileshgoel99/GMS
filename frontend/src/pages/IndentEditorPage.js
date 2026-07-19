@@ -54,8 +54,59 @@ const CARTON_DIM_UNITS = [
 
 const cartonDimUnitLabel = (unit) => (unit === 'INCH' ? 'Inches' : 'CMS');
 
+const hasCartonBoxContent = (row) =>
+  Boolean(String(row?.pcs_per_carton ?? '').trim() || String(row?.carton_ply ?? '').trim() || String(row?.carton_dimensions ?? '').trim());
+
+const normalizeCartonBoxesFromApi = (data, trimsList = []) => {
+  const resolveTrimName = (trimId) => {
+    if (!trimId) return '';
+    const trim = trimsList.find((t) => t.id === trimId);
+    return trim?.name || '';
+  };
+  if (Array.isArray(data?.carton_boxes) && data.carton_boxes.length) {
+    return data.carton_boxes.map((row) => ({
+      ...emptyCartonBox(),
+      ...row,
+      trim: row.trim_id || row.trim || null,
+      trim_name: row.trim_name || resolveTrimName(row.trim_id || row.trim),
+      pcs_per_carton: row.pcs_per_carton != null && row.pcs_per_carton !== '' ? String(row.pcs_per_carton) : '',
+    }));
+  }
+  if (data?.pcs_per_carton || data?.carton_ply || data?.carton_dimensions) {
+    return [{
+      trim: null,
+      trim_name: '',
+      pcs_per_carton: data.pcs_per_carton != null ? String(data.pcs_per_carton) : '',
+      carton_ply: data.carton_ply || '',
+      carton_dimensions: data.carton_dimensions || '',
+      carton_dimensions_unit: data.carton_dimensions_unit || 'CMS',
+    }];
+  }
+  return [emptyCartonBox()];
+};
+
+const serializeCartonBox = (row) => ({
+  pcs_per_carton: parseInt(row.pcs_per_carton, 10) || 0,
+  carton_ply: row.carton_ply || '',
+  carton_dimensions: row.carton_dimensions || '',
+  carton_dimensions_unit: row.carton_dimensions_unit || 'CMS',
+});
+
+const formatCartonBoxLine = (box) => {
+  const parts = [];
+  if (box.pcs_per_carton) parts.push(`${box.pcs_per_carton} pcs/box`);
+  if (box.carton_ply) parts.push(box.carton_ply);
+  if (box.carton_dimensions) {
+    parts.push(`${box.carton_dimensions} (L*W*H ${cartonDimUnitLabel(box.carton_dimensions_unit || 'CMS')})`);
+  }
+  return parts.join('  ');
+};
+
 // ── Empty row factories ───────────────────────────────────────────────────────
 const emptyFabric = () => ({ material: '', color: '', gsm: '', roll_width: '', consumption_per_pc: '', unit: 'MTRS', total_consumption: '', remarks: '' });
+const emptyCartonBox = () => ({
+  trim: null, trim_name: '', pcs_per_carton: '', carton_ply: '', carton_dimensions: '', carton_dimensions_unit: 'CMS',
+});
 const emptyTrimPart = (label = '') => ({ label, consumption_per_pc: '', unit: 'MTRS', total_consumption: '', total_unit: '' });
 const emptyTrim = () => ({
   trim: null, trim_name: '', category: '', color_variant: '', size_variant: '',
@@ -762,7 +813,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
             const parts = row.parts?.length ? row.parts : null;
             return (
               <Box component="tr" key={`t${i}`}>
-                <Box component="td" sx={cellSx}>{row.trim_name}</Box>
+                <Box component="td" sx={{ ...cellSx, textTransform: 'uppercase' }}>{row.trim_name}</Box>
                 <Box component="td" sx={cellSx}>{formatTrimVariant(row)}</Box>
                 <Box component="td" sx={cellSx}>—</Box>
                 <Box component="td" sx={{ ...cellSx, textAlign: 'right', whiteSpace: 'pre-line' }}>
@@ -823,16 +874,19 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
       )}
 
       {/* Carton info */}
-      {(indent?.pcs_per_carton || indent?.carton_ply || indent?.carton_dimensions) && (
-        <Box sx={{ mb: 1.5 }}>
+      {((indent?.carton_boxes || []).length
+        ? indent.carton_boxes.filter(hasCartonBoxContent)
+        : (indent?.pcs_per_carton || indent?.carton_ply || indent?.carton_dimensions)
+          ? normalizeCartonBoxesFromApi(indent).filter(hasCartonBoxContent)
+          : []
+      ).map((box, i) => (
+        <Box key={i} sx={{ mb: i === 0 ? 1.5 : 0.75 }}>
           <Typography sx={{ fontFamily: 'inherit', fontSize: '8.5pt', fontWeight: 600 }}>
-            Carton Size:&nbsp;&nbsp;
-            {indent.pcs_per_carton ? `${indent.pcs_per_carton} pcs/box` : ''}
-            {indent.carton_ply ? `  ${indent.carton_ply}` : ''}
-            {indent.carton_dimensions ? `  ${indent.carton_dimensions} (L*W*H ${cartonDimUnitLabel(indent.carton_dimensions_unit)})` : ''}
+            Carton Size{indent?.carton_boxes?.length > 1 ? ` ${i + 1}` : ''}:&nbsp;&nbsp;
+            {formatCartonBoxLine(box)}
           </Typography>
         </Box>
-      )}
+      ))}
 
       {/* Sign-off */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3, borderTop: '1px solid #999', pt: 1.5 }}>
@@ -918,10 +972,7 @@ export default function IndentEditorPage() {
   const [indentNumber, setIndentNumber] = useState('');
   const [indentDate,   setIndentDate]  = useState(new Date().toISOString().split('T')[0]);
   const [status,       setStatus]      = useState('DRAFT');
-  const [pcsPerCarton, setPcsPerCarton] = useState('');
-  const [cartonPly,    setCartonPly]   = useState('');
-  const [cartonDims,   setCartonDims]  = useState('');
-  const [cartonDimUnit, setCartonDimUnit] = useState('CMS');
+  const [cartonBoxes,  setCartonBoxes] = useState([emptyCartonBox()]);
   const [preparedBy,   setPreparedBy]  = useState('');
   const [receivedBy,   setReceivedBy]  = useState('');
   const [approvedBy,   setApprovedBy]  = useState('');
@@ -939,10 +990,7 @@ export default function IndentEditorPage() {
   const resetBomFormState = () => {
     setFabricLines([emptyFabric()]);
     setTrimLines([emptyTrim()]);
-    setPcsPerCarton('');
-    setCartonPly('');
-    setCartonDims('');
-    setCartonDimUnit('CMS');
+    setCartonBoxes([emptyCartonBox()]);
     setPreparedBy('');
     setReceivedBy('');
     setApprovedBy('');
@@ -1058,10 +1106,6 @@ export default function IndentEditorPage() {
           setIndentNumber(data.indent_number);
           setIndentDate(data.indent_date);
           setStatus(data.status);
-          setPcsPerCarton(data.pcs_per_carton || '');
-          setCartonPly(data.carton_ply || '');
-          setCartonDims(data.carton_dimensions || '');
-          setCartonDimUnit(data.carton_dimensions_unit || 'CMS');
           setPreparedBy(data.prepared_by || '');
           setReceivedBy(data.received_by || '');
           setApprovedBy(data.approved_by || '');
@@ -1087,6 +1131,7 @@ export default function IndentEditorPage() {
             if (!merged.some((m) => m.id === t.id)) merged.push(t);
           });
           setTrimsList(merged);
+          setCartonBoxes(normalizeCartonBoxesFromApi(data, merged));
         }
       } catch (e) {
         console.error(e);
@@ -1115,6 +1160,13 @@ export default function IndentEditorPage() {
         }
       } catch (_) { /* no template */ }
     }
+  };
+
+  const addCartonBox = () => setCartonBoxes((prev) => [...prev, emptyCartonBox()]);
+  const insertCartonBoxAfter = (i) => setCartonBoxes((prev) => [...prev.slice(0, i + 1), emptyCartonBox(), ...prev.slice(i + 1)]);
+  const removeCartonBox = (i) => setCartonBoxes((prev) => (prev.length <= 1 ? [emptyCartonBox()] : prev.filter((_, idx) => idx !== i)));
+  const setCartonBoxField = (i, field, value) => {
+    setCartonBoxes((prev) => prev.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
   };
 
   const loadItemTemplate = async () => {
@@ -1332,16 +1384,19 @@ export default function IndentEditorPage() {
 
     setSaving(true);
     try {
+      const savedCartonBoxes = cartonBoxes.filter(hasCartonBoxContent).map(serializeCartonBox);
+      const firstCarton = savedCartonBoxes[0] || serializeCartonBox(emptyCartonBox());
       const payload = {
         pi: pi.id,
         selected_pi_line_ids: selectedLineIds,
         indent_number: indentNumber,
         indent_date: indentDate,
         status: nextStatus || status,
-        pcs_per_carton: pcsPerCarton || 0,
-        carton_ply: cartonPly,
-        carton_dimensions: cartonDims,
-        carton_dimensions_unit: cartonDimUnit,
+        pcs_per_carton: firstCarton.pcs_per_carton,
+        carton_ply: firstCarton.carton_ply,
+        carton_dimensions: firstCarton.carton_dimensions,
+        carton_dimensions_unit: firstCarton.carton_dimensions_unit,
+        carton_boxes: savedCartonBoxes,
         prepared_by: preparedBy,
         received_by: receivedBy,
         approved_by: approvedBy,
@@ -1368,6 +1423,17 @@ export default function IndentEditorPage() {
         res = await ordersAPI.updateIndent(id, payload);
         setIndent(res.data);
         setStatus(res.data.status);
+        if (res.data.linked_trims?.length) {
+          setTrimsList((prev) => {
+            const merged = [...prev];
+            res.data.linked_trims.forEach((t) => {
+              const idx = merged.findIndex((m) => m.id === t.id);
+              if (idx >= 0) merged[idx] = t;
+              else merged.push(t);
+            });
+            return merged;
+          });
+        }
         setSaveNotice(successMessage);
       }
     } catch (e) {
@@ -1944,7 +2010,7 @@ export default function IndentEditorPage() {
                                   filterOptions={filterTrimNameOptions}
                                   getOptionLabel={(o) => (typeof o === 'string' ? o : o.name)}
                                   inputValue={row.trim_name}
-                                  onInputChange={(_, v) => setTrimField(i, 'trim_name', v)}
+                                  onInputChange={(_, v) => setTrimField(i, 'trim_name', v.toUpperCase())}
                                   onChange={(_, v) => {
                                     if (!v || typeof v !== 'object') return;
                                     if (v.__create) openTrimModal(i, v.name);
@@ -2224,39 +2290,70 @@ export default function IndentEditorPage() {
 
             {/* Carton Box */}
             <Box sx={cartonBoxSectionSx}>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', mb: 1.5, color: '#92400e', letterSpacing: '0.02em' }}>
-                Carton Box
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={4} md={3}>
-                  <TextField size="small" fullWidth label="Pcs/Box" type="number" value={pcsPerCarton}
-                    onChange={(e) => setPcsPerCarton(e.target.value)} sx={sxInput} />
-                </Grid>
-                <Grid item xs={12} sm={4} md={3}>
-                  <TextField size="small" fullWidth label="PLY" value={cartonPly}
-                    onChange={(e) => setCartonPly(e.target.value)} placeholder="5 PLY" sx={sxInput} />
-                </Grid>
-                <Grid item xs={12} sm={4} md={2}>
-                  <TextField size="small" fullWidth select label="Dim. unit" value={cartonDimUnit}
-                    onChange={(e) => setCartonDimUnit(e.target.value)} sx={sxInput}>
-                    {CARTON_DIM_UNITS.map((u) => (
-                      <MenuItem key={u.value} value={u.value}>{u.label}</MenuItem>
-                    ))}
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} sm={8} md={4}>
-                  <TextField size="small" fullWidth
-                    label={`Dimensions (${cartonDimUnitLabel(cartonDimUnit)})`}
-                    value={cartonDims}
-                    onChange={(e) => setCartonDims(e.target.value)}
-                    placeholder={cartonDimUnit === 'INCH' ? 'L × W × H in inches' : 'L × W × H in CMS'}
-                    helperText={cartonDimUnit === 'INCH'
-                      ? 'Length × Width × Height in inches'
-                      : 'Length × Width × Height in centimetres'}
-                    FormHelperTextProps={{ sx: { mx: 0, fontSize: '0.68rem' } }}
-                    sx={sxInput} />
-                </Grid>
-              </Grid>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', color: '#92400e', letterSpacing: '0.02em', flex: 1 }}>
+                  Carton Box
+                </Typography>
+                <Button size="small" startIcon={<Add />} onClick={addCartonBox}
+                  sx={{ fontWeight: 700, textTransform: 'none', color: '#92400e' }}>
+                  Add Carton
+                </Button>
+              </Box>
+              {cartonBoxes.map((box, i) => (
+                <Box
+                  key={i}
+                  sx={{
+                    mb: i < cartonBoxes.length - 1 ? 2 : 0,
+                    pb: i < cartonBoxes.length - 1 ? 2 : 0,
+                    borderBottom: i < cartonBoxes.length - 1 ? `1px dashed ${alpha('#b45309', 0.25)}` : 'none',
+                  }}
+                >
+                  {cartonBoxes.length > 1 && (
+                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#92400e', mb: 1 }}>
+                      Carton {i + 1}
+                    </Typography>
+                  )}
+                  <Grid container spacing={2} alignItems="flex-start">
+                    <Grid item xs={12} sm={4} md={3}>
+                      <TextField size="small" fullWidth label="Pcs/Box" type="number" value={box.pcs_per_carton}
+                        onChange={(e) => setCartonBoxField(i, 'pcs_per_carton', e.target.value)} sx={sxInput} />
+                    </Grid>
+                    <Grid item xs={12} sm={4} md={3}>
+                      <TextField size="small" fullWidth label="PLY" value={box.carton_ply}
+                        onChange={(e) => setCartonBoxField(i, 'carton_ply', e.target.value)} placeholder="5 PLY" sx={sxInput} />
+                    </Grid>
+                    <Grid item xs={12} sm={4} md={2}>
+                      <TextField size="small" fullWidth select label="Dim. unit" value={box.carton_dimensions_unit}
+                        onChange={(e) => setCartonBoxField(i, 'carton_dimensions_unit', e.target.value)} sx={sxInput}>
+                        {CARTON_DIM_UNITS.map((u) => (
+                          <MenuItem key={u.value} value={u.value}>{u.label}</MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={12} sm={8} md={3}>
+                      <TextField size="small" fullWidth
+                        label={`Dimensions (L × W × H, ${cartonDimUnitLabel(box.carton_dimensions_unit)})`}
+                        value={box.carton_dimensions}
+                        onChange={(e) => setCartonBoxField(i, 'carton_dimensions', e.target.value)}
+                        sx={sxInput} />
+                    </Grid>
+                    <Grid item xs={12} sm={4} md={1}>
+                      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: { xs: 'flex-start', md: 'flex-end' }, pt: { md: 0.5 } }}>
+                        <Tooltip title="Insert carton below">
+                          <IconButton size="small" color="primary" onClick={() => insertCartonBoxAfter(i)}>
+                            <Add fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Remove carton">
+                          <IconButton size="small" color="error" onClick={() => removeCartonBox(i)}>
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </Grid>
+                  </Grid>
+                </Box>
+              ))}
             </Box>
           </Paper>
 
@@ -2285,6 +2382,39 @@ export default function IndentEditorPage() {
         </Grid>
       </Paper>
 
+      {/* ── Bottom actions ── */}
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 1.5,
+        flexWrap: 'wrap',
+        py: 2,
+        px: { xs: 0, sm: 0.5 },
+        mb: 1,
+        borderTop: `1px solid ${slate[200]}`,
+      }}>
+        {!isNew && (
+          <Button startIcon={<Print />} variant="outlined" size="small"
+            onClick={() => window.print()}
+            sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
+            Print
+          </Button>
+        )}
+        {status !== 'CONFIRMED' && (
+          <Button variant="outlined" size="small" color="success"
+            startIcon={<CheckCircle />} onClick={() => handleSave('CONFIRMED')} disabled={saving}
+            sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
+            Confirm
+          </Button>
+        )}
+        <Button variant="contained" size="small" startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <Save />}
+          disabled={saving} onClick={() => handleSave()}
+          sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 3 }}>
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+      </Box>
+
       <AddTrimModal
         open={trimModalOpen}
         initialName={trimModalInitialName}
@@ -2297,7 +2427,18 @@ export default function IndentEditorPage() {
         <IndentDocument
           pi={pi}
           selectedLines={activeLines}
-          indent={{ indent_number: indentNumber, indent_date: indentDate, pcs_per_carton: pcsPerCarton, carton_ply: cartonPly, carton_dimensions: cartonDims, carton_dimensions_unit: cartonDimUnit, prepared_by: preparedBy, received_by: receivedBy, approved_by: approvedBy }}
+          indent={{
+            indent_number: indentNumber,
+            indent_date: indentDate,
+            carton_boxes: cartonBoxes.filter(hasCartonBoxContent).map(serializeCartonBox),
+            pcs_per_carton: cartonBoxes[0]?.pcs_per_carton || '',
+            carton_ply: cartonBoxes[0]?.carton_ply || '',
+            carton_dimensions: cartonBoxes[0]?.carton_dimensions || '',
+            carton_dimensions_unit: cartonBoxes[0]?.carton_dimensions_unit || 'CMS',
+            prepared_by: preparedBy,
+            received_by: receivedBy,
+            approved_by: approvedBy,
+          }}
           fabricLines={fabricLines}
           trimLines={trimLines}
           company={company}

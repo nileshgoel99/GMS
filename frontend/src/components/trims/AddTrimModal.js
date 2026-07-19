@@ -10,25 +10,31 @@ import { ordersAPI, suppliersAPI } from '../../services/api';
 import { slate } from '../../theme/appTheme';
 import {
   TRIM_PROPERTY_NAME_SUGGESTIONS,
+  TRIM_CATEGORY_SUGGESTIONS,
+  TRIM_UNIT_OPTIONS,
   isNumericTrimProperty,
+  isCartonBoxCategory,
   normalizeTrimPropertyName,
+  applyCartonBoxCategoryToForm,
+  defaultValuesFromCartonBox,
+  cartonBoxFromDefaultValues,
+  emptyCartonDefaults,
 } from './trimConstants';
+import CartonBoxDefaultsFields from './CartonBoxDefaultsFields';
 
-export const TRIM_CATEGORY_SUGGESTIONS = [
-  'Fabric', 'Tape', 'Button', 'Velcro', 'Zipper', 'Thread', 'Label',
-  'Polybag', 'Waist Band', 'Hook & Loop', 'Sticker', 'Other',
-];
-
-export const TRIM_UNIT_OPTIONS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GROSS', 'CMS', 'CM', 'MM', 'INCH', 'GMS', ''];
+export { TRIM_CATEGORY_SUGGESTIONS, TRIM_UNIT_OPTIONS } from './trimConstants';
 
 const emptyProperty = () => ({ name: '', unit: '' });
 export const emptyTrimForm = () => ({
   name: '', category: '', default_unit: 'PCS', notes: '', properties: [], supplier: null,
+  cartonDefaults: emptyCartonDefaults(),
 });
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 
-export default function AddTrimModal({ open, onClose, onSaved, initialName = '' }) {
+export default function AddTrimModal({
+  open, onClose, onSaved, initialName = '', initialCategory = '', initialUnit = '',
+}) {
   const [form, setForm] = useState(emptyTrimForm());
   const [saving, setSaving] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
@@ -46,10 +52,15 @@ export default function AddTrimModal({ open, onClose, onSaved, initialName = '' 
   useEffect(() => {
     if (open && !wasOpen.current) {
       loadSuppliers();
-      setForm({ ...emptyTrimForm(), name: initialName || '' });
+      setForm({
+        ...emptyTrimForm(),
+        name: (initialName || '').toUpperCase(),
+        category: initialCategory || '',
+        default_unit: initialUnit || 'PCS',
+      });
     }
     wasOpen.current = open;
-  }, [open, initialName, loadSuppliers]);
+  }, [open, initialName, initialCategory, initialUnit, loadSuppliers]);
 
   const handleClose = () => {
     if (!saving) {
@@ -77,6 +88,10 @@ export default function AddTrimModal({ open, onClose, onSaved, initialName = '' 
     setForm((f) => ({ ...f, properties: f.properties.filter((_, i) => i !== idx) }));
   };
 
+  const handleCategoryChange = (category) => {
+    setForm((f) => applyCartonBoxCategoryToForm({ ...f, category }));
+  };
+
   const handleSave = async () => {
     if (!form.name.trim()) {
       alert('Trim name is required.');
@@ -85,10 +100,21 @@ export default function AddTrimModal({ open, onClose, onSaved, initialName = '' 
     const properties = form.properties
       .filter((p) => p.name.trim())
       .map((p) => ({ name: p.name.trim(), unit: (p.unit || '').trim() }));
+    const default_property_values = isCartonBoxCategory(form.category)
+      ? defaultValuesFromCartonBox(form.cartonDefaults)
+      : {};
 
     setSaving(true);
     try {
-      const res = await ordersAPI.createTrim({ ...form, supplier: form.supplier || null, properties });
+      const res = await ordersAPI.createTrim({
+        name: form.name,
+        category: form.category,
+        default_unit: form.default_unit,
+        notes: form.notes,
+        supplier: form.supplier || null,
+        properties,
+        default_property_values,
+      });
       onSaved?.(res.data);
       setForm(emptyTrimForm());
       onClose();
@@ -114,8 +140,8 @@ export default function AddTrimModal({ open, onClose, onSaved, initialName = '' 
             <TextField
               fullWidth size="small" label="Trim Name *" autoFocus
               value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. 5 CM WIDE Reflective Tape D6101"
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value.toUpperCase() }))}
+              placeholder="e.g. 5 CM WIDE REFLECTIVE TAPE D6101"
             />
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -123,7 +149,7 @@ export default function AddTrimModal({ open, onClose, onSaved, initialName = '' 
               freeSolo
               options={TRIM_CATEGORY_SUGGESTIONS}
               value={form.category}
-              onInputChange={(_, v) => setForm((f) => ({ ...f, category: v }))}
+              onInputChange={(_, v) => handleCategoryChange(v)}
               renderInput={(params) => <TextField {...params} size="small" fullWidth label="Category" />}
             />
           </Grid>
@@ -217,6 +243,15 @@ export default function AddTrimModal({ open, onClose, onSaved, initialName = '' 
               </Table>
             )}
           </Grid>
+
+          {isCartonBoxCategory(form.category) && (
+            <Grid item xs={12}>
+              <CartonBoxDefaultsFields
+                values={form.cartonDefaults}
+                onChange={(cartonDefaults) => setForm((f) => ({ ...f, cartonDefaults }))}
+              />
+            </Grid>
+          )}
 
           <Grid item xs={12}>
             <TextField fullWidth size="small" multiline minRows={2} label="Notes"

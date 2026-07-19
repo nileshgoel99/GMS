@@ -9,6 +9,7 @@ import { alpha } from '@mui/material/styles';
 import { procurementAPI } from '../../services/api';
 import { slate } from '../../theme/appTheme';
 import { formatDateDisplay } from '../../utils/formatDate';
+import BillLineParticulars from './BillLineParticulars';
 
 const STATUS_COLOR = {
   DRAFT: 'default',
@@ -99,12 +100,6 @@ export default function SupplierPOViewModal({ open, poId, onClose, onEdit }) {
     })();
   }, [open, poId, onClose]);
 
-  const lineLabel = (item) =>
-    item.particulars
-    || item.trim_name
-    || item.item_details?.name
-    || '—';
-
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth PaperProps={{ sx: { borderRadius: 2, maxHeight: '92vh' } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2, px: 2.5 }}>
@@ -143,7 +138,6 @@ export default function SupplierPOViewModal({ open, poId, onClose, onEdit }) {
             <Grid container spacing={2}>
               <Grid item xs={6} sm={3}><InfoItem label="Order Date" value={formatDateDisplay(po.order_date)} /></Grid>
               <Grid item xs={6} sm={3}><InfoItem label="Expected Delivery" value={formatDateDisplay(po.expected_delivery_date)} /></Grid>
-              <Grid item xs={6} sm={3}><InfoItem label="Payment Due" value={formatDateDisplay(po.payment_due_date)} /></Grid>
               <Grid item xs={6} sm={3}><InfoItem label="Reference (Buyer PO)" value={po.reference_number || po.buyer_po_number} /></Grid>
               <Grid item xs={6} sm={3}><InfoItem label="PI Reference" value={po.pi_number} /></Grid>
             </Grid>
@@ -180,7 +174,9 @@ export default function SupplierPOViewModal({ open, poId, onClose, onEdit }) {
                       (po.items || []).map((item) => (
                         <TableRow key={item.id} hover>
                           <TableCell sx={viewCellSx()}>{item.serial_no}</TableCell>
-                          <TableCell sx={viewCellSx()}>{lineLabel(item)}</TableCell>
+                          <TableCell sx={{ ...viewCellSx(), minWidth: 220 }}>
+                            <BillLineParticulars row={item} />
+                          </TableCell>
                           <TableCell sx={{ ...viewCellSx(), fontFamily: 'monospace', fontSize: '0.8rem' }}>{val(item.hsn_code)}</TableCell>
                           <TableCell sx={viewCellSx('right')}>{formatMoney(item.quantity_ordered)}</TableCell>
                           <TableCell sx={viewCellSx('center')}>{val(item.unit)}</TableCell>
@@ -238,6 +234,10 @@ export default function SupplierPOViewModal({ open, poId, onClose, onEdit }) {
                     </Box>
                   </>
                 )}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
+                  <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>Round Off</Typography>
+                  <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }} className="font-numeric">{formatMoney(po.round_off)}</Typography>
+                </Box>
                 <Divider sx={{ my: 1 }} />
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Typography sx={{ fontWeight: 800, fontSize: '0.95rem' }}>Total</Typography>

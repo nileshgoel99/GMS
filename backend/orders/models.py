@@ -124,6 +124,11 @@ class TrimMaster(models.Model):
         blank=True,
         help_text='Configurable properties: [{"name": "Width", "unit": "CM"}, {"name": "Color", "unit": ""}]',
     )
+    default_property_values = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Default values for properties, e.g. {"PLY": "5 PLY", "Dimensions": "24.5*14.5*9"}',
+    )
     notes = models.TextField(blank=True, default='')
     hsn_code = models.CharField(max_length=20, blank=True, default='', help_text='Default HSN/SAC for PO lines')
     supplier = models.ForeignKey(
@@ -141,6 +146,11 @@ class TrimMaster(models.Model):
         ordering = ['category', 'name']
         verbose_name = 'Trim Master'
         verbose_name_plural = 'Trims Library'
+
+    def save(self, *args, **kwargs):
+        if self.name:
+            self.name = self.name.strip().upper()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -174,6 +184,15 @@ class Indent(models.Model):
         choices=CARTON_DIM_UNIT_CHOICES,
         default='CMS',
         blank=True,
+    )
+    carton_boxes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            'Multiple carton size rows, e.g. '
+            '[{"trim_id": 1, "pcs_per_carton": 12, "carton_ply": "5 PLY", '
+            '"carton_dimensions": "24.5*14.5*9", "carton_dimensions_unit": "CMS"}]'
+        ),
     )
 
     prepared_by = models.CharField(max_length=120, blank=True, default='')
@@ -246,6 +265,11 @@ class IndentTrimLine(models.Model):
 
     class Meta:
         ordering = ['indent', 'sort_order', 'id']
+
+    def save(self, *args, **kwargs):
+        if self.trim_name:
+            self.trim_name = self.trim_name.strip().upper()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.indent.indent_number} trim: {self.trim_name} / {self.color_variant}"

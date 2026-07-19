@@ -330,6 +330,100 @@ class IndentTrimLineSerializer(serializers.ModelSerializer):
         read_only_fields = ('id',)
 
 
+CARTON_BOX_CATEGORY = 'Carton Box'
+CARTON_BOX_TRIM_NAME = 'CARTON BOX'
+CARTON_BOX_PROPERTIES = [
+    {'name': 'Pcs/Box', 'unit': ''},
+    {'name': 'PLY', 'unit': ''},
+    {'name': 'Dimensions', 'unit': ''},
+    {'name': 'Dim. Unit', 'unit': 'CMS/INCH'},
+]
+
+
+def _get_carton_box_trim():
+    """Carton Box is just another trim in the library — one shared entry, like Velcro or Button.
+    Per-indent values (Pcs/Box, PLY, Dimensions, unit) live on the indent's carton row itself,
+    the same way other trims keep their per-use values in property_values — never written back
+    onto this shared master record.
+    """
+    trim, _created = TrimMaster.objects.get_or_create(
+        name=CARTON_BOX_TRIM_NAME,
+        defaults={
+            'category': CARTON_BOX_CATEGORY,
+            'default_unit': 'PCS',
+            'properties': CARTON_BOX_PROPERTIES,
+        },
+    )
+    return trim
+
+
+def _normalize_carton_boxes(raw):
+    """Normalize carton rows and link each to the shared Carton Box trim."""
+    if not isinstance(raw, list):
+        return []
+    out = []
+    trim = None
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        pcs = int(row.get('pcs_per_carton', 0) or 0)
+        ply = str(row.get('carton_ply') or '').strip()
+        dims = str(row.get('carton_dimensions') or '').strip()
+        unit = str(row.get('carton_dimensions_unit') or 'CMS').strip().upper() or 'CMS'
+        if unit not in ('CMS', 'INCH'):
+            unit = 'CMS'
+        if not (pcs or ply or dims):
+            continue
+        if trim is None:
+            trim = _get_carton_box_trim()
+        out.append({
+            'pcs_per_carton': pcs,
+            'carton_ply': ply,
+            'carton_dimensions': dims,
+            'carton_dimensions_unit': unit,
+            'trim_id': trim.id,
+            'trim_name': trim.name,
+        })
+    return out
+
+
+def _legacy_carton_from_boxes(boxes):
+    first = boxes[0] if boxes else {}
+    return {
+        'pcs_per_carton': first.get('pcs_per_carton') or 0,
+        'carton_ply': first.get('carton_ply') or '',
+        'carton_dimensions': first.get('carton_dimensions') or '',
+        'carton_dimensions_unit': first.get('carton_dimensions_unit') or 'CMS',
+    }
+
+
+def _carton_boxes_from_instance(instance):
+    boxes = instance.carton_boxes or []
+    if not boxes and (instance.pcs_per_carton or instance.carton_ply or instance.carton_dimensions):
+        boxes = [{
+            'pcs_per_carton': instance.pcs_per_carton or 0,
+            'carton_ply': instance.carton_ply or '',
+            'carton_dimensions': instance.carton_dimensions or '',
+            'carton_dimensions_unit': instance.carton_dimensions_unit or 'CMS',
+        }]
+    if not boxes:
+        return []
+    trim_ids = [row.get('trim_id') for row in boxes if row.get('trim_id')]
+    trim_names = {}
+    if trim_ids:
+        trim_names = dict(
+            TrimMaster.objects.filter(id__in=trim_ids).values_list('id', 'name')
+        )
+    enriched = []
+    for row in boxes:
+        item = dict(row)
+        tid = item.get('trim_id')
+        if tid and tid in trim_names:
+            item['trim_name'] = trim_names[tid]
+        enriched.append(item)
+    return enriched
+
+
 class IndentSerializer(serializers.ModelSerializer):
     fabric_lines = IndentFabricLineSerializer(many=True, required=False)
     trim_lines = IndentTrimLineSerializer(many=True, required=False)
@@ -346,7 +440,7 @@ class IndentSerializer(serializers.ModelSerializer):
             'id', 'pi', 'pi_number', 'pi_client_name', 'pi_lines', 'pi_detail', 'linked_trims',
             'selected_pi_line_ids',
             'indent_number', 'indent_date', 'status',
-            'pcs_per_carton', 'carton_ply', 'carton_dimensions', 'carton_dimensions_unit',
+            'pcs_per_carton', 'carton_ply', 'carton_dimensions', 'carton_dimensions_unit', 'carton_boxes',
             'prepared_by', 'received_by', 'approved_by', 'notes',
             'fabric_lines', 'trim_lines',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
@@ -360,11 +454,32 @@ class IndentSerializer(serializers.ModelSerializer):
         return IndentPiContextSerializer(obj.pi).data
 
     def get_linked_trims(self, obj):
-        trim_ids = obj.trim_lines.exclude(trim_id__isnull=True).values_list('trim_id', flat=True).distinct()
+        trim_ids = set(
+            obj.trim_lines.exclude(trim_id__isnull=True).values_list('trim_id', flat=True)
+        )
+        for row in obj.carton_boxes or []:
+            tid = row.get('trim_id')
+            if tid:
+                try:
+                    trim_ids.add(int(tid))
+                except (TypeError, ValueError):
+                    pass
         if not trim_ids:
             return []
         qs = TrimMaster.objects.filter(id__in=trim_ids).select_related('supplier')
         return TrimMasterSerializer(qs, many=True).data
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['carton_boxes'] = _carton_boxes_from_instance(instance)
+        return data
+
+    def _apply_carton_boxes(self, validated_data):
+        if 'carton_boxes' in validated_data:
+            boxes = _normalize_carton_boxes(validated_data.pop('carton_boxes'))
+            validated_data['carton_boxes'] = boxes
+            validated_data.update(_legacy_carton_from_boxes(boxes))
+        return validated_data
 
     def _save_lines(self, indent, fabric_data, trim_data):
         indent.fabric_lines.all().delete()
@@ -414,6 +529,7 @@ class IndentSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         fabric_data = validated_data.pop('fabric_lines', [])
         trim_data = validated_data.pop('trim_lines', [])
+        self._apply_carton_boxes(validated_data)
         indent = Indent.objects.create(**validated_data)
         self._save_lines(indent, fabric_data, trim_data)
         self._upsert_templates(indent)
@@ -422,6 +538,7 @@ class IndentSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         fabric_data = validated_data.pop('fabric_lines', None)
         trim_data = validated_data.pop('trim_lines', None)
+        self._apply_carton_boxes(validated_data)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()

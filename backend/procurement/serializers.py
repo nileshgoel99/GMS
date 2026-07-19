@@ -74,7 +74,7 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = (
             'created_by', 'created_at', 'updated_at',
-            'subtotal', 'cgst_amount', 'sgst_amount', 'igst_amount', 'total_amount',
+            'subtotal', 'cgst_amount', 'sgst_amount', 'igst_amount', 'round_off', 'total_amount',
         )
 
     def get_payment_due_date(self, obj):

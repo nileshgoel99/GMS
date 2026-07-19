@@ -322,9 +322,15 @@ const Layout = ({ children }) => {
     if (location.pathname === '/') {
       return { title: dashboardTitleForUser(user) };
     }
+    if (location.pathname === '/procurement/new') {
+      const params = new URLSearchParams(location.search);
+      return {
+        title: params.get('mode') === 'fabric' ? 'Raise Fabric PO' : 'Raise Trim PO',
+      };
+    }
     const meta = routeMeta[location.pathname] || { title: 'GMS' };
     return { title: meta.title };
-  }, [location.pathname, user]);
+  }, [location.pathname, location.search, user]);
 
   const displayName = useMemo(() => {
     const full = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
