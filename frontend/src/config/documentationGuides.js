@@ -1,37 +1,26 @@
-/** Step-by-step video guides (ScribeHow embeds). */
+/** Step-by-step video guides (YouTube embeds). */
 
 export const DOCUMENTATION_GUIDES = [
   {
-    id: 'create-customer',
-    title: 'How to Create a New Customer in Fabricon',
+    id: 'create-customers',
+    title: 'How to Create Customers',
     category: 'Buyers',
-    description: 'Add a new buyer to the system with contact and billing details.',
-    embedUrl:
-      'https://scribehow.com/embed/How_To_Create_A_New_Customer_In_GMS__IN-kWJq8TzCN5_7Gi-u1Ow?as=video',
+    description: 'Add new buyers to GMS with contact and billing details.',
+    embedUrl: 'https://www.youtube.com/embed/OwJm9qiObxY',
   },
   {
-    id: 'edit-customer',
-    title: 'How to View and Edit Customer Details',
-    category: 'Buyers',
-    description: 'Find an existing buyer and update their profile information.',
-    embedUrl:
-      'https://scribehow.com/embed/How_To_View_and_Edit_A_Customer_Details__jJpdgyfBSBG1kG4_NXl7UQ?as=video',
-  },
-  {
-    id: 'create-buyer-po',
-    title: 'How to Create a New Buyer Purchase Order',
+    id: 'buyer-po-and-pi',
+    title: 'Creating Buyer Purchase Orders & Proforma Invoices',
     category: 'Buyer POs',
-    description: 'Create a buyer PO linked to styles, quantities, and commercial terms.',
-    embedUrl:
-      'https://scribehow.com/embed/How_to_Create_a_New_Buyer_Purchase_Order__bKd6HaMLRpODYbz9S5NuyA?as=video',
+    description: 'Create buyer POs and raise proforma invoices from the commercial workflow.',
+    embedUrl: 'https://www.youtube.com/embed/830VL8D_u2I',
   },
   {
-    id: 'raise-process-buyer-pi',
-    title: 'How to Raise and Process Buyer Proforma Invoices',
-    category: 'Proforma Invoices',
-    description: 'Raise a proforma invoice from a buyer PO and process it through the sales workflow.',
-    embedUrl:
-      'https://scribehow.com/embed/How_to_Raise_and_Process_Buyer_Proforma_Invoices__452pZvfpRgWfY4l7-WGOFA?as=video',
+    id: 'indent-trims-accessories',
+    title: 'Adding Trims & Accessories In Indent',
+    category: 'Indents',
+    description: 'Add trims and accessories to a production indent from the library or PI lines.',
+    embedUrl: 'https://www.youtube.com/embed/t3cSbmZYX3Y',
   },
 ];
 

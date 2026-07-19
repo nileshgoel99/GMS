@@ -20,6 +20,7 @@ const CATEGORY_ACCENT = {
   Buyers: spectrum.indigo,
   'Buyer POs': spectrum.emerald,
   'Proforma Invoices': '#0f766e',
+  Indents: spectrum.amber,
 };
 
 const categoryAccent = (name) => CATEGORY_ACCENT[name] || spectrum.cyan;
@@ -96,7 +97,7 @@ export default function DocumentationGuideNav({
             <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mt: 0.35 }}>
               <VideoLibrary sx={{ fontSize: 14, color: slate[500] }} />
               <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: slate[500] }}>
-                {DOCUMENTATION_GUIDES.length} interactive walkthroughs
+                {DOCUMENTATION_GUIDES.length} video guides
               </Typography>
             </Stack>
           </Box>

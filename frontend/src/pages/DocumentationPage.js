@@ -15,7 +15,7 @@ import DocumentationGuideNav from '../components/documentation/DocumentationGuid
 import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
 import { DOCUMENTATION_GUIDES } from '../config/documentationGuides';
 
-const ScribeEmbed = ({ src, title, fill = false }) => (
+const VideoEmbed = ({ src, title, fill = false }) => (
   <Box
     sx={{
       position: 'relative',
@@ -23,7 +23,7 @@ const ScribeEmbed = ({ src, title, fill = false }) => (
       borderRadius: 2,
       overflow: 'hidden',
       border: `1px solid ${slate[200]}`,
-      bgcolor: slate[50],
+      bgcolor: '#000',
       ...(fill
         ? {
             flex: 1,
@@ -32,7 +32,8 @@ const ScribeEmbed = ({ src, title, fill = false }) => (
             flexDirection: 'column',
           }
         : {
-            minHeight: { xs: 360, sm: 420 },
+            aspectRatio: '16 / 9',
+            minHeight: { xs: 220, sm: 280 },
           }),
     }}
   >
@@ -40,7 +41,9 @@ const ScribeEmbed = ({ src, title, fill = false }) => (
       component="iframe"
       src={src}
       title={title}
-      allow="fullscreen"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      referrerPolicy="strict-origin-when-cross-origin"
+      allowFullScreen
       sx={{
         display: 'block',
         width: '100%',
@@ -52,7 +55,8 @@ const ScribeEmbed = ({ src, title, fill = false }) => (
               height: '100%',
             }
           : {
-              height: { xs: 400, sm: 480 },
+              height: '100%',
+              minHeight: { xs: 220, sm: 280 },
             }),
       }}
     />
@@ -189,7 +193,7 @@ export default function DocumentationPage({ viewportOffset = 200 }) {
                   {activeGuide.description}
                 </Typography>
               )}
-              <ScribeEmbed
+              <VideoEmbed
                 src={activeGuide.embedUrl}
                 title={activeGuide.title}
                 fill={!isMobile}
