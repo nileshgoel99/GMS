@@ -1,15 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  Box, Button, Typography, TextField, MenuItem, Grid, Paper,
+  Box, Button, Typography, TextField, Grid, Paper,
   IconButton, Autocomplete, CircularProgress, Table, TableHead,
   TableBody, TableRow, TableCell, Divider, FormControlLabel, Radio, RadioGroup,
+  Alert, Tooltip, Chip,
 } from '@mui/material';
-import { ArrowBack, Save, Add, Delete, ReceiptLong } from '@mui/icons-material';
+import { ArrowBack, Save, Add, Delete, ReceiptLong, Search } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { procurementAPI, purchaseBillAPI } from '../services/api';
 import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
 import BillLineParticulars from '../components/procurement/BillLineParticulars';
+import PurchaseBillDocuments from '../components/procurement/PurchaseBillDocuments';
+import { parseParticulars } from '../utils/parseParticulars';
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -32,6 +35,29 @@ const fmtQty = (v) => {
   const n = parseFloat(v);
   if (Number.isNaN(n)) return '—';
   return Number.isInteger(n) ? String(n) : n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+};
+
+const catalogSearchText = (row) => {
+  const parsed = parseParticulars(row.particulars);
+  return [
+    row.trim_name,
+    parsed.name,
+    row.particulars,
+    row.hsn_code,
+    ...(parsed.properties || []),
+  ].filter(Boolean).join(' ').toLowerCase();
+};
+
+const catalogOptionLabel = (row) => {
+  const parsed = parseParticulars(row.particulars);
+  const name = (row.trim_name || parsed.name || row.particulars || 'Item').trim();
+  const props = (parsed.properties || []).filter((p) => !p.startsWith('_pi_fabric_key:')).join(' · ');
+  const pending = Math.max(
+    0,
+    (parseFloat(row.quantity_ordered) || 0) - (parseFloat(row.quantity_received_previous) || 0),
+  );
+  const pendingLabel = pending > 0 ? ` · pending ${fmtQty(pending)}` : '';
+  return props ? `${name} — ${props}${pendingLabel}` : `${name}${pendingLabel}`;
 };
 
 const headCellSx = {
@@ -60,6 +86,13 @@ const mapLineFromApi = (row, i) => ({
   unit_price: String(row.unit_price ?? ''),
 });
 
+const applyRoundOff = ({ subtotal, cgst, sgst, igst }) => {
+  const rawTotal = subtotal + cgst + sgst + igst;
+  const roundedTotal = Math.round(rawTotal);
+  const roundOff = Math.round((roundedTotal - rawTotal) * 100) / 100;
+  return { subtotal, cgst, sgst, igst, roundOff, total: roundedTotal };
+};
+
 const initForm = () => ({
   internal_ref: '',
   bill_number: '',
@@ -69,19 +102,29 @@ const initForm = () => ({
   po_number: '',
   bill_date: todayIso(),
   received_date: todayIso(),
-  due_date: '',
   payment_terms: '',
   tax_mode: 'CGST_SGST',
   cgst_percent: '9',
   sgst_percent: '9',
   igst_percent: '18',
-  amount_paid: '0',
   status: 'OPEN',
   notes: '',
-  items: [emptyLine()],
+  items: [],
 });
 
 const sectionLabelSx = { fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: slate[600] };
+
+const formatApiError = (err, fallback = 'Something went wrong.') => {
+  const data = err?.response?.data;
+  if (!data) return err?.message || fallback;
+  if (typeof data === 'string') return data;
+  if (data.detail) return String(data.detail);
+  if (Array.isArray(data)) return data.map(String).join(' ');
+  return Object.entries(data).map(([key, value]) => {
+    const msg = Array.isArray(value) ? value.join(' ') : String(value);
+    return key === 'non_field_errors' ? msg : `${key.replace(/_/g, ' ')}: ${msg}`;
+  }).join(' · ');
+};
 
 export default function PurchaseBillEditorPage() {
   const { id } = useParams();
@@ -91,9 +134,14 @@ export default function PurchaseBillEditorPage() {
   const poIdFromQuery = searchParams.get('poId');
 
   const [form, setForm] = useState(initForm);
+  const [documents, setDocuments] = useState([]);
+  const [poCatalog, setPoCatalog] = useState([]);
+  const [itemSearch, setItemSearch] = useState('');
   const [pos, setPos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [catalogLoading, setCatalogLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,9 +168,17 @@ export default function PurchaseBillEditorPage() {
             cgst_percent: String(b.cgst_percent ?? 0),
             sgst_percent: String(b.sgst_percent ?? 0),
             igst_percent: String(b.igst_percent ?? 0),
-            amount_paid: String(b.amount_paid ?? 0),
             items: (b.items || []).map(mapLineFromApi),
           });
+          setDocuments(b.documents || []);
+          if (b.purchase_order) {
+            try {
+              const pref = await purchaseBillAPI.prefillFromPo(b.purchase_order);
+              if (!cancelled) setPoCatalog((pref.data.items || []).map(mapLineFromApi));
+            } catch (e) {
+              console.error(e);
+            }
+          }
         }
       } catch (e) {
         console.error(e);
@@ -133,39 +189,88 @@ export default function PurchaseBillEditorPage() {
     return () => { cancelled = true; };
   }, [id, isNew]);
 
+  const applyPoPrefill = useCallback(async (poId, selectedPo = null, { replaceItems = true } = {}) => {
+    setCatalogLoading(true);
+    setFormError('');
+    try {
+      const res = await purchaseBillAPI.prefillFromPo(poId);
+      const d = res.data;
+      const paymentTerms = String(d.payment_terms || selectedPo?.payment_terms || '').trim();
+      const catalog = (d.items || []).map(mapLineFromApi);
+      setPoCatalog(catalog);
+      setItemSearch('');
+      setForm((f) => ({
+        ...f,
+        purchase_order: d.purchase_order,
+        po_number: d.po_number || '',
+        supplier: d.supplier,
+        supplier_name: d.supplier_name || '',
+        payment_terms: paymentTerms,
+        tax_mode: d.tax_mode || f.tax_mode,
+        cgst_percent: String(d.cgst_percent ?? f.cgst_percent),
+        sgst_percent: String(d.sgst_percent ?? f.sgst_percent),
+        igst_percent: String(d.igst_percent ?? f.igst_percent),
+        received_date: d.received_date || f.received_date,
+        // Keep bill empty — user searches and adds only received lines
+        ...(replaceItems ? { items: [] } : {}),
+      }));
+      setPos((prev) => {
+        if (prev.some((p) => p.id === d.purchase_order)) return prev;
+        return [
+          ...prev,
+          {
+            id: d.purchase_order,
+            po_number: d.po_number,
+            vendor_name: d.supplier_name,
+            payment_terms: paymentTerms,
+          },
+        ];
+      });
+    } catch (e) {
+      console.error(e);
+      setFormError(formatApiError(e, 'Could not load Supplier PO details.'));
+      if (selectedPo?.payment_terms) {
+        setForm((f) => ({
+          ...f,
+          purchase_order: selectedPo.id,
+          po_number: selectedPo.po_number || '',
+          supplier_name: selectedPo.vendor_name || f.supplier_name,
+          payment_terms: String(selectedPo.payment_terms || '').trim(),
+        }));
+      }
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!loading && isNew && poIdFromQuery) {
-      applyPoPrefill(poIdFromQuery);
+      const matched = pos.find((p) => String(p.id) === String(poIdFromQuery));
+      applyPoPrefill(poIdFromQuery, matched || null);
     }
-  }, [loading, isNew, poIdFromQuery]);
-
-  const applyPoPrefill = async (poId) => {
-    const res = await purchaseBillAPI.prefillFromPo(poId);
-    const d = res.data;
-    const poObj = pos.find((p) => p.id === Number(poId)) || { id: Number(poId), po_number: d.po_number };
-    setForm((f) => ({
-      ...f,
-      purchase_order: d.purchase_order,
-      po_number: d.po_number,
-      supplier: d.supplier,
-      supplier_name: d.supplier_name,
-      payment_terms: d.payment_terms,
-      tax_mode: d.tax_mode,
-      cgst_percent: d.cgst_percent,
-      sgst_percent: d.sgst_percent,
-      igst_percent: d.igst_percent,
-      received_date: d.received_date || f.received_date,
-      items: (d.items || []).map(mapLineFromApi),
-    }));
-    if (!poObj.po_number && d.po_number) {
-      setPos((prev) => [...prev, { id: d.purchase_order, po_number: d.po_number, vendor_name: d.supplier_name }]);
-    }
-  };
+    // pos is read once when loading completes — do not re-run when pos updates after prefill
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, isNew, poIdFromQuery, applyPoPrefill]);
 
   const selectedPo = useMemo(
     () => pos.find((p) => p.id === form.purchase_order) || null,
     [pos, form.purchase_order],
   );
+
+  const availableCatalog = useMemo(() => {
+    const used = new Set(form.items.map((r) => r.po_item).filter(Boolean));
+    return poCatalog.filter((r) => r.po_item && !used.has(r.po_item));
+  }, [poCatalog, form.items]);
+
+  const filterCatalogOptions = useCallback((options, { inputValue }) => {
+    const q = (inputValue || '').trim().toLowerCase();
+    if (!q) return options;
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return options.filter((row) => {
+      const hay = catalogSearchText(row);
+      return tokens.every((t) => hay.includes(t));
+    });
+  }, []);
 
   const totals = useMemo(() => {
     const subtotal = form.items.reduce((s, row) => {
@@ -177,16 +282,14 @@ export default function PurchaseBillEditorPage() {
     if (form.tax_mode === 'IGST') {
       const pct = parseFloat(form.igst_percent) || 0;
       const igst = Math.round(sub * pct) / 100;
-      return { subtotal: sub, cgst: 0, sgst: 0, igst, total: sub + igst };
+      return applyRoundOff({ subtotal: sub, cgst: 0, sgst: 0, igst });
     }
     const cgstPct = parseFloat(form.cgst_percent) || 0;
     const sgstPct = parseFloat(form.sgst_percent) || 0;
     const cgst = Math.round(sub * cgstPct) / 100;
     const sgst = Math.round(sub * sgstPct) / 100;
-    return { subtotal: sub, cgst, sgst, igst: 0, total: sub + cgst + sgst };
+    return applyRoundOff({ subtotal: sub, cgst, sgst, igst: 0 });
   }, [form.items, form.tax_mode, form.cgst_percent, form.sgst_percent, form.igst_percent]);
-
-  const balanceDue = Math.max(0, totals.total - (parseFloat(form.amount_paid) || 0));
 
   const updateLine = (idx, field, value) => {
     setForm((f) => {
@@ -202,29 +305,61 @@ export default function PurchaseBillEditorPage() {
     items: f.items.filter((_, i) => i !== idx).map((row, i) => ({ ...row, serial_no: i + 1 })),
   }));
 
+  const addCatalogLine = (row) => {
+    if (!row?.po_item) return;
+    setForm((f) => {
+      if (f.items.some((r) => r.po_item === row.po_item)) return f;
+      const mapped = mapLineFromApi(row, f.items.length);
+      return { ...f, items: [...f.items, { ...mapped, serial_no: f.items.length + 1 }] };
+    });
+    setItemSearch('');
+  };
+
+  const loadAllRemaining = () => {
+    if (!availableCatalog.length) return;
+    setForm((f) => {
+      const used = new Set(f.items.map((r) => r.po_item).filter(Boolean));
+      const toAdd = poCatalog
+        .filter((r) => r.po_item && !used.has(r.po_item))
+        .map((row, i) => ({ ...mapLineFromApi(row, f.items.length + i), serial_no: f.items.length + i + 1 }));
+      return { ...f, items: [...f.items, ...toAdd] };
+    });
+    setItemSearch('');
+  };
+
   const handlePoSelect = async (_, po) => {
     if (!po) {
-      setForm((f) => ({ ...f, purchase_order: null, po_number: '' }));
+      setPoCatalog([]);
+      setItemSearch('');
+      setForm((f) => ({ ...f, purchase_order: null, po_number: '', items: [] }));
       return;
     }
-    setForm((f) => ({ ...f, purchase_order: po.id, po_number: po.po_number }));
-    await applyPoPrefill(po.id);
+    // Prefill payment terms immediately from the PO option, then refresh from API
+    setForm((f) => ({
+      ...f,
+      purchase_order: po.id,
+      po_number: po.po_number || '',
+      supplier_name: po.vendor_name || f.supplier_name,
+      payment_terms: String(po.payment_terms || '').trim() || f.payment_terms,
+      items: [],
+    }));
+    await applyPoPrefill(po.id, po, { replaceItems: true });
   };
 
   const handleSave = async () => {
-    if (!form.bill_number.trim()) { alert('Supplier bill / invoice number is required.'); return; }
-    if (!form.supplier_name.trim()) { alert('Supplier name is required.'); return; }
+    setFormError('');
+    if (!form.bill_number.trim()) {
+      setFormError('Supplier bill / invoice number is required.');
+      return;
+    }
+    if (!form.supplier_name.trim()) {
+      setFormError('Supplier name is required.');
+      return;
+    }
     const items = form.items.filter((r) => r.particulars?.trim() || r.trim);
-    if (!items.length) { alert('Add at least one line item.'); return; }
-
-    for (const row of items) {
-      const billed = parseFloat(row.quantity_billed) || 0;
-      const ordered = parseFloat(row.quantity_ordered) || 0;
-      const prev = parseFloat(row.quantity_received_previous) || 0;
-      if (row.po_item && ordered > 0 && billed > ordered - prev) {
-        alert(`Qty received (${billed}) exceeds pending (${Math.max(0, ordered - prev)}) for "${row.particulars || 'line item'}".`);
-        return;
-      }
+    if (!items.length) {
+      setFormError('Add at least one line item.');
+      return;
     }
 
     setSaving(true);
@@ -237,13 +372,11 @@ export default function PurchaseBillEditorPage() {
         purchase_order: form.purchase_order,
         bill_date: form.bill_date,
         received_date: form.received_date || null,
-        due_date: form.due_date || null,
         payment_terms: form.payment_terms,
         tax_mode: form.tax_mode,
         cgst_percent: parseFloat(form.cgst_percent) || 0,
         sgst_percent: parseFloat(form.sgst_percent) || 0,
         igst_percent: parseFloat(form.igst_percent) || 0,
-        amount_paid: parseFloat(form.amount_paid) || 0,
         status: form.status === 'DRAFT' ? 'DRAFT' : 'OPEN',
         notes: form.notes,
         items: items.map((row, i) => ({
@@ -257,11 +390,14 @@ export default function PurchaseBillEditorPage() {
           unit_price: parseFloat(row.unit_price) || 0,
         })),
       };
-      if (isNew) await purchaseBillAPI.create(payload);
-      else await purchaseBillAPI.update(id, payload);
+      if (isNew) {
+        await purchaseBillAPI.create(payload);
+      } else {
+        await purchaseBillAPI.update(id, payload);
+      }
       navigate('/purchase-bills');
     } catch (e) {
-      alert('Save failed: ' + (e.response?.data ? JSON.stringify(e.response.data) : e.message));
+      setFormError(formatApiError(e, 'Save failed.'));
     } finally {
       setSaving(false);
     }
@@ -287,6 +423,12 @@ export default function PurchaseBillEditorPage() {
 
   return (
     <Box sx={{ p: { xs: 1.5, sm: 2.5 } }}>
+      {formError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setFormError('')}>
+          {formError}
+        </Alert>
+      )}
+
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, flexWrap: 'wrap' }}>
         <IconButton onClick={() => navigate('/purchase-bills')} size="small"><ArrowBack /></IconButton>
         <ReceiptLong sx={{ color: 'primary.main' }} />
@@ -301,23 +443,22 @@ export default function PurchaseBillEditorPage() {
       </Box>
 
       <Paper elevation={0} sx={sectionPaperSxByIndex(0)}>
-        <Typography sx={{ ...sectionLabelSx, mb: 1.5, fontSize: '0.75rem' }}>Bill Details</Typography>
-        <Grid container spacing={1.5}>
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField fullWidth size="small" label="Internal Ref" value={form.internal_ref} InputProps={{ readOnly: true }} sx={sxInput} />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField fullWidth size="small" label="Supplier Bill No. *" value={form.bill_number}
-              onChange={(e) => setForm((f) => ({ ...f, bill_number: e.target.value }))} sx={sxInput} />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField fullWidth size="small" type="date" label="Bill Date" InputLabelProps={{ shrink: true }}
-              value={form.bill_date} onChange={(e) => setForm((f) => ({ ...f, bill_date: e.target.value }))} sx={sxInput} />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField fullWidth size="small" type="date" label="Material Received" InputLabelProps={{ shrink: true }}
-              value={form.received_date || ''} onChange={(e) => setForm((f) => ({ ...f, received_date: e.target.value }))} sx={sxInput} />
-          </Grid>
+        <Typography sx={{ ...sectionLabelSx, mb: 2, fontSize: '0.75rem' }}>Bill Details</Typography>
+
+        <Typography
+          sx={{
+            ...sectionLabelSx,
+            mb: 1,
+            mt: 0.5,
+            fontSize: '0.65rem',
+            color: slate[500],
+            borderBottom: `1px solid ${slate[100]}`,
+            pb: 0.75,
+          }}
+        >
+          Supplier & PO
+        </Typography>
+        <Grid container spacing={1.5} sx={{ mb: 2 }}>
           <Grid item xs={12} sm={6} md={4}>
             <Autocomplete
               size="small"
@@ -336,26 +477,143 @@ export default function PurchaseBillEditorPage() {
             <TextField fullWidth size="small" label="Payment Terms" value={form.payment_terms}
               onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))} sx={sxInput} />
           </Grid>
+        </Grid>
+
+        <Typography
+          sx={{
+            ...sectionLabelSx,
+            mb: 1,
+            mt: 0.5,
+            fontSize: '0.65rem',
+            color: slate[500],
+            borderBottom: `1px solid ${slate[100]}`,
+            pb: 0.75,
+          }}
+        >
+          Document
+        </Typography>
+        <Grid container spacing={1.5}>
           <Grid item xs={12} sm={6} md={3}>
-            <TextField fullWidth size="small" type="date" label="Payment Due" InputLabelProps={{ shrink: true }}
-              value={form.due_date || ''} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} sx={sxInput} />
+            <TextField fullWidth size="small" label="Internal Ref" value={form.internal_ref} InputProps={{ readOnly: true }} sx={sxInput} />
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
-            <TextField fullWidth size="small" label="Amount Paid (₹)" value={form.amount_paid}
-              onChange={(e) => setForm((f) => ({ ...f, amount_paid: e.target.value }))} sx={sxInput} />
+            <TextField fullWidth size="small" label="Supplier Bill No. *" value={form.bill_number}
+              onChange={(e) => setForm((f) => ({ ...f, bill_number: e.target.value }))} sx={sxInput} />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField fullWidth size="small" type="date" label="Bill Date" InputLabelProps={{ shrink: true }}
+              value={form.bill_date} onChange={(e) => setForm((f) => ({ ...f, bill_date: e.target.value }))} sx={sxInput} />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField fullWidth size="small" type="date" label="Material Received" InputLabelProps={{ shrink: true }}
+              value={form.received_date || ''} onChange={(e) => setForm((f) => ({ ...f, received_date: e.target.value }))} sx={sxInput} />
           </Grid>
         </Grid>
       </Paper>
 
       <Paper elevation={0} sx={{ ...sectionPaperSxByIndex(1), mt: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, gap: 1, flexWrap: 'wrap' }}>
           <Typography sx={{ ...sectionLabelSx, fontSize: '0.75rem' }}>Material Received — Line Items</Typography>
           {!form.purchase_order && (
             <Button size="small" startIcon={<Add />} onClick={addLine} sx={{ textTransform: 'none', fontWeight: 700 }}>
               Add Line
             </Button>
           )}
+          {form.purchase_order && availableCatalog.length > 0 && (
+            <Button
+              size="small"
+              onClick={loadAllRemaining}
+              sx={{ textTransform: 'none', fontWeight: 700 }}
+            >
+              Add all remaining ({availableCatalog.length})
+            </Button>
+          )}
         </Box>
+
+        {form.purchase_order && (
+          <Box sx={{ mb: 1.5 }}>
+            <Autocomplete
+              size="small"
+              options={availableCatalog}
+              filterOptions={filterCatalogOptions}
+              value={null}
+              inputValue={itemSearch}
+              onInputChange={(_, v) => setItemSearch(v)}
+              onChange={(_, row) => { if (row) addCatalogLine(row); }}
+              getOptionLabel={catalogOptionLabel}
+              isOptionEqualToValue={(a, b) => a?.po_item === b?.po_item}
+              loading={catalogLoading}
+              noOptionsText={
+                catalogLoading
+                  ? 'Loading PO items…'
+                  : availableCatalog.length === 0
+                    ? 'All PO lines are already on this bill'
+                    : 'No matching trim / properties'
+              }
+              renderOption={(props, option) => {
+                const parsed = parseParticulars(option.particulars);
+                const name = (option.trim_name || parsed.name || 'Item').trim();
+                const propsLines = (parsed.properties || []).filter((p) => !p.startsWith('_pi_fabric_key:'));
+                const pending = Math.max(
+                  0,
+                  (parseFloat(option.quantity_ordered) || 0) - (parseFloat(option.quantity_received_previous) || 0),
+                );
+                return (
+                  <Box component="li" {...props} key={option.po_item} sx={{ alignItems: 'flex-start !important', py: 1 }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontWeight: 700, fontSize: '0.84rem', lineHeight: 1.3 }}>{name}</Typography>
+                      {propsLines.length > 0 && (
+                        <Typography sx={{ fontSize: '0.72rem', color: slate[600], mt: 0.25, lineHeight: 1.4 }}>
+                          {propsLines.join(' · ')}
+                        </Typography>
+                      )}
+                      <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, flexWrap: 'wrap' }}>
+                        {option.hsn_code && (
+                          <Chip size="small" label={`HSN ${option.hsn_code}`} sx={{ height: 20, fontSize: '0.65rem' }} />
+                        )}
+                        <Chip
+                          size="small"
+                          label={`Rate ₹${fmtQty(option.unit_price)}`}
+                          sx={{ height: 20, fontSize: '0.65rem' }}
+                        />
+                        <Chip
+                          size="small"
+                          color={pending > 0 ? 'warning' : 'default'}
+                          label={`Pending ${fmtQty(pending)} ${option.unit || ''}`}
+                          sx={{ height: 20, fontSize: '0.65rem' }}
+                        />
+                      </Box>
+                    </Box>
+                  </Box>
+                );
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Search trim or properties to add"
+                  placeholder="e.g. button black 18L"
+                  InputProps={{
+                    ...params.InputProps,
+                    startAdornment: (
+                      <>
+                        <Search sx={{ color: slate[400], ml: 0.5, mr: 0.5, fontSize: 18 }} />
+                        {params.InputProps.startAdornment}
+                      </>
+                    ),
+                  }}
+                  sx={sxInput}
+                />
+              )}
+            />
+            <Typography sx={{ mt: 0.75, fontSize: '0.72rem', color: slate[500] }}>
+              Type trim name or property values from the PO — only add the lines you received.
+              {poCatalog.length > 0 && (
+                <> · {availableCatalog.length} of {poCatalog.length} PO lines remaining</>
+              )}
+            </Typography>
+          </Box>
+        )}
+
         <Box sx={{ overflowX: 'auto', border: `1px solid ${slate[200]}`, borderRadius: 1.5 }}>
           <Table size="small" sx={{ minWidth: 880 }}>
             <TableHead>
@@ -371,17 +629,29 @@ export default function PurchaseBillEditorPage() {
               </TableRow>
             </TableHead>
             <TableBody>
+              {form.items.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} sx={{ py: 3, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: '0.85rem', color: slate[500] }}>
+                      {form.purchase_order
+                        ? 'No lines yet — search above and pick the items you received.'
+                        : 'Link a Supplier PO, then search and add received items.'}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
               {form.items.map((row, idx) => {
                 const amt = (parseFloat(row.quantity_billed) || 0) * (parseFloat(row.unit_price) || 0);
                 const ordered = parseFloat(row.quantity_ordered);
                 const prev = parseFloat(row.quantity_received_previous) || 0;
+                const billed = parseFloat(row.quantity_billed) || 0;
                 const pending = row.po_item
-                  ? Math.max(0, (Number.isNaN(ordered) ? 0 : ordered) - prev)
+                  ? (Number.isNaN(ordered) ? 0 : ordered) - prev - billed
                   : null;
                 const fromPo = Boolean(row.po_item);
 
                 return (
-                  <TableRow key={idx} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
+                  <TableRow key={row.po_item || idx} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
                     <TableCell sx={{ ...bodyCellSx, color: slate[500], fontWeight: 700, fontSize: '0.8rem' }}>
                       {row.serial_no || idx + 1}
                     </TableCell>
@@ -390,7 +660,7 @@ export default function PurchaseBillEditorPage() {
                         <BillLineParticulars row={row} />
                       ) : (
                         <Typography sx={{ fontSize: '0.8rem', color: 'text.disabled', fontStyle: 'italic' }}>
-                          Link a supplier PO to load items
+                          Empty line
                         </Typography>
                       )}
                     </TableCell>
@@ -420,7 +690,13 @@ export default function PurchaseBillEditorPage() {
                             {pending != null && (
                               <>
                                 Pending{' '}
-                                <Box component="span" sx={{ fontWeight: 700, color: pending > 0 ? '#b45309' : slate[700] }}>
+                                <Box
+                                  component="span"
+                                  sx={{
+                                    fontWeight: 700,
+                                    color: pending < 0 ? 'error.main' : pending > 0 ? '#b45309' : slate[700],
+                                  }}
+                                >
                                   {fmtQty(pending)}
                                 </Box>
                               </>
@@ -452,11 +728,11 @@ export default function PurchaseBillEditorPage() {
                       ₹ {amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell sx={bodyCellSx}>
-                      {!form.purchase_order && (
-                        <IconButton size="small" color="error" onClick={() => removeLine(idx)} disabled={form.items.length <= 1}>
+                      <Tooltip title="Remove line">
+                        <IconButton size="small" color="error" onClick={() => removeLine(idx)}>
                           <Delete fontSize="small" />
                         </IconButton>
-                      )}
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 );
@@ -504,13 +780,12 @@ export default function PurchaseBillEditorPage() {
                 ...(form.tax_mode === 'IGST'
                   ? [[`IGST (${form.igst_percent}%)`, totals.igst]]
                   : [[`CGST (${form.cgst_percent}%)`, totals.cgst], [`SGST (${form.sgst_percent}%)`, totals.sgst]]),
+                ['Round Off', totals.roundOff],
                 ['Bill Total', totals.total],
-                ['Amount Paid', parseFloat(form.amount_paid) || 0],
-                ['Balance Due', balanceDue],
               ].map(([label, val]) => (
                 <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5 }}>
-                  <Typography sx={{ fontSize: '0.85rem', fontWeight: label.includes('Balance') || label.includes('Total') ? 700 : 500 }}>{label}</Typography>
-                  <Typography className="font-numeric" sx={{ fontWeight: 700, color: label === 'Balance Due' ? 'error.dark' : slate[800] }}>
+                  <Typography sx={{ fontSize: '0.85rem', fontWeight: label === 'Bill Total' ? 700 : 500 }}>{label}</Typography>
+                  <Typography className="font-numeric" sx={{ fontWeight: 700, color: label === 'Bill Total' ? slate[900] : slate[800] }}>
                     ₹ {Number(val).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </Typography>
                 </Box>
@@ -518,6 +793,16 @@ export default function PurchaseBillEditorPage() {
             </Box>
           </Grid>
         </Grid>
+      </Paper>
+
+      <Paper elevation={0} sx={{ ...sectionPaperSxByIndex(3), mt: 2 }}>
+        <Typography sx={{ ...sectionLabelSx, mb: 1.5, fontSize: '0.75rem' }}>Invoice Documents</Typography>
+        <PurchaseBillDocuments
+          billId={isNew ? null : Number(id)}
+          documents={documents}
+          onChange={setDocuments}
+          onError={setFormError}
+        />
       </Paper>
     </Box>
   );

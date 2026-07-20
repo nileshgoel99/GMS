@@ -198,6 +198,10 @@ export const purchaseBillAPI = {
   getNextRef: () => api.get('/procurement/bills/next-ref/'),
   getPayablesDueSummary: () => api.get('/procurement/bills/payment-due-summary/'),
   prefillFromPo: (poId) => api.get('/procurement/bills/prefill-from-po/', { params: { po_id: poId } }),
+  uploadDocument: (billId, formData) => api.post(`/procurement/bills/${billId}/upload-document/`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  removeDocument: (billId, docId) => api.delete(`/procurement/bills/${billId}/remove-document/`, { params: { doc_id: docId } }),
 };
 
 export const salesEntryAPI = {

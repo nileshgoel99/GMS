@@ -4,7 +4,10 @@ from django.db.models import Sum
 from rest_framework import serializers
 
 from suppliers.models import Supplier
-from .models import PurchaseOrder, PurchaseOrderItem, POReceipt, POReceiptItem, PurchaseBill, PurchaseBillLine
+from .models import (
+    PurchaseOrder, PurchaseOrderItem, POReceipt, POReceiptItem,
+    PurchaseBill, PurchaseBillLine, PurchaseBillDocument,
+)
 from .po_numbering import next_supplier_po_number
 from .bill_numbering import next_purchase_bill_ref
 from .payment_due import compute_payment_due_date, compute_bill_due_date
@@ -293,8 +296,37 @@ def _default_bill_due_date(validated_data):
     return validated_data.get('bill_date')
 
 
+class PurchaseBillDocumentSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+    file_name = serializers.SerializerMethodField()
+    uploaded_by_name = serializers.CharField(source='uploaded_by.username', read_only=True)
+    display_label = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = PurchaseBillDocument
+        fields = [
+            'id', 'document_type', 'label', 'display_label',
+            'file', 'file_url', 'file_name', 'uploaded_at', 'uploaded_by_name',
+        ]
+        read_only_fields = fields
+
+    def get_file_url(self, obj):
+        if not obj.file:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.file.url)
+        return obj.file.url
+
+    def get_file_name(self, obj):
+        if not obj.file:
+            return ''
+        return obj.file.name.rsplit('/', 1)[-1]
+
+
 class PurchaseBillSerializer(serializers.ModelSerializer):
     items = PurchaseBillLineSerializer(many=True, required=False)
+    documents = PurchaseBillDocumentSerializer(many=True, read_only=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     supplier_name_display = serializers.CharField(source='supplier.name', read_only=True)
     po_number = serializers.CharField(source='purchase_order.po_number', read_only=True)
@@ -306,7 +338,7 @@ class PurchaseBillSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = (
             'created_by', 'created_at', 'updated_at',
-            'subtotal', 'cgst_amount', 'sgst_amount', 'igst_amount', 'total_amount',
+            'subtotal', 'cgst_amount', 'sgst_amount', 'igst_amount', 'round_off', 'total_amount',
         )
 
     def get_balance_due(self, obj):
@@ -317,31 +349,6 @@ class PurchaseBillSerializer(serializers.ModelSerializer):
         return due.isoformat() if due else None
 
     def validate(self, attrs):
-        items = attrs.get('items')
-        if items is None:
-            return attrs
-
-        old_by_po = {}
-        if self.instance:
-            old_by_po = {
-                line.po_item_id: line.quantity_billed
-                for line in self.instance.items.all()
-                if line.po_item_id
-            }
-
-        for item in items:
-            po_item = item.get('po_item')
-            qty = item.get('quantity_billed')
-            if not po_item or qty is None:
-                continue
-            po_id = po_item.pk if hasattr(po_item, 'pk') else po_item
-            credit = old_by_po.get(po_id, Decimal('0'))
-            pending = (po_item.quantity_ordered or Decimal('0')) - (po_item.quantity_received or Decimal('0')) + credit
-            if qty > pending:
-                label = item.get('particulars') or getattr(getattr(po_item, 'trim', None), 'name', '') or 'PO line'
-                raise serializers.ValidationError({
-                    'items': f'Qty received ({qty}) exceeds pending ({pending}) for "{label}".',
-                })
         return attrs
 
     def create(self, validated_data):

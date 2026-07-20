@@ -21,46 +21,67 @@ const FONT = {
   body: '"Source Sans 3", "Segoe UI", system-ui, sans-serif',
 };
 
-const SECTION_GAP = 14;
+const SECTION_GAP = 10;
 
 /**
- * Item-count caps per print page, tuned to the A4 layout below.
- * - ONE_PAGE: header + meta + parties + items + footer, all on a single page (no continuation).
- * - FIRST: header + meta + parties + items, no footer (more pages follow).
- * - MIDDLE: items table only (no header/footer), more pages still follow.
- * - LAST: items table + footer (final page of a multi-page PO).
+ * Item-count caps per print page (A4). First page also carries letterhead + meta + parties,
+ * so it holds fewer rows than continuation pages.
+ * Tuned for trim lines with multi-line particulars.
  */
 const ITEMS_PER_PAGE = {
-  ONE_PAGE: 11,
-  FIRST: 18,
-  MIDDLE: 26,
-  LAST: 18,
+  ONE_PAGE: 8,
+  FIRST: 6,
+  MIDDLE: 18,
+  LAST: 12,
 };
 
-/** Splits line items across print pages, so we never overflow (and clip) a single A4 page. */
+/** Splits line items across print pages. Never leaves an empty page. */
 function paginatePoItems(allItems) {
   const total = allItems.length;
+  if (total === 0) {
+    return [{ items: [], startIndex: 0, isFirst: true, isLast: true, moreCount: 0 }];
+  }
   if (total <= ITEMS_PER_PAGE.ONE_PAGE) {
     return [{ items: allItems, startIndex: 0, isFirst: true, isLast: true, moreCount: 0 }];
   }
 
   const pages = [];
-  let remaining = allItems;
+  let remaining = [...allItems];
   let startIndex = 0;
 
   const firstCount = Math.min(ITEMS_PER_PAGE.FIRST, remaining.length);
-  pages.push({ items: remaining.slice(0, firstCount), startIndex, isFirst: true, isLast: false });
+  pages.push({
+    items: remaining.slice(0, firstCount),
+    startIndex,
+    isFirst: true,
+    isLast: false,
+  });
   remaining = remaining.slice(firstCount);
   startIndex += firstCount;
 
   while (remaining.length > ITEMS_PER_PAGE.LAST) {
     const count = Math.min(ITEMS_PER_PAGE.MIDDLE, remaining.length - ITEMS_PER_PAGE.LAST);
-    pages.push({ items: remaining.slice(0, count), startIndex, isFirst: false, isLast: false });
+    pages.push({
+      items: remaining.slice(0, count),
+      startIndex,
+      isFirst: false,
+      isLast: false,
+    });
     remaining = remaining.slice(count);
     startIndex += count;
   }
 
-  pages.push({ items: remaining, startIndex, isFirst: false, isLast: true });
+  if (remaining.length > 0) {
+    pages.push({
+      items: remaining,
+      startIndex,
+      isFirst: false,
+      isLast: true,
+    });
+  } else {
+    // All items were placed on earlier pages — mark the last one as final (footer goes there)
+    pages[pages.length - 1] = { ...pages[pages.length - 1], isLast: true };
+  }
 
   return pages.map((page, i) => ({
     ...page,
@@ -104,6 +125,9 @@ export const SUPPLIER_PO_PRINT_STYLE = `
     break-after: auto !important;
   }
   .po-print-no-break { page-break-inside: avoid !important; break-inside: avoid !important; }
+  .po-print-items-table { page-break-inside: auto !important; break-inside: auto !important; }
+  .po-print-items-table thead { display: table-header-group !important; }
+  .po-print-items-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
   @page {
     size: A4 portrait;
     margin: 8mm 9mm;
@@ -126,7 +150,7 @@ const pageStyle = {
   boxSizing: 'border-box',
   backgroundColor: BRAND.pageBg,
   position: 'relative',
-  overflow: 'hidden',
+  overflow: 'visible',
 };
 
 const contentWrap = {
@@ -173,10 +197,10 @@ const calcTotals = (po) => {
   return applyRoundOff({ subtotal: sub, cgst, sgst, igst: 0 });
 };
 
-function PrintSection({ children, last = false }) {
+function PrintSection({ children, last = false, allowBreak = false }) {
   return (
     <div
-      className="po-print-no-break"
+      className={allowBreak ? undefined : 'po-print-no-break'}
       style={{ marginBottom: last ? 0 : SECTION_GAP }}
     >
       {children}
@@ -186,9 +210,9 @@ function PrintSection({ children, last = false }) {
 
 const thStyle = (align = 'left') => ({
   border: `1px solid ${BRAND.navyDark}`,
-  padding: '8px 10px',
+  padding: '5px 7px',
   fontWeight: 600,
-  fontSize: '7.5pt',
+  fontSize: '7pt',
   fontFamily: FONT.body,
   textAlign: align,
   letterSpacing: '0.06em',
@@ -199,22 +223,22 @@ const thStyle = (align = 'left') => ({
 
 const tdStyle = (align = 'left', alt = false) => ({
   border: `1px solid ${BRAND.border}`,
-  padding: '7px 10px',
-  fontSize: '8pt',
+  padding: '5px 7px',
+  fontSize: '7.5pt',
   fontFamily: FONT.body,
   textAlign: align,
-  verticalAlign: 'middle',
+  verticalAlign: 'top',
   color: BRAND.black,
   backgroundColor: alt ? BRAND.navyLight : BRAND.white,
-  lineHeight: 1.45,
+  lineHeight: 1.35,
 });
 
 const SectionHead = ({ title }) => (
   <div style={{
     background: BRAND.navy,
     color: BRAND.white,
-    padding: '6px 12px',
-    fontSize: '7.5pt',
+    padding: '4px 10px',
+    fontSize: '7pt',
     fontWeight: 600,
     fontFamily: FONT.body,
     letterSpacing: '0.1em',
@@ -228,7 +252,7 @@ const SectionHead = ({ title }) => (
 const PartyCell = ({ title, children }) => (
   <div style={{ border: `1px solid ${BRAND.border}`, borderRadius: 6, overflow: 'hidden', height: '100%' }}>
     <SectionHead title={title} />
-    <div style={{ padding: '10px 12px', background: BRAND.white, fontSize: '8pt', lineHeight: 1.45, fontFamily: FONT.body }}>
+    <div style={{ padding: '7px 10px', background: BRAND.white, fontSize: '7.5pt', lineHeight: 1.35, fontFamily: FONT.body }}>
       {children}
     </div>
   </div>
@@ -261,7 +285,7 @@ const MetaChip = ({ label, value }) => (
   </div>
 );
 
-const getItemLabel = (row, trimsMap) => {
+const getItemParts = (row, trimsMap) => {
   const trim = row.trim ? trimsMap[row.trim] : null;
   const parsed = parseParticulars(row.particulars);
   const name = parsed.name || trim?.name || row.particulars || '—';
@@ -272,17 +296,17 @@ const getItemLabel = (row, trimsMap) => {
     .replace(/\n/g, ' · ')
     .replace(/_pi_fabric_key:[^·]+( · )?/g, '')
     .trim();
-  return props ? `${name} — ${props}` : name;
+  return { name, props };
 };
 
 function PoHeader({ po, company, companyName, addrLine, contactLine }) {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: company?.logo_url ? '54px 1fr auto' : '1fr auto',
-      gap: 12,
+      gridTemplateColumns: company?.logo_url ? '48px 1fr auto' : '1fr auto',
+      gap: 10,
       alignItems: 'center',
-      padding: '14px 16px',
+      padding: '10px 12px',
       background: BRAND.navy,
       borderRadius: 6,
       borderBottom: `3px solid ${BRAND.gold}`,
@@ -293,28 +317,28 @@ function PoHeader({ po, company, companyName, addrLine, contactLine }) {
         <img
           src={company.logo_url}
           alt=""
-          style={{ width: 50, height: 50, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 3 }}
+          style={{ width: 44, height: 44, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 2 }}
         />
       )}
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: '12pt', lineHeight: 1.2, color: BRAND.white }}>
+        <div style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: '11pt', lineHeight: 1.2, color: BRAND.white }}>
           {companyName}
         </div>
         {company?.tagline && (
-          <div style={{ fontSize: '7.5pt', color: 'rgba(255,255,255,0.88)', marginTop: 3, fontFamily: FONT.body }}>
+          <div style={{ fontSize: '7pt', color: 'rgba(255,255,255,0.88)', marginTop: 2, fontFamily: FONT.body }}>
             {company.tagline}
           </div>
         )}
-        {addrLine && <div style={{ fontSize: '7.5pt', opacity: 0.88, marginTop: 4, fontFamily: FONT.body, lineHeight: 1.4 }}>{addrLine}</div>}
-        <div style={{ fontSize: '7.5pt', opacity: 0.88, marginTop: 2, fontFamily: FONT.body }}>
+        {addrLine && <div style={{ fontSize: '7pt', opacity: 0.88, marginTop: 3, fontFamily: FONT.body, lineHeight: 1.35 }}>{addrLine}</div>}
+        <div style={{ fontSize: '7pt', opacity: 0.88, marginTop: 2, fontFamily: FONT.body }}>
           {[contactLine, company?.tax_registration && `GSTIN: ${company.tax_registration}`].filter(Boolean).join(' · ')}
         </div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0, paddingLeft: 8 }}>
-        <div style={{ fontSize: '7.5pt', fontWeight: 600, letterSpacing: '0.16em', color: BRAND.white, fontFamily: FONT.body, opacity: 0.92 }}>
+        <div style={{ fontSize: '7pt', fontWeight: 600, letterSpacing: '0.16em', color: BRAND.white, fontFamily: FONT.body, opacity: 0.92 }}>
           PURCHASE ORDER
         </div>
-        <div style={{ fontFamily: FONT.body, fontWeight: 700, fontSize: '11pt', marginTop: 4, color: BRAND.white, ...tabular }}>
+        <div style={{ fontFamily: FONT.body, fontWeight: 700, fontSize: '10pt', marginTop: 3, color: BRAND.white, ...tabular }}>
           {po.po_number}
         </div>
       </div>
@@ -327,8 +351,8 @@ function PoMeta({ po, piLabel }) {
     <div style={{
       display: 'grid',
       gridTemplateColumns: 'repeat(4, 1fr)',
-      gap: '10px 14px',
-      padding: '12px 14px',
+      gap: '6px 12px',
+      padding: '8px 12px',
       background: BRAND.navyLight,
       border: `1px solid ${BRAND.border}`,
       borderRadius: 6,
@@ -355,21 +379,21 @@ function PoParties({ po }) {
     <div style={{
       display: 'grid',
       gridTemplateColumns: '1fr 1fr 1fr',
-      gap: 10,
+      gap: 8,
     }}
     >
       <PartyCell title="Supplier">
-        <strong style={{ fontSize: '8pt', fontFamily: FONT.body, color: BRAND.black }}>{po.vendor_name || '—'}</strong>
-        {po.vendor_address && <div style={{ whiteSpace: 'pre-line', marginTop: 4, color: BRAND.textMuted }}>{po.vendor_address}</div>}
+        <strong style={{ fontSize: '7.5pt', fontFamily: FONT.body, color: BRAND.black }}>{po.vendor_name || '—'}</strong>
+        {po.vendor_address && <div style={{ whiteSpace: 'pre-line', marginTop: 3, color: BRAND.textMuted, fontSize: '7pt' }}>{po.vendor_address}</div>}
         {[po.attention && `Attn: ${po.attention}`, po.vendor_phone, po.vendor_email].filter(Boolean).map((t) => (
-          <div key={t} style={{ color: BRAND.textMuted, marginTop: 2 }}>{t}</div>
+          <div key={t} style={{ color: BRAND.textMuted, marginTop: 2, fontSize: '7pt' }}>{t}</div>
         ))}
       </PartyCell>
       <PartyCell title="Bill To">
-        <div style={{ whiteSpace: 'pre-line', color: BRAND.textMuted }}>{po.bill_to || '—'}</div>
+        <div style={{ whiteSpace: 'pre-line', color: BRAND.textMuted, fontSize: '7pt' }}>{po.bill_to || '—'}</div>
       </PartyCell>
       <PartyCell title="Ship To">
-        <div style={{ whiteSpace: 'pre-line', color: BRAND.textMuted }}>{po.ship_to || '—'}</div>
+        <div style={{ whiteSpace: 'pre-line', color: BRAND.textMuted, fontSize: '7pt' }}>{po.ship_to || '—'}</div>
       </PartyCell>
     </div>
   );
@@ -394,7 +418,10 @@ function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = fals
           Purchase Order {poNumber} — Line Items (continued)
         </div>
       )}
-      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontFamily: FONT.body, borderRadius: 6, overflow: 'hidden' }}>
+      <table
+        className="po-print-items-table"
+        style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontFamily: FONT.body, borderRadius: 6, overflow: 'hidden' }}
+      >
         <thead>
           <tr>
             <th style={{ ...thStyle('center'), width: '4%' }}>#</th>
@@ -414,11 +441,18 @@ function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = fals
           ) : (
             items.map((row, i) => {
               const globalIndex = startIndex + i;
-              const label = getItemLabel(row, trimsMap);
+              const { name, props } = getItemParts(row, trimsMap);
               return (
                 <tr key={row.id ?? globalIndex}>
                   <td style={{ ...tdStyle('center', i % 2 === 1), fontWeight: 600 }}>{row.serial_no || globalIndex + 1}</td>
-                  <td style={{ ...tdStyle('left', i % 2 === 1), wordBreak: 'break-word' }}>{label}</td>
+                  <td style={{ ...tdStyle('left', i % 2 === 1), wordBreak: 'break-word' }}>
+                    <div style={{ fontWeight: 600 }}>{name}</div>
+                    {props ? (
+                      <div style={{ fontSize: '6.8pt', color: BRAND.textMuted, marginTop: 2, lineHeight: 1.3 }}>
+                        {props}
+                      </div>
+                    ) : null}
+                  </td>
                   <td style={{ ...tdStyle('center', i % 2 === 1), ...tabular }}>{row.hsn_code || '—'}</td>
                   <td style={{ ...tdStyle('right', i % 2 === 1), fontWeight: 600, ...tabular }}>{fmtMoney(row.quantity_ordered)}</td>
                   <td style={{ ...tdStyle('center', i % 2 === 1) }}>{row.unit || 'PCS'}</td>
@@ -688,7 +722,7 @@ export default function SupplierPOPrintDocument({ po, company, trimsMap = {} }) 
               <PrintSection><PoParties po={po} /></PrintSection>
             </>
           )}
-          <PrintSection last={!page.isLast}>
+          <PrintSection last={!page.isLast} allowBreak>
             <PoItemsTable
               items={page.items}
               trimsMap={trimsMap}

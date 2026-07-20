@@ -141,20 +141,27 @@ class PurchaseOrder(models.Model):
             ])
 
     def update_status(self):
-        items = self.items.filter(item__isnull=False)
-        if not items.exists():
+        """Derive PO status from all line receipts (trim + fabric), not only inventory-linked rows."""
+        items = list(self.items.all())
+        if not items:
             return
 
-        total_ordered = sum(item.quantity_ordered for item in items)
-        total_received = sum(item.quantity_received for item in items)
+        any_received = any((item.quantity_received or 0) > 0 for item in items)
+        all_complete = all(
+            (item.quantity_received or 0) >= (item.quantity_ordered or 0)
+            for item in items
+        )
 
-        if total_received == 0:
-            self.status = 'ORDERED'
-        elif total_received < total_ordered:
-            self.status = 'PARTIAL'
+        if not any_received:
+            new_status = 'ORDERED'
+        elif all_complete:
+            new_status = 'COMPLETED'
         else:
-            self.status = 'COMPLETED'
-        self.save(update_fields=['status', 'updated_at'])
+            new_status = 'PARTIAL'
+
+        if self.status != new_status:
+            self.status = new_status
+            self.save(update_fields=['status', 'updated_at'])
 
 
 class PurchaseOrderItem(models.Model):
@@ -276,6 +283,12 @@ class PurchaseBill(models.Model):
     cgst_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     sgst_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     igst_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    round_off = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Adjustment to round grand total to nearest rupee',
+    )
     total_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     amount_paid = models.DecimalField(max_digits=14, decimal_places=2, default=0)
 
@@ -319,10 +332,14 @@ class PurchaseBill(models.Model):
             self.sgst_amount = (subtotal * sgst_pct / Decimal('100')).quantize(Decimal('0.01'))
             self.igst_amount = Decimal('0')
 
-        self.total_amount = (self.subtotal + self.cgst_amount + self.sgst_amount + self.igst_amount).quantize(Decimal('0.01'))
+        raw_total = (self.subtotal + self.cgst_amount + self.sgst_amount + self.igst_amount).quantize(Decimal('0.01'))
+        rounded_total = raw_total.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        self.round_off = (rounded_total - raw_total).quantize(Decimal('0.01'))
+        self.total_amount = rounded_total
         if save:
             self.save(update_fields=[
-                'subtotal', 'cgst_amount', 'sgst_amount', 'igst_amount', 'total_amount', 'updated_at',
+                'subtotal', 'cgst_amount', 'sgst_amount', 'igst_amount',
+                'round_off', 'total_amount', 'updated_at',
             ])
 
     def sync_payment_status(self, save=True):
@@ -368,3 +385,52 @@ class PurchaseBillLine(models.Model):
 
     def __str__(self):
         return f"{self.bill.internal_ref} — {self.particulars or 'Line'}"
+
+
+class PurchaseBillDocument(models.Model):
+    """Scanned supplier invoice and supporting documents for a purchase bill."""
+
+    DOCUMENT_TYPE_CHOICES = [
+        ('ORIGINAL_INVOICE', 'Original Invoice'),
+        ('OTHER', 'Other Document'),
+    ]
+
+    bill = models.ForeignKey(
+        PurchaseBill,
+        on_delete=models.CASCADE,
+        related_name='documents',
+    )
+    document_type = models.CharField(
+        max_length=32,
+        choices=DOCUMENT_TYPE_CHOICES,
+        default='ORIGINAL_INVOICE',
+    )
+    label = models.CharField(max_length=120, blank=True, default='')
+    file = models.FileField(upload_to='purchase_bill_docs/%Y/%m/')
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploaded_purchase_bill_documents',
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at', 'id']
+        verbose_name = 'Purchase Bill Document'
+        verbose_name_plural = 'Purchase Bill Documents'
+
+    def __str__(self):
+        return f"{self.bill.internal_ref} — {self.display_label}"
+
+    @property
+    def display_label(self):
+        if self.label.strip():
+            return self.label.strip()
+        return dict(self.DOCUMENT_TYPE_CHOICES).get(self.document_type, 'Document')
+
+    def delete(self, *args, **kwargs):
+        if self.file:
+            self.file.delete(save=False)
+        super().delete(*args, **kwargs)

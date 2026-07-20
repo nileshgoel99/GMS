@@ -1,11 +1,11 @@
 from decimal import Decimal
 
-from django.db.models import Count, Sum
-from rest_framework import viewsets, filters, status
+from django.db.models import Count, Sum, F, Exists, OuterRef
+from rest_framework import viewsets, filters, status, parsers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import PurchaseOrder, PurchaseOrderItem, POReceipt, PurchaseBill
+from .models import PurchaseOrder, PurchaseOrderItem, POReceipt, PurchaseBill, PurchaseBillDocument
 from .po_numbering import next_supplier_po_number
 from .bill_numbering import next_purchase_bill_ref
 from .payment_due import build_bills_payables_payload, month_bounds
@@ -18,7 +18,24 @@ from .serializers import (
     POReceiptSerializer,
     PurchaseBillSerializer,
     PurchaseBillListSerializer,
+    PurchaseBillDocumentSerializer,
 )
+
+
+def _pos_with_pending_receipt():
+    """Supplier POs that still have at least one line not fully received."""
+    has_pending = PurchaseOrderItem.objects.filter(
+        po_id=OuterRef('pk'),
+        quantity_received__lt=F('quantity_ordered'),
+    )
+    return (
+        PurchaseOrder.objects
+        .exclude(status__in=['DRAFT', 'CANCELLED'])
+        .filter(Exists(has_pending))
+        .select_related('pi', 'created_by')
+        .prefetch_related('items')
+        .order_by('-order_date', '-id')
+    )
 
 
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
@@ -54,7 +71,8 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def pending(self, request):
-        pos = self.queryset.filter(status__in=['ORDERED', 'PARTIAL'])
+        # Any non-draft/cancelled PO that still has open receipt qty (not status alone)
+        pos = _pos_with_pending_receipt()
         serializer = PurchaseOrderListSerializer(pos, many=True)
         return Response(serializer.data)
 
@@ -125,7 +143,9 @@ class POReceiptViewSet(viewsets.ModelViewSet):
 class PurchaseBillViewSet(viewsets.ModelViewSet):
     queryset = PurchaseBill.objects.all().select_related(
         'supplier', 'purchase_order', 'created_by',
-    ).prefetch_related('items__po_item', 'items__trim')
+    ).prefetch_related(
+        'items__po_item', 'items__trim', 'documents__uploaded_by',
+    )
     serializer_class = PurchaseBillSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'supplier', 'purchase_order', 'bill_date']
@@ -159,7 +179,55 @@ class PurchaseBillViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         if InventoryLog.objects.filter(reference_type='BILL', reference_id=str(instance.id)).exists():
             reverse_purchase_bill_stock(instance)
+        for doc in instance.documents.all():
+            doc.file.delete(save=False)
         instance.delete()
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='upload-document',
+        parser_classes=[parsers.MultiPartParser, parsers.FormParser],
+    )
+    def upload_document(self, request, pk=None):
+        bill = self.get_object()
+        uploaded = request.FILES.get('file')
+        if not uploaded:
+            return Response({'detail': 'No file provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        doc_type = (request.data.get('document_type') or 'ORIGINAL_INVOICE').strip().upper()
+        valid_types = {choice[0] for choice in PurchaseBillDocument.DOCUMENT_TYPE_CHOICES}
+        if doc_type not in valid_types:
+            doc_type = 'OTHER'
+
+        label = (request.data.get('label') or '').strip()
+        if not label:
+            label = dict(PurchaseBillDocument.DOCUMENT_TYPE_CHOICES).get(doc_type, 'Document')
+
+        doc = PurchaseBillDocument.objects.create(
+            bill=bill,
+            document_type=doc_type,
+            label=label,
+            file=uploaded,
+            uploaded_by=request.user if request.user.is_authenticated else None,
+        )
+        return Response(
+            PurchaseBillDocumentSerializer(doc, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['delete'], url_path='remove-document')
+    def remove_document(self, request, pk=None):
+        bill = self.get_object()
+        doc_id = request.query_params.get('doc_id')
+        if not doc_id:
+            return Response({'detail': 'doc_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            doc = bill.documents.get(pk=doc_id)
+        except PurchaseBillDocument.DoesNotExist:
+            return Response({'detail': 'Document not found.'}, status=status.HTTP_404_NOT_FOUND)
+        doc.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=['get'], url_path='prefill-from-po')
     def prefill_from_po(self, request):
@@ -196,7 +264,7 @@ class PurchaseBillViewSet(viewsets.ModelViewSet):
             'po_number': po.po_number,
             'supplier': po.supplier_id,
             'supplier_name': po.vendor_name,
-            'payment_terms': po.payment_terms or '',
+            'payment_terms': (po.payment_terms or '').strip(),
             'tax_mode': po.tax_mode,
             'cgst_percent': str(po.cgst_percent or 0),
             'sgst_percent': str(po.sgst_percent or 0),

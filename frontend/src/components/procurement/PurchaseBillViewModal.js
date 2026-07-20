@@ -9,6 +9,7 @@ import { purchaseBillAPI } from '../../services/api';
 import { formatDateDisplay } from '../../utils/formatDate';
 import { slate } from '../../theme/appTheme';
 import BillLineParticulars from './BillLineParticulars';
+import PurchaseBillDocuments from './PurchaseBillDocuments';
 
 const STATUS_COLOR = {
   DRAFT: 'default',
@@ -120,9 +121,27 @@ export default function PurchaseBillViewModal({ open, billId, onClose, onEdit })
               </Table>
             </Box>
             <Box sx={{ mt: 2, p: 1.5, borderRadius: 1.5, bgcolor: slate[50], border: `1px solid ${slate[200]}` }}>
+              <MetaRow label="Subtotal" value={fmt(bill.subtotal)} />
+              {bill.tax_mode === 'IGST' ? (
+                <MetaRow label={`IGST (${bill.igst_percent}%)`} value={fmt(bill.igst_amount)} />
+              ) : (
+                <>
+                  <MetaRow label={`CGST (${bill.cgst_percent}%)`} value={fmt(bill.cgst_amount)} />
+                  <MetaRow label={`SGST (${bill.sgst_percent}%)`} value={fmt(bill.sgst_amount)} />
+                </>
+              )}
+              <MetaRow label="Round Off" value={fmt(bill.round_off)} />
               <MetaRow label="Bill Total" value={fmt(bill.total_amount)} bold />
-              <MetaRow label="Amount Paid" value={fmt(bill.amount_paid)} />
-              <MetaRow label="Balance Due" value={fmt(bill.balance_due)} bold accent />
+            </Box>
+            <Box sx={{ mt: 2 }}>
+              <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: slate[500], mb: 1 }}>
+                Invoice Documents
+              </Typography>
+              <PurchaseBillDocuments
+                billId={bill.id}
+                documents={bill.documents || []}
+                readOnly
+              />
             </Box>
           </>
         )}
@@ -156,7 +175,6 @@ function GridMeta({ bill }) {
     ['Supplier PO', bill.po_number || '—'],
     ['Bill Date', formatDateDisplay(bill.bill_date)],
     ['Received', formatDateDisplay(bill.received_date)],
-    ['Payment Due', formatDateDisplay(bill.payment_due_date || bill.due_date)],
     ['Payment Terms', bill.payment_terms || '—'],
   ];
   return (

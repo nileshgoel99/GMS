@@ -726,6 +726,41 @@ const sectionLabelSx = {
   mb: 0.75,
 };
 
+/** Extract lead days from delivery terms (e.g. "30", "30 days", "within 15 days"). */
+const parseDeliveryDays = (terms) => {
+  const text = String(terms || '').trim();
+  if (!text) return null;
+  const match = text.match(/(\d+)\s*(?:days?|d)?/i);
+  if (!match) return null;
+  const days = parseInt(match[1], 10);
+  return Number.isFinite(days) && days >= 0 ? days : null;
+};
+
+const addDaysToIsoDate = (isoDate, days) => {
+  if (!isoDate || days == null) return '';
+  const [y, m, d] = String(isoDate).split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+};
+
+const OrderSectionTitle = ({ children }) => (
+  <Typography
+    sx={{
+      ...sectionLabelSx,
+      mb: 1,
+      mt: 0.5,
+      fontSize: '0.65rem',
+      color: slate[500],
+      borderBottom: `1px solid ${slate[100]}`,
+      pb: 0.75,
+    }}
+  >
+    {children}
+  </Typography>
+);
+
 const PARTY_CARD_HEIGHT = 220;
 
 const PARTY_THEMES = {
@@ -1049,11 +1084,11 @@ export default function SupplierPOEditorPage() {
   }, [form.pi, filteredPiOptions]);
 
   const filteredLibraryTrims = useMemo(() => {
-    if (!isNew) return trims;
-    return isFabricMode
-      ? trims.filter((t) => isFabricCategory(t.category))
-      : trims.filter((t) => !isFabricCategory(t.category));
-  }, [trims, isFabricMode, isNew]);
+    if (effectiveFabricMode) {
+      return trims.filter((t) => isFabricCategory(t.category));
+    }
+    return trims;
+  }, [trims, effectiveFabricMode]);
 
   const hasPiTrims = filteredPiOptions.length > 0;
   const trimOptions = useMemo(() => {
@@ -1680,8 +1715,11 @@ export default function SupplierPOEditorPage() {
 
       {/* Order details */}
       <Paper elevation={0} sx={sectionPaperSxByIndex(0)}>
-        <Typography sx={{ ...sectionLabelSx, mb: 1.5, fontSize: '0.75rem' }}>Order Details</Typography>
-        <Grid container spacing={1.5}>
+        <Typography sx={{ ...sectionLabelSx, mb: 2, fontSize: '0.75rem' }}>Order Details</Typography>
+
+        {/* Document */}
+        <OrderSectionTitle>Document</OrderSectionTitle>
+        <Grid container spacing={1.5} sx={{ mb: 2 }}>
           <Grid item xs={12} sm={6} md={4}>
             <TextField
               fullWidth
@@ -1713,17 +1751,21 @@ export default function SupplierPOEditorPage() {
               }}
             />
           </Grid>
-          <Grid item xs={6} sm={3} md={2}>
-            <TextField fullWidth size="small" label="Order Date" type="date" value={form.order_date}
-              onChange={(e) => setForm((f) => ({ ...f, order_date: e.target.value }))}
-              InputLabelProps={{ shrink: true }} sx={sxInput} />
-          </Grid>
-          <Grid item xs={6} sm={3} md={2}>
-            <TextField fullWidth size="small" label="Delivery Date" type="date" value={form.expected_delivery_date}
-              onChange={(e) => setForm((f) => ({ ...f, expected_delivery_date: e.target.value }))}
-              InputLabelProps={{ shrink: true }} sx={sxInput} />
-          </Grid>
           <Grid item xs={12} sm={6} md={4}>
+            <TextField fullWidth size="small" label="Order Date" type="date" value={form.order_date}
+              onChange={(e) => {
+                const order_date = e.target.value;
+                setForm((f) => {
+                  const days = parseDeliveryDays(f.delivery_terms);
+                  const expected_delivery_date = days != null
+                    ? addDaysToIsoDate(order_date, days)
+                    : f.expected_delivery_date;
+                  return { ...f, order_date, expected_delivery_date };
+                });
+              }}
+              InputLabelProps={{ shrink: true }} sx={sxInput} />
+          </Grid>
+          <Grid item xs={12} sm={12} md={4}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
               <Autocomplete
                 options={suppliers}
@@ -1744,15 +1786,20 @@ export default function SupplierPOEditorPage() {
               </Tooltip>
             </Box>
           </Grid>
-          <Grid item xs={6} sm={3} md={2}>
+          <Grid item xs={12} sm={6} md={4}>
             <TextField fullWidth size="small" label="Attention" value={form.attention}
               onChange={(e) => setForm((f) => ({ ...f, attention: e.target.value }))} sx={sxInput} />
           </Grid>
-          <Grid item xs={6} sm={3} md={2}>
+          <Grid item xs={12} sm={6} md={4}>
             <TextField fullWidth size="small" label="Phone No." value={form.vendor_phone}
               onChange={(e) => setForm((f) => ({ ...f, vendor_phone: e.target.value }))} sx={sxInput} />
           </Grid>
-          <Grid item xs={12} sm={4} md={3}>
+        </Grid>
+
+        {/* References */}
+        <OrderSectionTitle>References</OrderSectionTitle>
+        <Grid container spacing={1.5} sx={{ mb: 2 }}>
+          <Grid item xs={12} sm={6} md={4}>
             <Autocomplete
               options={piList}
               getOptionLabel={(o) => `${o.pi_number} — ${o.client_name || ''}`}
@@ -1764,7 +1811,7 @@ export default function SupplierPOEditorPage() {
               renderInput={(params) => <TextField {...params} size="small" fullWidth label="Reference PI" sx={sxInput} />}
             />
           </Grid>
-          <Grid item xs={12} sm={4} md={3}>
+          <Grid item xs={12} sm={6} md={4}>
             <Autocomplete
               options={buyerPoList}
               getOptionLabel={(o) => `${o.po_number} — ${o.buyer_name || ''}`}
@@ -1776,20 +1823,67 @@ export default function SupplierPOEditorPage() {
               renderInput={(params) => <TextField {...params} size="small" fullWidth label="Reference Buyer PO" sx={sxInput} />}
             />
           </Grid>
-          <Grid item xs={12} sm={4} md={3}>
+          <Grid item xs={12} sm={6} md={4}>
             <TextField fullWidth size="small" label="Reference No. (Buyer PO)" value={form.reference_number}
               onChange={(e) => setForm((f) => ({ ...f, reference_number: e.target.value }))} sx={sxInput} />
           </Grid>
+        </Grid>
+
+        {/* Schedule & terms */}
+        <OrderSectionTitle>Schedule &amp; Terms</OrderSectionTitle>
+        <Grid container spacing={1.5}>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              size="small"
+              label="Delivery Terms"
+              value={form.delivery_terms}
+              onChange={(e) => {
+                const delivery_terms = e.target.value;
+                setForm((f) => {
+                  const days = parseDeliveryDays(delivery_terms);
+                  const expected_delivery_date = days != null
+                    ? addDaysToIsoDate(f.order_date, days)
+                    : f.expected_delivery_date;
+                  return { ...f, delivery_terms, expected_delivery_date };
+                });
+              }}
+              placeholder="e.g. 30"
+              helperText="Lead time in days from order date"
+              InputProps={{
+                endAdornment: <InputAdornment position="end">days</InputAdornment>,
+              }}
+              sx={sxInput}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              size="small"
+              label="Delivery Date"
+              type="date"
+              value={form.expected_delivery_date}
+              onChange={(e) => setForm((f) => ({ ...f, expected_delivery_date: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              helperText={
+                parseDeliveryDays(form.delivery_terms) != null
+                  ? `Auto from order date + ${parseDeliveryDays(form.delivery_terms)} days`
+                  : ' '
+              }
+              sx={sxInput}
+            />
+          </Grid>
           <Grid item xs={12} sm={6} md={3}>
             <TextField fullWidth size="small" label="Payment Terms" value={form.payment_terms}
-              onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))} sx={sxInput} />
+              onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))}
+              placeholder="e.g. Net 30 days"
+              sx={sxInput}
+            />
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
-            <TextField fullWidth size="small" label="Delivery Terms" value={form.delivery_terms}
-              onChange={(e) => setForm((f) => ({ ...f, delivery_terms: e.target.value }))} sx={sxInput} />
-          </Grid>
-          <Grid item xs={12}>
-            <Typography sx={{ ...sectionLabelSx, mb: 0.75, fontSize: '0.65rem' }}>Transport</Typography>
+            <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: slate[600], mb: 0.75 }}>
+              Transport paid by
+            </Typography>
             <RadioGroup
               row
               value={form.transport_paid_by || ''}
@@ -1798,12 +1892,12 @@ export default function SupplierPOEditorPage() {
               <FormControlLabel
                 value="SUPPLIER"
                 control={<Radio size="small" />}
-                label={<Typography variant="body2">Transport to be paid by Supplier</Typography>}
+                label={<Typography variant="body2">Supplier</Typography>}
               />
               <FormControlLabel
                 value="BUYER"
                 control={<Radio size="small" />}
-                label={<Typography variant="body2">Transport to be paid by Buyer</Typography>}
+                label={<Typography variant="body2">Buyer</Typography>}
               />
             </RadioGroup>
           </Grid>

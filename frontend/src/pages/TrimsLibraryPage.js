@@ -282,30 +282,43 @@ export default function TrimsLibraryPage() {
         />
       </Box>
 
-      <DataGridShell>
+      <DataGridShell sx={{ height: { xs: 520, md: 620 }, width: '100%' }}>
         <DataGrid
           rows={rows}
           columns={columns}
           loading={loading}
           rowHeight={64}
           columnHeaderHeight={48}
-          sx={trimsGridSx}
+          sx={{ ...trimsGridSx, height: '100%' }}
           disableRowSelectionOnClick
           pageSizeOptions={[25, 50, 100]}
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
         />
       </DataGridShell>
 
-      <Drawer anchor="right" open={drawerOpen} onClose={() => setDrawer(false)}
-        PaperProps={{ sx: { width: { xs: '100vw', sm: 480 }, p: 3 } }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+      <Drawer
+        anchor="right"
+        open={drawerOpen}
+        onClose={() => setDrawer(false)}
+        PaperProps={{
+          sx: {
+            width: { xs: '100vw', sm: 480 },
+            maxWidth: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          },
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', px: 3, pt: 3, pb: 2, flexShrink: 0 }}>
           <Typography sx={{ fontWeight: 800, fontSize: '1.1rem', flex: 1 }}>
             {editing ? 'Edit Trim' : 'Add New Trim'}
           </Typography>
           <IconButton onClick={() => setDrawer(false)}><Close /></IconButton>
         </Box>
-        <Divider sx={{ mb: 3 }} />
-
+        <Divider sx={{ flexShrink: 0 }} />
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 3, py: 3 }}>
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <TextField
@@ -439,6 +452,7 @@ export default function TrimsLibraryPage() {
             sx={{ textTransform: 'none', fontWeight: 800 }}>
             {saving ? 'Saving…' : 'Save Trim'}
           </Button>
+        </Box>
         </Box>
       </Drawer>
     </Box>
