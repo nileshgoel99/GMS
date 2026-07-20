@@ -328,7 +328,7 @@ const Layout = ({ children }) => {
         title: params.get('mode') === 'fabric' ? 'Raise Fabric PO' : 'Raise Trim PO',
       };
     }
-    const meta = routeMeta[location.pathname] || { title: 'GMS' };
+    const meta = routeMeta[location.pathname] || { title: 'FabriFlow' };
     return { title: meta.title };
   }, [location.pathname, location.search, user]);
 
@@ -437,7 +437,7 @@ const Layout = ({ children }) => {
               flexShrink: 0,
             }}
           >
-            G
+            F
           </Box>
           {!compactNav ? (
             <Box sx={{ minWidth: 0 }}>
@@ -451,7 +451,7 @@ const Layout = ({ children }) => {
                   textTransform: 'none',
                 }}
               >
-                GMS
+                FabriFlow
               </Typography>
               <Typography variant="caption" sx={{ color: alpha('#ffffff', 0.78), fontWeight: 600 }}>
                 Garment production suite

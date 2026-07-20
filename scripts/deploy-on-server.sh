@@ -4,8 +4,8 @@
 # Or:
 #   bash scripts/deploy-on-server.sh
 #
-# Optional (defaults are fine for gms.nileshgoel.in):
-#   DEPLOY_PATH=/var/www/gms REACT_API_URL=https://gms.nileshgoel.in/api ./scripts/deploy-on-server.sh
+# Optional (defaults are fine for jbi.fabriflow.in):
+#   DEPLOY_PATH=/var/www/gms REACT_API_URL=https://jbi.fabriflow.in/api ./scripts/deploy-on-server.sh
 #
 set -euo pipefail
 
@@ -17,9 +17,9 @@ if [[ -z "${DEPLOY_PATH:-}" ]]; then
     DEPLOY_PATH="/var/www/gms"
   fi
 fi
-REACT_API_URL="${REACT_API_URL:-${REACT_API:-https://gms.nileshgoel.in/api}}"
+REACT_API_URL="${REACT_API_URL:-${REACT_API:-https://jbi.fabriflow.in/api}}"
 
-echo "==> GMS deploy (on-server, no SSH)"
+echo "==> FabriFlow deploy (on-server, no SSH)"
 echo "    DEPLOY_PATH=${DEPLOY_PATH}"
 echo "    REACT_APP_API_URL=${REACT_API_URL}"
 

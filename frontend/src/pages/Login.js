@@ -26,7 +26,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { navChrome, slate, warm } from '../theme/appTheme';
 
-const BRAND_NAME = 'Fabricon';
+const BRAND_NAME = 'FabriFlow';
 /** Short mark used in the logo tile */
 const BRAND_MARK = 'F';
 const BRAND_TAGLINE = 'From order to production—one connected operation.';

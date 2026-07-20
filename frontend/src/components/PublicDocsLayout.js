@@ -54,14 +54,14 @@ export default function PublicDocsLayout({ children, isAuthenticated = false }) 
                 boxShadow: `0 2px 8px ${alpha(theme.palette.primary.main, 0.3)}`,
               }}
             >
-              G
+              F
             </Box>
             <Box>
               <Typography variant="subtitle2" sx={{ fontWeight: 800, lineHeight: 1.2, letterSpacing: '-0.02em' }}>
-                GMS Documentation
+                FabriFlow Documentation
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                Fabricon · Garment production guides
+                FabriFlow · Garment production guides
               </Typography>
             </Box>
           </Box>

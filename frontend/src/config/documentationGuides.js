@@ -5,7 +5,7 @@ export const DOCUMENTATION_GUIDES = [
     id: 'create-customers',
     title: 'How to Create Customers',
     category: 'Buyers',
-    description: 'Add new buyers to GMS with contact and billing details.',
+    description: 'Add new buyers to FabriFlow with contact and billing details.',
     embedUrl: 'https://www.youtube.com/embed/OwJm9qiObxY',
   },
   {
