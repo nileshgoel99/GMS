@@ -9,6 +9,13 @@ export const DOCUMENTATION_GUIDES = [
     embedUrl: 'https://www.youtube.com/embed/OwJm9qiObxY',
   },
   {
+    id: 'adding-suppliers',
+    title: 'Adding Suppliers',
+    category: 'Suppliers',
+    description: 'Create supplier records with contact, address, and payment details for procurement.',
+    embedUrl: 'https://www.youtube.com/embed/D5lqpJ2nY2I',
+  },
+  {
     id: 'buyer-po-and-pi',
     title: 'Creating Buyer Purchase Orders & Proforma Invoices',
     category: 'Buyer POs',
