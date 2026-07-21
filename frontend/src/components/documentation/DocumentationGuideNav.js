@@ -26,6 +26,7 @@ const CATEGORY_META = {
   Indents: { accent: '#b45309', Icon: AssignmentOutlined, step: 3 },
   Suppliers: { accent: '#7c3aed', Icon: StorefrontOutlined, step: 4 },
   Procurement: { accent: '#047857', Icon: LocalShippingOutlined, step: 5 },
+  Users: { accent: '#334155', Icon: PeopleOutline, step: 6 },
 };
 
 const categoryMeta = (name) => CATEGORY_META[name] || {

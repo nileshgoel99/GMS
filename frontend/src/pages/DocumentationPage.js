@@ -110,7 +110,7 @@ export default function DocumentationPage({ viewportOffset = 200 }) {
       <PageHeader
         kicker="Help"
         title="Documentation"
-        subtitle="Watch short videos in workflow order: Buyers → Buyers PO → Indents → Suppliers → Procurement"
+        subtitle="Watch short videos in workflow order: Buyers → Buyers PO → Indents → Suppliers → Procurement → Users"
         compact
       />
 

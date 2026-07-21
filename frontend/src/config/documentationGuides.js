@@ -7,6 +7,7 @@ export const GUIDE_CATEGORY_ORDER = [
   'Indents',
   'Suppliers',
   'Procurement',
+  'Users',
 ];
 
 export const DOCUMENTATION_GUIDES = [
@@ -51,6 +52,20 @@ export const DOCUMENTATION_GUIDES = [
     category: 'Procurement',
     description: 'Raise a fabric Supplier PO with material details, meters, rates, and terms.',
     embedUrl: 'https://www.youtube.com/embed/evOUwyX4_Ho',
+  },
+  {
+    id: 'purchase-bills-inventory',
+    title: 'Recording and Managing Purchase Bills & Inventory in FabriFlow',
+    category: 'Procurement',
+    description: 'Enter supplier purchase bills, receive stock into inventory, and track what was billed.',
+    embedUrl: 'https://www.youtube.com/embed/-UK1toqA8J8',
+  },
+  {
+    id: 'user-role-management',
+    title: 'User & Role Management Guide',
+    category: 'Users',
+    description: 'Create users, assign roles, and control module access in FabriFlow.',
+    embedUrl: 'https://www.youtube.com/embed/WM4XxhC8S5k',
   },
 ];
 
