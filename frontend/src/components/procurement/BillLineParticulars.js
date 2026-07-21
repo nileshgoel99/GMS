@@ -6,14 +6,29 @@ import { parseParticulars } from '../../utils/parseParticulars';
 
 export { parseParticulars as parseBillParticulars };
 
-/** Read-only trim / item display for purchase bill lines. */
+/** Expand "Color: X · Width: Y" (or newline-separated) into display lines. */
+const expandPropertyLines = (lines) => {
+  const out = [];
+  (lines || []).forEach((line) => {
+    const trimmed = (line || '').trim();
+    if (!trimmed || trimmed.startsWith('_pi_fabric_key:')) return;
+    if (trimmed.includes(' · ')) {
+      trimmed.split(/\s·\s/).map((p) => p.trim()).filter(Boolean).forEach((p) => out.push(p));
+    } else {
+      out.push(trimmed);
+    }
+  });
+  return out;
+};
+
+/** Read-only trim / item display for purchase bill / PO lines. */
 export default function BillLineParticulars({ row }) {
   const parsed = parseParticulars(row.particulars);
   const name = (row.trim_name || parsed.name || row.particulars || '').trim() || '—';
-  const properties = (parsed.properties.length
+  const rawProps = parsed.properties.length
     ? parsed.properties
-    : (parsed.name && row.trim_name && parsed.name !== row.trim_name ? [parsed.name] : [])
-  ).filter((line) => !line.startsWith('_pi_fabric_key:'));
+    : (parsed.name && row.trim_name && parsed.name !== row.trim_name ? [parsed.name] : []);
+  const properties = expandPropertyLines(rawProps);
 
   return (
     <Box sx={{ py: 0.5, pr: 1 }}>
@@ -36,7 +51,7 @@ export default function BillLineParticulars({ row }) {
             py: 0.55,
             borderRadius: 1,
             width: 'fit-content',
-            maxWidth: 220,
+            maxWidth: 320,
             bgcolor: alpha(slate[900], 0.03),
             border: `1px solid ${alpha(slate[900], 0.08)}`,
           }}

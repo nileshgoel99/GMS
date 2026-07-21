@@ -12,6 +12,11 @@ const DataGridShell = ({ children, sx }) => (
       '&:hover': {
         boxShadow: (theme) => theme.shadows[4],
       },
+      // Let flex parents size the shell; children (DataGrid) fill the box
+      '& > .MuiDataGrid-root': {
+        height: '100%',
+        width: '100%',
+      },
       ...sx,
     }}
   >

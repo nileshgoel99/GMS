@@ -41,6 +41,13 @@ const FABRIC_PO_PROPERTY_FIELDS = [
   'Color',
   'Certification',
 ];
+/** Fields unique to fabric POs — shared labels like Color/Width alone must not flip a trim PO to fabric. */
+const FABRIC_PO_DETECT_FIELDS = [
+  'Fabric Material Composition',
+  'Fabric Weight',
+  'Finish / Coating',
+  'Certification',
+];
 
 const emptyFabricPropertyValues = () => {
   const vals = {};
@@ -50,6 +57,14 @@ const emptyFabricPropertyValues = () => {
 
 const isStandardFabricProperty = (name) => FABRIC_PO_PROPERTY_FIELDS.includes(name);
 const PI_FABRIC_KEY_FIELD = '_pi_fabric_key';
+
+const isFabricParticularsLine = (parsed) => {
+  const name = (parsed?.name || '').trim().toUpperCase();
+  if (name === FABRIC_PO_NAME.toUpperCase()) return true;
+  const label = parsed?.property_label || '';
+  if (label.includes(`${PI_FABRIC_KEY_FIELD}:`)) return true;
+  return FABRIC_PO_DETECT_FIELDS.some((field) => label.includes(`${field}:`));
+};
 
 const formatFabricPropertyLabel = (propertyValues, customFields = [], piFabricOptionKey = '') => {
   const lines = [];
@@ -1172,8 +1187,7 @@ export default function SupplierPOEditorPage() {
             ? d.items.map((row, i) => {
               const parsed = parseParticulars(row.particulars);
               const trimMaster = row.trim ? trimMasterById[row.trim] : null;
-              const isFabricLine = parsed.name.toUpperCase() === FABRIC_PO_NAME.toUpperCase()
-                || FABRIC_PO_PROPERTY_FIELDS.some((field) => parsed.property_label.includes(`${field}:`));
+              const isFabricLine = isFabricParticularsLine(parsed);
               if (isFabricLine) {
                 const parsedFabric = parseFabricPropertyLabel(parsed.property_label);
                 return {
@@ -1207,9 +1221,7 @@ export default function SupplierPOEditorPage() {
               };
             })
             : [emptyLine(1, lineDefaults)];
-          if (mappedItems.some((row) => row.particulars === FABRIC_PO_NAME)) {
-            setFabricPoDetected(true);
-          }
+          setFabricPoDetected(mappedItems.some((row) => row.particulars === FABRIC_PO_NAME));
           setForm({
             po_number: d.po_number,
             supplier: d.supplier,

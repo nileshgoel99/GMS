@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Button, Typography, TextField, IconButton, Chip, Drawer,
   Grid, MenuItem, Tooltip, Divider, CircularProgress, Autocomplete,
@@ -43,7 +43,14 @@ export default function TrimsLibraryPage() {
   const [form, setForm]         = useState(emptyForm());
   const [saving, setSaving]     = useState(false);
   const [search, setSearch]     = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [suppliers, setSuppliers] = useState([]);
+  const initialLoadDone = useRef(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const loadSuppliers = useCallback(async () => {
     try {
@@ -57,16 +64,18 @@ export default function TrimsLibraryPage() {
   useEffect(() => { loadSuppliers(); }, [loadSuppliers]);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const showSpinner = !initialLoadDone.current;
+    if (showSpinner) setLoading(true);
     try {
-      const res = await ordersAPI.getTrimsMaster({ search });
+      const res = await ordersAPI.getTrimsMaster({ search: debouncedSearch });
       setRows(asList(res.data));
+      initialLoadDone.current = true;
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
-  }, [search]);
+  }, [debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -174,7 +183,14 @@ export default function TrimsLibraryPage() {
   const trimsGridSx = {
     ...dataGridSx,
     width: '100%',
+    height: '100%',
+    border: 'none',
     bgcolor: '#fff',
+    '& .MuiDataGrid-main': { overflow: 'hidden' },
+    '& .MuiDataGrid-virtualScroller': {
+      overflowY: 'auto !important',
+      overscrollBehavior: 'contain',
+    },
     '& .MuiDataGrid-columnHeaders': {
       ...(dataGridSx['& .MuiDataGrid-columnHeaders'] || {}),
       bgcolor: slate[50],
@@ -263,33 +279,60 @@ export default function TrimsLibraryPage() {
   ];
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 } }}>
-      <PageHeader
-        title="Trims Library"
-        subtitle="Define trims with configurable properties (name + unit) used when building indents"
-        actions={
-          <Button startIcon={<Add />} variant="contained" onClick={openNew} sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
-            Add Trim
-          </Button>
-        }
-      />
-
-      <Box sx={{ mb: 2 }}>
-        <TextField
-          size="small" placeholder="Search by name or category…" value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{ width: 320, '& .MuiInputBase-root': { borderRadius: 2 } }}
+    <Box
+      sx={{
+        // Fill viewport under app toolbar + layout padding so only the grid scrolls
+        height: {
+          xs: 'calc(100dvh - 68px - 32px)',
+          sm: 'calc(100dvh - 76px - 48px)',
+          md: 'calc(100dvh - 76px - 64px)',
+        },
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
+      <Box sx={{ flexShrink: 0 }}>
+        <PageHeader
+          title="Trims Library"
+          subtitle="Define trims with configurable properties (name + unit) used when building indents"
+          compact
+          actions={
+            <Button startIcon={<Add />} variant="contained" onClick={openNew} sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
+              Add Trim
+            </Button>
+          }
         />
+
+        <Box sx={{ mb: 1.5 }}>
+          <TextField
+            size="small"
+            placeholder="Search by name or category…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{ width: { xs: '100%', sm: 320 }, '& .MuiInputBase-root': { borderRadius: 2 } }}
+          />
+        </Box>
       </Box>
 
-      <DataGridShell sx={{ height: { xs: 520, md: 620 }, width: '100%' }}>
+      <DataGridShell
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          '&:hover': { boxShadow: (theme) => theme.shadows[1] },
+        }}
+      >
         <DataGrid
           rows={rows}
           columns={columns}
           loading={loading}
           rowHeight={64}
           columnHeaderHeight={48}
-          sx={{ ...trimsGridSx, height: '100%' }}
+          sx={trimsGridSx}
           disableRowSelectionOnClick
           pageSizeOptions={[25, 50, 100]}
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
@@ -300,11 +343,13 @@ export default function TrimsLibraryPage() {
         anchor="right"
         open={drawerOpen}
         onClose={() => setDrawer(false)}
+        ModalProps={{ keepMounted: false }}
         PaperProps={{
           sx: {
             width: { xs: '100vw', sm: 480 },
             maxWidth: '100%',
             height: '100%',
+            maxHeight: '100dvh',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -318,132 +363,154 @@ export default function TrimsLibraryPage() {
           <IconButton onClick={() => setDrawer(false)}><Close /></IconButton>
         </Box>
         <Divider sx={{ flexShrink: 0 }} />
-        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 3, py: 3 }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth size="small" label="Trim Name *"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value.toUpperCase() }))}
-              placeholder="e.g. 5 CM WIDE REFLECTIVE TAPE D6101"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Autocomplete
-              freeSolo
-              options={TRIM_CATEGORY_SUGGESTIONS}
-              value={form.category}
-              onInputChange={(_, v) => handleCategoryChange(v)}
-              renderInput={(params) => <TextField {...params} size="small" fullWidth label="Category" />}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField fullWidth size="small" select label="Default Consumption Unit"
-              value={form.default_unit}
-              onChange={(e) => setForm((f) => ({ ...f, default_unit: e.target.value }))}>
-              {UNIT_OPTIONS.filter(Boolean).map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
-            </TextField>
-          </Grid>
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
+            px: 3,
+            py: 3,
+          }}
+        >
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth size="small" label="Trim Name *"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value.toUpperCase() }))}
+                placeholder="e.g. 5 CM WIDE REFLECTIVE TAPE D6101"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Autocomplete
+                freeSolo
+                options={TRIM_CATEGORY_SUGGESTIONS}
+                value={form.category}
+                onInputChange={(_, v) => handleCategoryChange(v)}
+                renderInput={(params) => <TextField {...params} size="small" fullWidth label="Category" />}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" select label="Default Consumption Unit"
+                value={form.default_unit}
+                onChange={(e) => setForm((f) => ({ ...f, default_unit: e.target.value }))}>
+                {UNIT_OPTIONS.filter(Boolean).map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
+              </TextField>
+            </Grid>
 
-          <Grid item xs={12}>
-            <Autocomplete
-              options={suppliers}
-              getOptionLabel={(o) => o.name || ''}
-              value={suppliers.find((s) => s.id === form.supplier) || null}
-              onChange={(_, v) => setForm((f) => ({ ...f, supplier: v?.id || null }))}
-              renderOption={(props, o) => (
-                <Box component="li" {...props}>
-                  <Box>
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{o.name}</Typography>
-                    <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>{o.country}{o.gst ? ` · ${o.gst}` : ''}</Typography>
+            <Grid item xs={12}>
+              <Autocomplete
+                options={suppliers}
+                getOptionLabel={(o) => o.name || ''}
+                value={suppliers.find((s) => s.id === form.supplier) || null}
+                onChange={(_, v) => setForm((f) => ({ ...f, supplier: v?.id || null }))}
+                renderOption={(props, o) => (
+                  <Box component="li" {...props}>
+                    <Box>
+                      <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{o.name}</Typography>
+                      <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>{o.country}{o.gst ? ` · ${o.gst}` : ''}</Typography>
+                    </Box>
                   </Box>
-                </Box>
-              )}
-              renderInput={(params) => (
-                <TextField {...params} size="small" fullWidth label="Supplier (optional)"
-                  placeholder="Select preferred supplier for this trim" />
-              )}
-            />
-          </Grid>
+                )}
+                renderInput={(params) => (
+                  <TextField {...params} size="small" fullWidth label="Supplier (optional)"
+                    placeholder="Select preferred supplier for this trim" />
+                )}
+              />
+            </Grid>
 
-          {/* Properties builder */}
-          <Grid item xs={12}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', flex: 1 }}>Properties</Typography>
-              <Button size="small" startIcon={<Add />} onClick={addProperty} sx={{ textTransform: 'none', fontWeight: 700 }}>
-                Add Property
-              </Button>
-            </Box>
-            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 1.5 }}>
-              Define property names and units (e.g. Width → CMS, Size → button dia., Garment Size → PI size, Number / Washes → no unit)
-            </Typography>
-            {form.properties.length === 0 ? (
-              <Box sx={{ p: 2, bgcolor: alpha(slate[200], 0.3), borderRadius: 1.5, textAlign: 'center' }}>
-                <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>No properties yet — click Add Property</Typography>
+            {/* Properties builder */}
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', flex: 1 }}>Properties</Typography>
+                <Button size="small" startIcon={<Add />} onClick={addProperty} sx={{ textTransform: 'none', fontWeight: 700 }}>
+                  Add Property
+                </Button>
               </Box>
-            ) : (
-              <Table size="small" sx={{ border: `1px solid ${slate[200]}`, borderRadius: 1 }}>
-                <TableHead>
-                  <TableRow sx={{ bgcolor: alpha(slate[900], 0.04) }}>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Property Name</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Unit</TableCell>
-                    <TableCell width={40} />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {form.properties.map((prop, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell sx={{ py: 0.75 }}>
-                        <Autocomplete
-                          freeSolo
-                          options={TRIM_PROPERTY_NAME_SUGGESTIONS}
-                          value={prop.name}
-                          onInputChange={(_, v) => updateProperty(idx, 'name', v)}
-                          renderInput={(params) => (
-                            <TextField {...params} size="small" fullWidth placeholder="Width, Color, Microns, GSM…" />
-                          )}
-                        />
-                      </TableCell>
-                      <TableCell sx={{ py: 0.75 }}>
-                        {isNumericTrimProperty(prop.name) ? (
-                          <TextField size="small" fullWidth disabled value="—"
-                            helperText="Numeric only" FormHelperTextProps={{ sx: { mx: 0, fontSize: '0.65rem' } }} />
-                        ) : (
+              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 1.5 }}>
+                Define property names and units (e.g. Width → CMS, Size → button dia., Garment Size → PI size, Number / Washes → no unit)
+              </Typography>
+              {form.properties.length === 0 ? (
+                <Box sx={{ p: 2, bgcolor: alpha(slate[200], 0.3), borderRadius: 1.5, textAlign: 'center' }}>
+                  <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>No properties yet — click Add Property</Typography>
+                </Box>
+              ) : (
+                <Table size="small" sx={{ border: `1px solid ${slate[200]}`, borderRadius: 1 }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: alpha(slate[900], 0.04) }}>
+                      <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Property Name</TableCell>
+                      <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Unit</TableCell>
+                      <TableCell width={40} />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {form.properties.map((prop, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell sx={{ py: 0.75 }}>
                           <Autocomplete
                             freeSolo
-                            options={UNIT_OPTIONS}
-                            value={prop.unit}
-                            onInputChange={(_, v) => updateProperty(idx, 'unit', v)}
-                            renderInput={(params) => <TextField {...params} size="small" placeholder="e.g. CMS, PCS" />}
+                            options={TRIM_PROPERTY_NAME_SUGGESTIONS}
+                            value={prop.name}
+                            onInputChange={(_, v) => updateProperty(idx, 'name', v)}
+                            renderInput={(params) => (
+                              <TextField {...params} size="small" fullWidth placeholder="Width, Color, Microns, GSM…" />
+                            )}
                           />
-                        )}
-                      </TableCell>
-                      <TableCell sx={{ py: 0.75 }}>
-                        <IconButton size="small" color="error" onClick={() => removeProperty(idx)}>
-                          <Delete fontSize="small" />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </Grid>
-
-          {isCartonBoxCategory(form.category) && (
-            <Grid item xs={12}>
-              <CartonBoxDefaultsFields values={form.cartonDefaults} onChange={(cartonDefaults) => setForm((f) => ({ ...f, cartonDefaults }))} />
+                        </TableCell>
+                        <TableCell sx={{ py: 0.75 }}>
+                          {isNumericTrimProperty(prop.name) ? (
+                            <TextField size="small" fullWidth disabled value="—"
+                              helperText="Numeric only" FormHelperTextProps={{ sx: { mx: 0, fontSize: '0.65rem' } }} />
+                          ) : (
+                            <Autocomplete
+                              freeSolo
+                              options={UNIT_OPTIONS}
+                              value={prop.unit}
+                              onInputChange={(_, v) => updateProperty(idx, 'unit', v)}
+                              renderInput={(params) => <TextField {...params} size="small" placeholder="e.g. CMS, PCS" />}
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell sx={{ py: 0.75 }}>
+                          <IconButton size="small" color="error" onClick={() => removeProperty(idx)}>
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </Grid>
-          )}
 
-          <Grid item xs={12}>
-            <TextField fullWidth size="small" multiline minRows={2} label="Notes"
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
+            {isCartonBoxCategory(form.category) && (
+              <Grid item xs={12}>
+                <CartonBoxDefaultsFields values={form.cartonDefaults} onChange={(cartonDefaults) => setForm((f) => ({ ...f, cartonDefaults }))} />
+              </Grid>
+            )}
+
+            <Grid item xs={12}>
+              <TextField fullWidth size="small" multiline minRows={2} label="Notes"
+                value={form.notes}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
+            </Grid>
           </Grid>
-        </Grid>
+        </Box>
 
-        <Box sx={{ mt: 4, display: 'flex', gap: 1.5 }}>
+        <Box
+          sx={{
+            flexShrink: 0,
+            px: 3,
+            py: 2,
+            borderTop: `1px solid ${slate[200]}`,
+            display: 'flex',
+            gap: 1.5,
+            bgcolor: 'background.paper',
+          }}
+        >
           <Button fullWidth variant="outlined" onClick={() => setDrawer(false)} sx={{ textTransform: 'none', fontWeight: 700 }}>
             Cancel
           </Button>
@@ -452,7 +519,6 @@ export default function TrimsLibraryPage() {
             sx={{ textTransform: 'none', fontWeight: 800 }}>
             {saving ? 'Saving…' : 'Save Trim'}
           </Button>
-        </Box>
         </Box>
       </Drawer>
     </Box>
