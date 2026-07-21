@@ -23,6 +23,13 @@ export const DOCUMENTATION_GUIDES = [
     embedUrl: 'https://www.youtube.com/embed/aL7nZbLOzAA',
   },
   {
+    id: 'supplier-po-fabric',
+    title: 'Creating a Fabric Supplier Purchase Order in FabriFlow',
+    category: 'Procurement',
+    description: 'Raise a fabric Supplier PO with material details, meters, rates, and terms.',
+    embedUrl: 'https://www.youtube.com/embed/evOUwyX4_Ho',
+  },
+  {
     id: 'buyer-po-and-pi',
     title: 'Creating Buyer Purchase Orders & Proforma Invoices',
     category: 'Buyer POs',
