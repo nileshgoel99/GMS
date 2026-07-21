@@ -174,7 +174,6 @@ function GridMeta({ bill }) {
     ['Supplier', bill.supplier_name],
     ['Supplier PO', bill.po_number || '—'],
     ['Bill Date', formatDateDisplay(bill.bill_date)],
-    ['Received', formatDateDisplay(bill.received_date)],
     ['Payment Terms', bill.payment_terms || '—'],
   ];
   return (

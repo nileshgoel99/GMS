@@ -86,10 +86,6 @@ export default function PurchaseBills() {
       renderCell: (p) => cell('left', <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{p.value || '—'}</Typography>),
     },
     {
-      field: 'received_date', headerName: 'Received', width: 110,
-      renderCell: (p) => cell('left', <Typography sx={{ fontSize: '0.82rem' }}>{formatDateDisplay(p.value)}</Typography>),
-    },
-    {
       field: 'payment_due_date', headerName: 'Payment Due', width: 120,
       renderCell: (p) => cell('left',
         <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: p.value ? 'warning.dark' : 'text.disabled' }}>

@@ -371,7 +371,7 @@ export default function PurchaseBillEditorPage() {
         supplier_name: form.supplier_name,
         purchase_order: form.purchase_order,
         bill_date: form.bill_date,
-        received_date: form.received_date || null,
+        received_date: form.bill_date || null,
         payment_terms: form.payment_terms,
         tax_mode: form.tax_mode,
         cgst_percent: parseFloat(form.cgst_percent) || 0,
@@ -493,27 +493,23 @@ export default function PurchaseBillEditorPage() {
           Document
         </Typography>
         <Grid container spacing={1.5}>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={12} sm={6} md={4}>
             <TextField fullWidth size="small" label="Internal Ref" value={form.internal_ref} InputProps={{ readOnly: true }} sx={sxInput} />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={12} sm={6} md={4}>
             <TextField fullWidth size="small" label="Supplier Bill No. *" value={form.bill_number}
               onChange={(e) => setForm((f) => ({ ...f, bill_number: e.target.value }))} sx={sxInput} />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={12} sm={6} md={4}>
             <TextField fullWidth size="small" type="date" label="Bill Date" InputLabelProps={{ shrink: true }}
               value={form.bill_date} onChange={(e) => setForm((f) => ({ ...f, bill_date: e.target.value }))} sx={sxInput} />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField fullWidth size="small" type="date" label="Material Received" InputLabelProps={{ shrink: true }}
-              value={form.received_date || ''} onChange={(e) => setForm((f) => ({ ...f, received_date: e.target.value }))} sx={sxInput} />
           </Grid>
         </Grid>
       </Paper>
 
       <Paper elevation={0} sx={{ ...sectionPaperSxByIndex(1), mt: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, gap: 1, flexWrap: 'wrap' }}>
-          <Typography sx={{ ...sectionLabelSx, fontSize: '0.75rem' }}>Material Received — Line Items</Typography>
+          <Typography sx={{ ...sectionLabelSx, fontSize: '0.75rem' }}>Line Items</Typography>
           {!form.purchase_order && (
             <Button size="small" startIcon={<Add />} onClick={addLine} sx={{ textTransform: 'none', fontWeight: 700 }}>
               Add Line

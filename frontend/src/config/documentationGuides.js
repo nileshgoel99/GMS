@@ -16,6 +16,13 @@ export const DOCUMENTATION_GUIDES = [
     embedUrl: 'https://www.youtube.com/embed/D5lqpJ2nY2I',
   },
   {
+    id: 'supplier-po-trim',
+    title: 'Creating a Supplier Purchase Order for a Trim',
+    category: 'Procurement',
+    description: 'Raise a trim Supplier PO from the library or indent lines, with quantities, rates, and terms.',
+    embedUrl: 'https://www.youtube.com/embed/aL7nZbLOzAA',
+  },
+  {
     id: 'buyer-po-and-pi',
     title: 'Creating Buyer Purchase Orders & Proforma Invoices',
     category: 'Buyer POs',
