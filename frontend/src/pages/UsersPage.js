@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Button, Typography, TextField, IconButton, Chip, MenuItem, Switch,
   FormControlLabel, Tabs, Tab, Checkbox, FormGroup, FormControlLabel as MuiFormControlLabel,
-  Tooltip,
+  Tooltip, Avatar,
 } from '@mui/material';
 import { Add, Edit, Delete, ManageAccounts, Security } from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
 import { DataGrid } from '@mui/x-data-grid';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
@@ -13,6 +14,29 @@ import { accountsAPI } from '../services/api';
 import { ALL_MODULES, moduleLabel } from '../config/permissions';
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
+
+const userInitials = (row) => {
+  const fn = (row.first_name || '').trim();
+  const ln = (row.last_name || '').trim();
+  if (fn || ln) {
+    return `${fn.charAt(0)}${ln.charAt(0) || fn.charAt(1) || ''}`.toUpperCase();
+  }
+  const u = (row.username || 'U').trim();
+  return u.slice(0, 2).toUpperCase();
+};
+
+const capitalizeWord = (s) => {
+  const t = String(s || '').trim();
+  if (!t) return '';
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
+
+const displayPersonName = (row) => {
+  const first = capitalizeWord(row.first_name);
+  const last = capitalizeWord(row.last_name);
+  const full = [first, last].filter(Boolean).join(' ');
+  return full || capitalizeWord(row.username) || '—';
+};
 
 const emptyUserForm = (roleId = '') => ({
   username: '',
@@ -232,7 +256,38 @@ export default function UsersPage() {
   };
 
   const userColumns = [
-    { field: 'username', headerName: 'Username', flex: 1, minWidth: 130 },
+    {
+      field: 'username',
+      headerName: 'User',
+      flex: 1.2,
+      minWidth: 180,
+      renderCell: ({ row }) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, width: '100%', height: '100%' }}>
+          <Avatar
+            sx={{
+              width: 32,
+              height: 32,
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              letterSpacing: '0.02em',
+              bgcolor: alpha('#0f766e', 0.12),
+              color: '#0f766e',
+              border: `1px solid ${alpha('#0f766e', 0.25)}`,
+            }}
+          >
+            {userInitials(row)}
+          </Avatar>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', lineHeight: 1.25, textTransform: 'capitalize' }}>
+              {displayPersonName(row)}
+            </Typography>
+            <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', lineHeight: 1.3 }}>
+              @{row.username}
+            </Typography>
+          </Box>
+        </Box>
+      ),
+    },
     { field: 'email', headerName: 'Email', flex: 1.2, minWidth: 160 },
     {
       field: 'role_label',
@@ -341,7 +396,15 @@ export default function UsersPage() {
             </Button>
           </Box>
           <DataGridShell>
-            <DataGrid rows={users} columns={userColumns} loading={loadingUsers} disableRowSelectionOnClick autoHeight sx={gridSx} />
+            <DataGrid
+              rows={users}
+              columns={userColumns}
+              loading={loadingUsers}
+              disableRowSelectionOnClick
+              autoHeight
+              rowHeight={56}
+              sx={gridSx}
+            />
           </DataGridShell>
         </>
       )}

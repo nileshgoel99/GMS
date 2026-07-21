@@ -4,28 +4,37 @@ import {
   Paper,
   Typography,
   Stack,
-  Divider,
 } from '@mui/material';
 import {
-  MenuBook,
   PlayArrow,
-  ChevronRight,
-  VideoLibrary,
+  PeopleOutline,
+  ReceiptLong,
+  AssignmentOutlined,
+  StorefrontOutlined,
+  LocalShippingOutlined,
 } from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
-import { slate, spectrum } from '../../theme/appTheme';
-import { DOCUMENTATION_GUIDES, guideCategories } from '../../config/documentationGuides';
+import { slate } from '../../theme/appTheme';
+import {
+  DOCUMENTATION_GUIDES,
+  guideCategories,
+} from '../../config/documentationGuides';
 
-const CATEGORY_ACCENT = {
-  Buyers: spectrum.indigo,
-  'Buyer POs': spectrum.emerald,
-  'Proforma Invoices': '#0f766e',
-  Indents: spectrum.amber,
+const CATEGORY_META = {
+  Buyers: { accent: '#0f766e', Icon: PeopleOutline, step: 1 },
+  'Buyers PO': { accent: '#0369a1', Icon: ReceiptLong, step: 2 },
+  Indents: { accent: '#b45309', Icon: AssignmentOutlined, step: 3 },
+  Suppliers: { accent: '#7c3aed', Icon: StorefrontOutlined, step: 4 },
+  Procurement: { accent: '#047857', Icon: LocalShippingOutlined, step: 5 },
 };
 
-const categoryAccent = (name) => CATEGORY_ACCENT[name] || spectrum.cyan;
+const categoryMeta = (name) => CATEGORY_META[name] || {
+  accent: slate[500],
+  Icon: PlayArrow,
+  step: 0,
+};
 
-/** Left navigation — professional guide index for documentation. */
+/** Left navigation — workflow-ordered guide index. */
 export default function DocumentationGuideNav({
   activeId,
   onSelect,
@@ -34,8 +43,6 @@ export default function DocumentationGuideNav({
 }) {
   const theme = useTheme();
   const categories = guideCategories(DOCUMENTATION_GUIDES);
-
-  let guideIndex = 0;
 
   return (
     <Paper
@@ -49,7 +56,8 @@ export default function DocumentationGuideNav({
         borderRadius: 2.5,
         border: `1px solid ${slate[200]}`,
         bgcolor: '#fff',
-        boxShadow: `0 4px 24px ${alpha(slate[900], 0.06)}`,
+        display: 'flex',
+        flexDirection: 'column',
         '&::-webkit-scrollbar': { width: 6 },
         '&::-webkit-scrollbar-thumb': {
           bgcolor: alpha(slate[400], 0.35),
@@ -57,90 +65,69 @@ export default function DocumentationGuideNav({
         },
       }}
     >
-      {/* Header */}
       <Box
         sx={{
-          px: 1.75,
-          pt: 1.5,
-          pb: 1.25,
-          background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(spectrum.indigo, 0.05)} 100%)`,
+          px: 2,
+          py: 1.75,
           borderBottom: `1px solid ${slate[200]}`,
+          bgcolor: alpha(theme.palette.primary.main, 0.04),
+          flexShrink: 0,
         }}
       >
-        <Stack direction="row" spacing={1.25} alignItems="center">
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: 1.5,
-              display: 'grid',
-              placeItems: 'center',
-              bgcolor: alpha(theme.palette.primary.main, 0.12),
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.22)}`,
-              color: 'primary.dark',
-            }}
-          >
-            <MenuBook sx={{ fontSize: 22 }} />
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              sx={{
-                fontWeight: 800,
-                fontSize: '0.95rem',
-                letterSpacing: '-0.02em',
-                color: slate[900],
-                lineHeight: 1.25,
-              }}
-            >
-              Guide library
-            </Typography>
-            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mt: 0.35 }}>
-              <VideoLibrary sx={{ fontSize: 14, color: slate[500] }} />
-              <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: slate[500] }}>
-                {DOCUMENTATION_GUIDES.length} video guides
-              </Typography>
-            </Stack>
-          </Box>
-        </Stack>
+        <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', letterSpacing: '-0.02em', color: slate[900] }}>
+          Learning path
+        </Typography>
+        <Typography sx={{ mt: 0.4, fontSize: '0.75rem', color: slate[500], lineHeight: 1.45, fontWeight: 500 }}>
+          Follow the steps in order — from buyers to supplier POs.
+        </Typography>
       </Box>
 
-      {/* Categories + guides */}
-      <Box sx={{ p: 1.5 }}>
-        {categories.map((category, catIdx) => {
-          const accent = categoryAccent(category);
+      <Box sx={{ p: 1.5, flex: 1 }}>
+        {categories.map((category) => {
+          const meta = categoryMeta(category);
+          const Icon = meta.Icon;
           const guides = DOCUMENTATION_GUIDES.filter((g) => g.category === category);
+          const hasActive = guides.some((g) => g.id === activeId);
 
           return (
-            <Box key={category} sx={{ mb: catIdx < categories.length - 1 ? 2 : 0 }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 0.75, mb: 1 }}>
+            <Box key={category} sx={{ mb: 2 }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 0.5, mb: 1 }}>
                 <Box
                   sx={{
-                    width: 3,
-                    height: 14,
-                    borderRadius: 999,
-                    bgcolor: accent,
+                    width: 26,
+                    height: 26,
+                    borderRadius: 1.25,
+                    display: 'grid',
+                    placeItems: 'center',
+                    bgcolor: alpha(meta.accent, hasActive ? 0.18 : 0.1),
+                    color: meta.accent,
                     flexShrink: 0,
                   }}
-                />
-                <Typography
-                  sx={{
-                    fontSize: '0.68rem',
-                    fontWeight: 800,
-                    letterSpacing: '0.1em',
-                    textTransform: 'uppercase',
-                    color: slate[600],
-                  }}
                 >
-                  {category}
-                </Typography>
+                  <Icon sx={{ fontSize: 15 }} />
+                </Box>
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography
+                    sx={{
+                      fontSize: '0.62rem',
+                      fontWeight: 800,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: slate[500],
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    Step {meta.step || '—'}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.8rem', fontWeight: 800, color: slate[800], lineHeight: 1.25 }}>
+                    {category}
+                  </Typography>
+                </Box>
               </Stack>
 
-              <Stack spacing={0.75}>
-                {guides.map((guide) => {
-                  guideIndex += 1;
-                  const step = guideIndex;
+              <Stack spacing={0.6}>
+                {guides.map((guide, idx) => {
                   const selected = guide.id === activeId;
-
                   return (
                     <Box
                       key={guide.id}
@@ -153,93 +140,69 @@ export default function DocumentationGuideNav({
                         textAlign: 'left',
                         cursor: 'pointer',
                         font: 'inherit',
-                        fontFamily: 'inherit',
                         outline: 'none',
                         p: 0,
-                        borderRadius: 2,
-                        bgcolor: selected ? alpha(theme.palette.primary.main, 0.07) : 'transparent',
-                        boxShadow: selected
-                          ? `inset 3px 0 0 0 ${theme.palette.primary.main}, 0 2px 8px ${alpha(theme.palette.primary.main, 0.08)}`
-                          : 'none',
-                        border: `1px solid ${selected ? alpha(theme.palette.primary.main, 0.28) : slate[200]}`,
-                        transition: 'background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+                        borderRadius: 1.75,
+                        bgcolor: selected ? alpha(meta.accent, 0.1) : slate[50],
+                        border: `1px solid ${selected ? alpha(meta.accent, 0.45) : slate[200]}`,
+                        boxShadow: selected ? `inset 3px 0 0 0 ${meta.accent}` : 'none',
+                        transition: 'background-color 0.15s ease, border-color 0.15s ease',
                         '&:hover': {
-                          bgcolor: selected
-                            ? alpha(theme.palette.primary.main, 0.09)
-                            : alpha(slate[100], 0.8),
-                          borderColor: selected
-                            ? alpha(theme.palette.primary.main, 0.35)
-                            : slate[300],
+                          bgcolor: selected ? alpha(meta.accent, 0.14) : alpha(slate[100], 0.95),
+                          borderColor: selected ? alpha(meta.accent, 0.55) : slate[300],
                         },
                       }}
                     >
-                      <Stack direction="row" spacing={1.25} sx={{ p: 1.25, alignItems: 'flex-start' }}>
+                      <Stack direction="row" spacing={1} sx={{ px: 1.25, py: 1.1, alignItems: 'flex-start' }}>
                         <Box
                           sx={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 1,
+                            mt: 0.15,
+                            width: 22,
+                            height: 22,
+                            borderRadius: '50%',
                             flexShrink: 0,
                             display: 'grid',
                             placeItems: 'center',
-                            fontSize: '0.72rem',
+                            bgcolor: selected ? meta.accent : '#fff',
+                            color: selected ? '#fff' : meta.accent,
+                            border: `1px solid ${alpha(meta.accent, 0.35)}`,
+                            fontSize: '0.65rem',
                             fontWeight: 800,
-                            fontVariantNumeric: 'tabular-nums',
-                            bgcolor: selected ? theme.palette.primary.main : alpha(accent, 0.12),
-                            color: selected ? '#fff' : accent,
-                            border: `1px solid ${selected ? theme.palette.primary.dark : alpha(accent, 0.25)}`,
                           }}
                         >
-                          {String(step).padStart(2, '0')}
+                          {selected ? <PlayArrow sx={{ fontSize: 14 }} /> : idx + 1}
                         </Box>
-
                         <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={0.5}>
-                            <Typography
-                              sx={{
-                                fontWeight: selected ? 800 : 700,
-                                fontSize: '0.8125rem',
-                                lineHeight: 1.4,
-                                letterSpacing: '-0.015em',
-                                color: selected ? slate[900] : slate[800],
-                              }}
-                            >
-                              {guide.title}
-                            </Typography>
-                            <ChevronRight
-                              sx={{
-                                fontSize: 18,
-                                mt: 0.1,
-                                flexShrink: 0,
-                                color: selected ? 'primary.main' : slate[400],
-                                opacity: selected ? 1 : 0.6,
-                              }}
-                            />
-                          </Stack>
-                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.5 }}>
-                            <PlayArrow sx={{ fontSize: 14, color: selected ? 'primary.main' : slate[400] }} />
-                            <Typography
-                              sx={{
-                                fontSize: '0.65rem',
-                                fontWeight: 700,
-                                letterSpacing: '0.04em',
-                                textTransform: 'uppercase',
-                                color: selected ? 'primary.dark' : slate[400],
-                              }}
-                            >
-                              Video guide
-                            </Typography>
-                          </Stack>
+                          <Typography
+                            sx={{
+                              fontWeight: selected ? 800 : 700,
+                              fontSize: '0.8rem',
+                              lineHeight: 1.35,
+                              color: slate[900],
+                            }}
+                          >
+                            {guide.title}
+                          </Typography>
+                          <Typography
+                            sx={{
+                              mt: 0.35,
+                              fontSize: '0.7rem',
+                              lineHeight: 1.4,
+                              color: slate[500],
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            {guide.description}
+                          </Typography>
                         </Box>
                       </Stack>
                     </Box>
                   );
                 })}
               </Stack>
-
-              {catIdx < categories.length - 1 && (
-                <Divider sx={{ mt: 2, borderColor: alpha(slate[200], 0.9) }} />
-              )}
             </Box>
           );
         })}

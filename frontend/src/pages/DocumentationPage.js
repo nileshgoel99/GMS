@@ -8,12 +8,19 @@ import {
   useMediaQuery,
   MenuItem,
   TextField,
+  Divider,
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
+import { PlayCircleOutline } from '@mui/icons-material';
+import { useTheme, alpha } from '@mui/material/styles';
 import PageHeader from '../components/PageHeader';
 import DocumentationGuideNav from '../components/documentation/DocumentationGuideNav';
 import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
-import { DOCUMENTATION_GUIDES } from '../config/documentationGuides';
+import {
+  DOCUMENTATION_GUIDES,
+  guidesInCategoryOrder,
+} from '../config/documentationGuides';
+
+const orderedGuides = () => guidesInCategoryOrder(DOCUMENTATION_GUIDES);
 
 const VideoEmbed = ({ src, title, fill = false }) => (
   <Box
@@ -23,7 +30,7 @@ const VideoEmbed = ({ src, title, fill = false }) => (
       borderRadius: 2,
       overflow: 'hidden',
       border: `1px solid ${slate[200]}`,
-      bgcolor: '#000',
+      bgcolor: '#0f172a',
       ...(fill
         ? {
             flex: 1,
@@ -66,19 +73,25 @@ const VideoEmbed = ({ src, title, fill = false }) => (
 export default function DocumentationPage({ viewportOffset = 200 }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [activeId, setActiveId] = useState(DOCUMENTATION_GUIDES[0]?.id || '');
+  const guides = useMemo(() => orderedGuides(), []);
+  const [activeId, setActiveId] = useState(guides[0]?.id || '');
 
   const activeGuide = useMemo(
-    () => DOCUMENTATION_GUIDES.find((g) => g.id === activeId) || DOCUMENTATION_GUIDES[0],
-    [activeId],
+    () => guides.find((g) => g.id === activeId) || guides[0],
+    [activeId, guides],
   );
+
+  const activeStep = useMemo(() => {
+    const idx = guides.findIndex((g) => g.id === activeGuide?.id);
+    return idx >= 0 ? idx + 1 : 1;
+  }, [guides, activeGuide]);
 
   useEffect(() => {
     const hash = window.location.hash.replace('#', '');
-    if (hash && DOCUMENTATION_GUIDES.some((g) => g.id === hash)) {
+    if (hash && guides.some((g) => g.id === hash)) {
       setActiveId(hash);
     }
-  }, []);
+  }, [guides]);
 
   const selectGuide = (id) => {
     setActiveId(id);
@@ -94,14 +107,19 @@ export default function DocumentationPage({ viewportOffset = 200 }) {
         maxHeight: { md: `calc(100dvh - ${viewportOffset}px)` },
       }}
     >
-      <PageHeader kicker="Help" title="Documentation" compact />
+      <PageHeader
+        kicker="Help"
+        title="Documentation"
+        subtitle="Watch short videos in workflow order: Buyers → Buyers PO → Indents → Suppliers → Procurement"
+        compact
+      />
 
       {isMobile && (
         <TextField
           select
           fullWidth
           size="small"
-          label="Select guide"
+          label="Choose a guide"
           value={activeGuide?.id || ''}
           onChange={(e) => selectGuide(e.target.value)}
           sx={{
@@ -110,11 +128,11 @@ export default function DocumentationPage({ viewportOffset = 200 }) {
             '& .MuiInputLabel-root': { fontWeight: 600 },
           }}
         >
-          {DOCUMENTATION_GUIDES.map((guide, i) => (
-            <MenuItem key={guide.id} value={guide.id} sx={{ py: 1.25 }}>
+          {guides.map((guide, i) => (
+            <MenuItem key={guide.id} value={guide.id} sx={{ py: 1.25, alignItems: 'flex-start' }}>
               <Stack spacing={0.25}>
                 <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, color: 'primary.main', letterSpacing: '0.06em' }}>
-                  GUIDE {String(i + 1).padStart(2, '0')} · {guide.category.toUpperCase()}
+                  {String(i + 1).padStart(2, '0')} · {guide.category.toUpperCase()}
                 </Typography>
                 <Typography sx={{ fontSize: '0.84rem', fontWeight: 700 }}>{guide.title}</Typography>
               </Stack>
@@ -128,10 +146,10 @@ export default function DocumentationPage({ viewportOffset = 200 }) {
           flex: 1,
           minHeight: 0,
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'minmax(272px, 300px) 1fr' },
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(280px, 320px) 1fr' },
           gap: { xs: 1.5, md: 2 },
           alignItems: 'stretch',
-          mt: { xs: 0, md: 1 },
+          mt: { xs: 0, md: 0.5 },
         }}
       >
         {!isMobile && (
@@ -146,7 +164,7 @@ export default function DocumentationPage({ viewportOffset = 200 }) {
           elevation={0}
           sx={{
             ...sectionPaperSxByIndex(1),
-            p: { xs: 1.25, sm: 1.5 },
+            p: { xs: 1.5, sm: 2 },
             display: 'flex',
             flexDirection: 'column',
             minHeight: 0,
@@ -155,44 +173,60 @@ export default function DocumentationPage({ viewportOffset = 200 }) {
         >
           {activeGuide && (
             <>
-              <Stack
-                direction="row"
-                spacing={1}
-                alignItems="center"
-                sx={{ mb: 1, flexShrink: 0, minWidth: 0, gap: 1 }}
-              >
-                <Chip
-                  label={activeGuide.category}
-                  size="small"
-                  color="primary"
-                  variant="outlined"
-                  sx={{ fontWeight: 700, fontSize: '0.7rem', height: 24, flexShrink: 0 }}
-                />
+              <Box sx={{ flexShrink: 0, mb: 1.5 }}>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 0.75 }}>
+                  <Chip
+                    label={`Guide ${activeStep} of ${guides.length}`}
+                    size="small"
+                    sx={{
+                      fontWeight: 800,
+                      fontSize: '0.68rem',
+                      height: 24,
+                      bgcolor: alpha(theme.palette.primary.main, 0.1),
+                      color: 'primary.dark',
+                    }}
+                  />
+                  <Chip
+                    label={activeGuide.category}
+                    size="small"
+                    variant="outlined"
+                    color="primary"
+                    sx={{ fontWeight: 700, fontSize: '0.7rem', height: 24 }}
+                  />
+                </Stack>
                 <Typography
-                  variant="subtitle2"
-                  fontWeight={800}
                   sx={{
-                    flex: 1,
-                    minWidth: 0,
-                    lineHeight: 1.3,
+                    fontWeight: 800,
+                    fontSize: { xs: '1.05rem', sm: '1.2rem' },
                     letterSpacing: '-0.02em',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    lineHeight: 1.3,
+                    color: slate[900],
                   }}
                 >
                   {activeGuide.title}
                 </Typography>
-              </Stack>
-              {isMobile && (
                 <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 1.25, lineHeight: 1.5, flexShrink: 0 }}
+                  sx={{
+                    mt: 0.75,
+                    fontSize: '0.875rem',
+                    lineHeight: 1.55,
+                    color: slate[600],
+                    maxWidth: 640,
+                  }}
                 >
                   {activeGuide.description}
                 </Typography>
-              )}
+              </Box>
+
+              <Divider sx={{ mb: 1.5, borderColor: slate[200], flexShrink: 0 }} />
+
+              <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 1, flexShrink: 0 }}>
+                <PlayCircleOutline sx={{ fontSize: 18, color: 'primary.main' }} />
+                <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: slate[500], letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Watch the video
+                </Typography>
+              </Stack>
+
               <VideoEmbed
                 src={activeGuide.embedUrl}
                 title={activeGuide.title}
