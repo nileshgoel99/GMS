@@ -191,7 +191,7 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
         items = (
             BuyerPOLine.objects
             .filter(id__in=latest_ids)
-            .values('item_code', 'item_name', 'fabric')
+            .values('item_code', 'item_name', 'fabric', 'color')
             .order_by('item_code')
         )
         return Response(list(items))

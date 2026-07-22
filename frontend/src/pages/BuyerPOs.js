@@ -257,10 +257,9 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
 
                   {/* Line body */}
                   <Box sx={{ px: 2, py: 1.5 }}>
-                    {(line.fabric || line.delivery_date) && (
+                    {line.fabric && (
                       <Grid container spacing={2} sx={{ mb: line.size_breakdown?.length ? 1.5 : 0 }}>
-                        {line.fabric        && <Grid item xs={12} sm={6}><F label="Fabric" value={line.fabric} /></Grid>}
-                        {line.delivery_date && <Grid item xs={6}  sm={3}><F label="Delivery Date" value={line.delivery_date} /></Grid>}
+                        <Grid item xs={12} sm={6}><F label="Fabric" value={line.fabric} /></Grid>
                       </Grid>
                     )}
                     {(line.size_breakdown || []).length > 0 && (

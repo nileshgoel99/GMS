@@ -61,7 +61,7 @@ const SECTIONS = [
 ];
 
 // ── Default structures ────────────────────────────────────────────────────────
-const MIN_SIZE_ROWS = 3;
+const MIN_SIZE_ROWS = 8;
 
 const emptySizeRows = (count = MIN_SIZE_ROWS) =>
   Array.from({ length: count }, () => ({ size: '', qty: '', product_code: '' }));
@@ -76,7 +76,7 @@ const padSizeRows = (rows) => {
   return next;
 };
 
-const emptyLine = (exFactoryDate = '') => ({
+const emptyLine = () => ({
   _key: Date.now() + Math.random(),
   item_code: '',
   item_name: '',
@@ -88,7 +88,7 @@ const emptyLine = (exFactoryDate = '') => ({
   uom: 'PCS',
   unit_price: '',
   discount: '',
-  delivery_date: exFactoryDate,
+  delivery_date: '',
   notes: '',
 });
 
@@ -145,6 +145,123 @@ const lineAmt = (line) => {
 const fmtNum   = (n) => (n == null || n === '' ? '—' : Number(n).toLocaleString());
 const fmtMoney = (n, ccy = 'USD') =>
   n == null ? '—' : `${ccy} ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** Map common garment colour names → hex for the preview swatch. */
+const COLOUR_SWATCH_MAP = {
+  black: '#111827',
+  white: '#f8fafc',
+  'off white': '#f5f5f0',
+  'off-white': '#f5f5f0',
+  ivory: '#fffff0',
+  cream: '#fffdd0',
+  beige: '#f5f5dc',
+  ecru: '#c2b280',
+  khaki: '#c3b091',
+  camel: '#c19a6b',
+  tan: '#d2b48c',
+  brown: '#92400e',
+  chocolate: '#7b3f00',
+  coffee: '#6f4e37',
+  grey: '#6b7280',
+  gray: '#6b7280',
+  'light grey': '#d1d5db',
+  'light gray': '#d1d5db',
+  'dark grey': '#374151',
+  'dark gray': '#374151',
+  charcoal: '#374151',
+  silver: '#c0c0c0',
+  navy: '#1e3a8a',
+  'navy blue': '#1e3a5f',
+  blue: '#2563eb',
+  'royal blue': '#4169e1',
+  'sky blue': '#87ceeb',
+  'light blue': '#93c5fd',
+  indigo: '#4338ca',
+  teal: '#0d9488',
+  turquoise: '#40e0d0',
+  aqua: '#00ffff',
+  cyan: '#06b6d4',
+  green: '#16a34a',
+  'forest green': '#228b22',
+  'olive green': '#556b2f',
+  olive: '#808000',
+  'army green': '#4b5320',
+  sage: '#9dc183',
+  mint: '#98ff98',
+  yellow: '#eab308',
+  mustard: '#e1ad01',
+  gold: '#d4af37',
+  orange: '#f97316',
+  coral: '#ff7f50',
+  peach: '#ffcba4',
+  red: '#dc2626',
+  burgundy: '#800020',
+  maroon: '#800000',
+  wine: '#722f37',
+  pink: '#ec4899',
+  'hot pink': '#ff69b4',
+  rose: '#f43f5e',
+  purple: '#7c3aed',
+  lavender: '#e6e6fa',
+  lilac: '#c8a2c8',
+  violet: '#8b5cf6',
+  magenta: '#d946ef',
+};
+
+const resolveColourSwatch = (input) => {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(raw)) return raw;
+
+  const key = raw.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (COLOUR_SWATCH_MAP[key]) return COLOUR_SWATCH_MAP[key];
+
+  // Browser-named CSS colours (e.g. "rebeccapurple")
+  if (typeof document !== 'undefined') {
+    const style = new Option().style;
+    style.color = key;
+    if (style.color) return key;
+
+    // Fall back to known tokens inside multi-word labels ("DEEP NAVY BLUE")
+    const parts = key.split(' ').filter(Boolean);
+    for (let i = 0; i < parts.length; i += 1) {
+      const slice = parts.slice(i).join(' ');
+      if (COLOUR_SWATCH_MAP[slice]) return COLOUR_SWATCH_MAP[slice];
+      style.color = '';
+      style.color = slice;
+      if (style.color) return slice;
+    }
+    for (let i = parts.length - 1; i >= 0; i -= 1) {
+      if (COLOUR_SWATCH_MAP[parts[i]]) return COLOUR_SWATCH_MAP[parts[i]];
+      style.color = '';
+      style.color = parts[i];
+      if (style.color) return parts[i];
+    }
+  }
+  return null;
+};
+
+const ColourSwatch = ({ color, size = 16 }) => {
+  const swatch = resolveColourSwatch(color);
+  if (!swatch) return null;
+  const isLight = /^(#fff|#f8fafc|white|ivory|cream|off)/i.test(String(swatch));
+  return (
+    <Box
+      component="span"
+      title={color}
+      sx={{
+        display: 'inline-block',
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        bgcolor: swatch,
+        border: `1px solid ${isLight ? slate[300] : alpha(slate[900], 0.2)}`,
+        boxShadow: `inset 0 0 0 1px ${alpha('#fff', 0.15)}`,
+        flexShrink: 0,
+      }}
+    />
+  );
+};
 
 // ── Style helpers ─────────────────────────────────────────────────────────────
 const canvasSx = (theme) => ({
@@ -253,7 +370,7 @@ const darkInputSx = {
 };
 
 // ── Single line item card ─────────────────────────────────────────────────────
-function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatalogue, exFactoryDate }) {
+function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatalogue }) {
   const [showNotes, setShowNotes] = useState(false);
 
   const setSizeQty  = (si, val) =>
@@ -355,13 +472,17 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
             <Chip
               label={line.color}
               size="small"
+              {...(resolveColourSwatch(line.color)
+                ? { icon: <ColourSwatch color={line.color} size={12} /> }
+                : {})}
               sx={{ 
                 fontWeight: 700, 
                 bgcolor: '#fff', 
                 border: `1px solid ${slate[200]}`,
                 color: slate[600],
                 height: 24,
-                '& .MuiChip-label': { px: 1 }
+                '& .MuiChip-label': { px: 1 },
+                '& .MuiChip-icon': { ml: 0.75, mr: -0.25 },
               }}
             />
           )}
@@ -401,136 +522,130 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
         </Box>
       </Box>
 
-      {/* ── Card body ─── */}
-      <Box sx={{ p: 3 }}>
-        {/* Row 1: code, name, colour */}
-        <Grid container spacing={2.5} sx={{ mb: 2.5 }}>
-          <Grid item xs={12} sm={3}>
-            <Autocomplete
-              freeSolo
-              options={itemCatalogue}
-              getOptionLabel={(opt) => (typeof opt === 'string' ? opt : opt.item_code)}
-              filterOptions={(opts, { inputValue }) =>
-                opts.filter((o) =>
-                  o.item_code.toLowerCase().includes(inputValue.toLowerCase())
-                )
-              }
-              value={line.item_code}
-              inputValue={line.item_code}
-              onInputChange={(_, val) => onChange({ item_code: val })}
-              onChange={(_, selected) => {
-                if (selected && typeof selected === 'object') {
-                  onChange({
-                    item_code:  selected.item_code,
-                    item_name:  line.item_name  || selected.item_name,
-                    fabric:     line.fabric     || selected.fabric,
-                  });
+      {/* ── Card body: item fields | size breakdown ─── */}
+      <Box sx={{ p: { xs: 2, sm: 2.5 } }}>
+        <Grid container spacing={2.5} alignItems="flex-start">
+          {/* Left: item details column */}
+          <Grid item xs={12} md={5}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+              <Autocomplete
+                freeSolo
+                options={itemCatalogue}
+                getOptionLabel={(opt) => (typeof opt === 'string' ? opt : opt.item_code)}
+                filterOptions={(opts, { inputValue }) =>
+                  opts.filter((o) =>
+                    o.item_code.toLowerCase().includes(inputValue.toLowerCase())
+                  )
                 }
-              }}
-              renderOption={(props, opt) => (
-                <Box component="li" {...props} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', py: 1 }}>
-                  <Typography sx={{ fontFamily: '"IBM Plex Mono", monospace', fontWeight: 700, fontSize: '0.85rem', color: theme.palette.primary.main }}>
-                    {opt.item_code}
-                  </Typography>
-                  {opt.item_name && (
-                    <Typography sx={{ fontSize: '0.75rem', color: slate[500] }}>{opt.item_name}</Typography>
-                  )}
-                  {opt.fabric && (
-                    <Typography sx={{ fontSize: '0.68rem', color: slate[400] }}>{opt.fabric}</Typography>
-                  )}
-                </Box>
-              )}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  fullWidth
-                  label="Item Code"
-                  placeholder="e.g. V181-0-02A"
-                  sx={fieldSx}
-                />
-              )}
-            />
+                value={line.item_code}
+                inputValue={line.item_code}
+                onInputChange={(_, val) => onChange({ item_code: val })}
+                onChange={(_, selected) => {
+                  if (selected && typeof selected === 'object') {
+                    onChange({
+                      item_code: selected.item_code,
+                      item_name: line.item_name || selected.item_name || '',
+                      fabric:    line.fabric    || selected.fabric    || '',
+                      color:     line.color     || selected.color     || '',
+                    });
+                  }
+                }}
+                renderOption={(props, opt) => (
+                  <Box component="li" {...props} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', py: 1 }}>
+                    <Typography sx={{ fontFamily: '"IBM Plex Mono", monospace', fontWeight: 700, fontSize: '0.85rem', color: theme.palette.primary.main }}>
+                      {opt.item_code}
+                    </Typography>
+                    {opt.item_name && (
+                      <Typography sx={{ fontSize: '0.75rem', color: slate[500] }}>{opt.item_name}</Typography>
+                    )}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25 }}>
+                      {opt.color && (
+                        <>
+                          <ColourSwatch color={opt.color} size={10} />
+                          <Typography sx={{ fontSize: '0.68rem', color: slate[500] }}>{opt.color}</Typography>
+                        </>
+                      )}
+                      {opt.fabric && (
+                        <Typography sx={{ fontSize: '0.68rem', color: slate[400] }}>{opt.fabric}</Typography>
+                      )}
+                    </Box>
+                  </Box>
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    size="small"
+                    fullWidth
+                    label="Item Code"
+                    placeholder="e.g. V181-0-02A"
+                    sx={fieldSx}
+                  />
+                )}
+              />
+              <TextField
+                size="small"
+                fullWidth
+                required
+                label="Item Name"
+                value={line.item_name}
+                onChange={(e) => onChange({ item_name: e.target.value })}
+                placeholder='e.g. TROUSERS "RABAT"'
+                sx={fieldSx}
+              />
+              <TextField
+                size="small"
+                fullWidth
+                label="Colour"
+                value={line.color}
+                onChange={(e) => onChange({ color: e.target.value })}
+                placeholder="e.g. NAVY BLUE"
+                InputProps={{
+                  endAdornment: resolveColourSwatch(line.color) ? (
+                    <InputAdornment position="end">
+                      <ColourSwatch color={line.color} size={18} />
+                    </InputAdornment>
+                  ) : null,
+                }}
+                sx={fieldSx}
+              />
+              <TextField
+                size="small"
+                fullWidth
+                label="Fabric / Composition"
+                value={line.fabric}
+                onChange={(e) => onChange({ fabric: e.target.value })}
+                placeholder="e.g. 65% polyester / 35% cotton 245gr./sqm"
+                multiline
+                minRows={1}
+                maxRows={3}
+                sx={fieldSx}
+              />
+            </Box>
           </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              size="small"
-              fullWidth
-              required
-              label="Item Name"
-              value={line.item_name}
-              onChange={(e) => onChange({ item_name: e.target.value })}
-              placeholder='e.g. TROUSERS "RABAT"'
-              sx={fieldSx}
-            />
-          </Grid>
-          <Grid item xs={12} sm={3}>
-            <TextField
-              size="small"
-              fullWidth
-              label="Colour"
-              value={line.color}
-              onChange={(e) => onChange({ color: e.target.value })}
-              placeholder="e.g. NAVY BLUE"
-              sx={fieldSx}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              size="small"
-              fullWidth
-              label="Fabric / Composition"
-              value={line.fabric}
-              onChange={(e) => onChange({ fabric: e.target.value })}
-              placeholder="e.g. 65% polyester / 35% cotton 245gr./sqm"
-              helperText="Auto-filled from item code history — edit freely"
-              FormHelperTextProps={{ sx: { display: line.fabric ? 'block' : 'none', fontSize: '0.68rem', color: slate[400] } }}
-              sx={fieldSx}
-            />
-          </Grid>
-        </Grid>
 
-        {/* Delivery date + size grid side by side */}
-        <Grid container spacing={2.5} sx={{ mb: 1 }} alignItems="flex-start">
-          <Grid item xs={12} sm={4} md={3}>
-            <TextField
-              size="small"
-              fullWidth
-              label="Delivery Date"
-              type="date"
-              value={line.delivery_date}
-              onChange={(e) => onChange({ delivery_date: e.target.value })}
-              InputLabelProps={{ shrink: true }}
-              helperText={exFactoryDate && line.delivery_date === exFactoryDate ? 'Pre-filled from Ex-Factory date' : ' '}
-              FormHelperTextProps={{ sx: { fontSize: '0.68rem', color: slate[400] } }}
-              sx={fieldSx}
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  size="small"
-                  checked={showProductCode}
-                  onChange={(e) => onChange({ size_level_codes: e.target.checked })}
-                />
-              }
-              label={
-                <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: slate[700] }}>
-                  Add size-level PRODUCT code
-                </Typography>
-              }
-              sx={{ mt: 0.5, ml: 0.25, alignItems: 'center' }}
-            />
-          </Grid>
-          <Grid item xs={12} sm={8} md={9}>
-            <Box sx={{
-              borderRadius: 1.5,
-              border: `1px solid ${slate[300]}`,
-              overflow: 'hidden',
-              bgcolor: '#fff',
-              width: '100%',
-              maxWidth: showProductCode ? 520 : 360,
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.75, bgcolor: slate[50], borderBottom: `1px solid ${slate[200]}` }}>
+          {/* Right: size breakdown */}
+          <Grid item xs={12} md={7}>
+            <Box
+              sx={{
+                borderRadius: 1.5,
+                border: `1px solid ${slate[300]}`,
+                overflow: 'hidden',
+                bgcolor: '#fff',
+                width: '100%',
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 1,
+                  px: 1.5,
+                  py: 0.85,
+                  bgcolor: slate[50],
+                  borderBottom: `1px solid ${slate[200]}`,
+                }}
+              >
                 <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: slate[500] }}>
                   Size breakdown
                 </Typography>
@@ -539,6 +654,21 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
                     · {fmtNum(qty)} pcs
                   </Typography>
                 )}
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={showProductCode}
+                      onChange={(e) => onChange({ size_level_codes: e.target.checked })}
+                    />
+                  }
+                  label={
+                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: slate[600] }}>
+                      Add size-level PRODUCT code
+                    </Typography>
+                  }
+                  sx={{ ml: 'auto', mr: 0 }}
+                />
               </Box>
 
               <Box
@@ -560,17 +690,17 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
                 <Box component="thead">
                   <Box component="tr" sx={{ bgcolor: '#e8f0e4' }}>
                     {showProductCode && (
-                      <Box component="th" sx={{ width: '42%', py: 0.65, textAlign: 'center', fontSize: '0.65rem', fontWeight: 800, color: slate[600], letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                      <Box component="th" sx={{ width: '40%', py: 0.7, textAlign: 'center', fontSize: '0.65rem', fontWeight: 800, color: slate[600], letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                         Product code
                       </Box>
                     )}
-                    <Box component="th" sx={{ width: showProductCode ? '24%' : '44%', py: 0.65, textAlign: 'center', fontSize: '0.65rem', fontWeight: 800, color: slate[600], letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                    <Box component="th" sx={{ width: showProductCode ? '25%' : '48%', py: 0.7, textAlign: 'center', fontSize: '0.65rem', fontWeight: 800, color: slate[600], letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                       Size
                     </Box>
-                    <Box component="th" sx={{ width: showProductCode ? '24%' : '44%', py: 0.65, textAlign: 'center', fontSize: '0.65rem', fontWeight: 800, color: slate[600], letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                    <Box component="th" sx={{ width: showProductCode ? '25%' : '48%', py: 0.7, textAlign: 'center', fontSize: '0.65rem', fontWeight: 800, color: slate[600], letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                       Qty
                     </Box>
-                    <Box component="th" sx={{ width: 36 }} />
+                    <Box component="th" sx={{ width: 40 }} />
                   </Box>
                 </Box>
                 <Box component="tbody">
@@ -597,7 +727,7 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
                               fontWeight: 600,
                               fontSize: '0.8rem',
                               color: slate[800],
-                              padding: '8px 8px',
+                              padding: '9px 10px',
                               fontFamily: 'inherit',
                               textAlign: 'left',
                               boxSizing: 'border-box',
@@ -621,7 +751,7 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
                             textTransform: 'uppercase',
                             letterSpacing: '0.02em',
                             color: slate[800],
-                            padding: '8px 6px',
+                            padding: '9px 6px',
                             fontFamily: 'inherit',
                             textAlign: 'center',
                             boxSizing: 'border-box',
@@ -644,7 +774,7 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
                             fontWeight: 700,
                             fontSize: '0.85rem',
                             color: slate[900],
-                            padding: '8px 6px',
+                            padding: '9px 6px',
                             fontFamily: 'inherit',
                             textAlign: 'center',
                             boxSizing: 'border-box',
@@ -684,7 +814,7 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 0.5,
-                  py: 0.65,
+                  py: 0.75,
                   borderTop: `1px solid ${slate[200]}`,
                   bgcolor: slate[50],
                   cursor: 'pointer',
@@ -878,7 +1008,7 @@ export default function BuyerPOEditorPage() {
   const [uploading, setUploading]   = useState(false);
   const [sectionTab, setSectionTab] = useState(0);
   const [formData, setFormData]     = useState(emptyForm());
-  const [lines, setLines]           = useState([emptyLine('')]);
+  const [lines, setLines]           = useState([emptyLine()]);
   
   // Section expansion state
   const [expanded, setExpanded] = useState({
@@ -1049,16 +1179,12 @@ export default function BuyerPOEditorPage() {
   // Form field helpers
   const setField = (key, val) => {
     setFormData((f) => ({ ...f, [key]: val }));
-    // When ex_factory_date changes, pre-fill any line that still has no delivery date
-    if (key === 'ex_factory_date' && val) {
-      setLines((ls) => ls.map((l) => l.delivery_date ? l : { ...l, delivery_date: val }));
-    }
   };
 
   const updateLine = (idx, patch) =>
     setLines((ls) => ls.map((l, i) => i === idx ? { ...l, ...patch } : l));
 
-  const addLine    = () => setLines((ls) => [...ls, emptyLine(formData.ex_factory_date)]);
+  const addLine    = () => setLines((ls) => [...ls, emptyLine()]);
   const removeLine = (idx) => setLines((ls) => ls.filter((_, i) => i !== idx));
 
   // Save — returns the saved PO id (used by both save buttons)
@@ -1566,7 +1692,6 @@ export default function BuyerPOEditorPage() {
                 idx={idx}
                 theme={theme}
                 itemCatalogue={itemCatalogue}
-                exFactoryDate={formData.ex_factory_date}
                 onChange={(patch) => updateLine(idx, patch)}
                 onRemove={() => removeLine(idx)}
                 canRemove={lines.length > 1}
