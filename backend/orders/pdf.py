@@ -31,7 +31,9 @@ TABLE_GRID = colors.HexColor('#94a3b8')
 
 
 def _fmt_size_breakdown(size_breakdown, qty_pcs: int) -> str:
-    rows = size_breakdown or []
+    from .size_utils import sort_size_breakdown_entries
+
+    rows = sort_size_breakdown_entries(size_breakdown or [])
     parts = []
     for row in rows:
         if not isinstance(row, dict):

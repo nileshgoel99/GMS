@@ -29,6 +29,7 @@ import DataGridShell from '../components/DataGridShell';
 import { dataGridSx, slate, warm } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import { ordersAPI } from '../services/api';
+import { sortSizeBreakdownEntries } from '../utils/normalizeGarmentSize';
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = [
@@ -262,21 +263,24 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                         <Grid item xs={12} sm={6}><F label="Fabric" value={line.fabric} /></Grid>
                       </Grid>
                     )}
-                    {(line.size_breakdown || []).length > 0 && (
+                    {(line.size_breakdown || []).length > 0 && (() => {
+                      const sizes = sortSizeBreakdownEntries(line.size_breakdown);
+                      const hasCodes = sizes.some((r) => r.product_code);
+                      return (
                       <Box sx={{ overflowX: 'auto' }}>
                         <Table size="small" sx={{ '& td, & th': { px: 1.5, py: 0.75, borderColor: slate[100], textAlign: 'center' } }}>
                           <TableHead>
                             <TableRow sx={{ bgcolor: slate[50] }}>
-                              {line.size_breakdown.map((r, si) => (
+                              {sizes.map((r, si) => (
                                 <TableCell key={si} sx={{ fontWeight: 800, fontSize: '0.75rem', color: slate[600] }}>{r.size}</TableCell>
                               ))}
                               <TableCell sx={{ fontWeight: 800, fontSize: '0.75rem', color: slate[700], bgcolor: slate[100] }}>Total</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {(line.size_breakdown || []).some((r) => r.product_code) && (
+                            {hasCodes && (
                               <TableRow>
-                                {line.size_breakdown.map((r, si) => (
+                                {sizes.map((r, si) => (
                                   <TableCell key={si} sx={{ fontWeight: 500, fontSize: '0.7rem', color: slate[500] }}>
                                     {r.product_code || '—'}
                                   </TableCell>
@@ -285,7 +289,7 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                               </TableRow>
                             )}
                             <TableRow>
-                              {line.size_breakdown.map((r, si) => (
+                              {sizes.map((r, si) => (
                                 <TableCell key={si} sx={{ fontWeight: 600, fontSize: '0.875rem' }}>{fmtNum(r.qty)}</TableCell>
                               ))}
                               <TableCell sx={{ fontWeight: 900, fontSize: '0.95rem', color: slate[800], bgcolor: alpha(slate[100], 0.5) }}>
@@ -295,7 +299,8 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                           </TableBody>
                         </Table>
                       </Box>
-                    )}
+                      );
+                    })()}
                   </Box>
                 </Paper>
               ))}

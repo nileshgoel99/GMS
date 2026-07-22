@@ -1,45 +1,83 @@
+/** Map common aliases onto the canonical letter-size sequence. */
+const LETTER_SIZE_ALIASES = {
+  '2XS': 'XXS',
+  MM: 'M',
+  '2XL': 'XXL',
+  XXXL: '3XL',
+  'XXXXL': '4XL',
+  'XXXXXL': '5XL',
+};
+
 /** Normalize garment size labels so 3XL and 3xl are treated as the same size. */
 export function normalizeGarmentSize(value) {
-  return String(value ?? '').trim().toUpperCase();
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (!normalized) return '';
+  return LETTER_SIZE_ALIASES[normalized] || normalized;
 }
 
 /** Standard letter-size column order for size breakdown tables. */
-export const GARMENT_LETTER_SIZE_ORDER = ['S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL'];
+export const GARMENT_LETTER_SIZE_ORDER = [
+  'XXS',
+  'XS',
+  'S',
+  'M',
+  'L',
+  'XL',
+  'XXL',
+  '3XL',
+  '4XL',
+  '5XL',
+];
 
 const letterSizeRank = (size) => {
-  const normalized = normalizeGarmentSize(size);
-  if (!normalized) return -1;
-  const lookup = normalized === '2XL' ? 'XXL' : normalized;
+  const lookup = normalizeGarmentSize(size);
+  if (!lookup) return -1;
   return GARMENT_LETTER_SIZE_ORDER.indexOf(lookup);
 };
 
 const isNumericGarmentSize = (size) => /^\d+(\.\d+)?$/.test(normalizeGarmentSize(size));
 
-/** Sort sizes: S→5XL sequence, then numeric ascending, then any others alphabetically. */
+/** Compare two size labels: XXS→5XL, then numeric ascending, then other labels. */
+export function compareGarmentSizes(a, b) {
+  const aNorm = normalizeGarmentSize(a);
+  const bNorm = normalizeGarmentSize(b);
+  const aLetter = letterSizeRank(aNorm);
+  const bLetter = letterSizeRank(bNorm);
+  const aNumeric = isNumericGarmentSize(aNorm);
+  const bNumeric = isNumericGarmentSize(bNorm);
+
+  if (aLetter >= 0 && bLetter >= 0) {
+    if (aLetter !== bLetter) return aLetter - bLetter;
+    return aNorm.localeCompare(bNorm);
+  }
+  if (aLetter >= 0) return -1;
+  if (bLetter >= 0) return 1;
+
+  if (aNumeric && bNumeric) {
+    const diff = parseFloat(aNorm) - parseFloat(bNorm);
+    if (diff !== 0) return diff;
+    return aNorm.localeCompare(bNorm);
+  }
+  if (aNumeric) return -1;
+  if (bNumeric) return 1;
+
+  // Empty sizes sort last (used when padding editor rows)
+  if (!aNorm && !bNorm) return 0;
+  if (!aNorm) return 1;
+  if (!bNorm) return -1;
+
+  return aNorm.localeCompare(bNorm, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+/** Sort sizes: XXS→5XL sequence, then numeric ascending, then any others alphabetically. */
 export function sortGarmentSizes(sizes) {
-  return [...sizes].sort((a, b) => {
-    const aNorm = normalizeGarmentSize(a);
-    const bNorm = normalizeGarmentSize(b);
-    const aLetter = letterSizeRank(aNorm);
-    const bLetter = letterSizeRank(bNorm);
-    const aNumeric = isNumericGarmentSize(aNorm);
-    const bNumeric = isNumericGarmentSize(bNorm);
+  return [...sizes].sort(compareGarmentSizes);
+}
 
-    if (aLetter >= 0 && bLetter >= 0) {
-      if (aLetter !== bLetter) return aLetter - bLetter;
-      return aNorm.localeCompare(bNorm);
-    }
-    if (aLetter >= 0) return -1;
-    if (bLetter >= 0) return 1;
-
-    if (aNumeric && bNumeric) {
-      return parseFloat(aNorm) - parseFloat(bNorm);
-    }
-    if (aNumeric) return 1;
-    if (bNumeric) return -1;
-
-    return aNorm.localeCompare(bNorm, undefined, { numeric: true, sensitivity: 'base' });
-  });
+/** Sort size-breakdown rows; blank size rows stay at the end. */
+export function sortSizeBreakdownEntries(breakdown) {
+  if (!Array.isArray(breakdown)) return [];
+  return [...breakdown].sort((a, b) => compareGarmentSizes(a?.size, b?.size));
 }
 
 /** Normalize and merge [{ size, qty, product_code? }] rows by uppercase size label. */
@@ -61,11 +99,12 @@ export function normalizeSizeBreakdownEntries(breakdown) {
     }
   });
 
-  return [...merged.entries()].map(([size, { qty, product_code }]) => {
+  const rows = [...merged.entries()].map(([size, { qty, product_code }]) => {
     const row = { size, qty };
     if (product_code) row.product_code = product_code;
     return row;
   });
+  return sortSizeBreakdownEntries(rows);
 }
 
 /** Normalize size keys in intent sheet maps, merging duplicate labels. */

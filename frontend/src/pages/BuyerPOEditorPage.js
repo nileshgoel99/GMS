@@ -38,7 +38,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, customersAPI } from '../services/api';
-import { normalizeGarmentSize, normalizeSizeBreakdownEntries } from '../utils/normalizeGarmentSize';
+import { normalizeGarmentSize, normalizeSizeBreakdownEntries, sortSizeBreakdownEntries } from '../utils/normalizeGarmentSize';
 import { slate, warm, spectrum } from '../theme/appTheme';
 
 // ── Status config ────────────────────────────────────────────────────────────
@@ -67,11 +67,13 @@ const emptySizeRows = (count = MIN_SIZE_ROWS) =>
   Array.from({ length: count }, () => ({ size: '', qty: '', product_code: '' }));
 
 const padSizeRows = (rows) => {
-  const next = (rows || []).map((r) => ({
-    size: r.size || '',
-    qty: r.qty != null && r.qty !== '' ? String(r.qty) : '',
-    product_code: r.product_code || '',
-  }));
+  const next = sortSizeBreakdownEntries(
+    (rows || []).map((r) => ({
+      size: r.size || '',
+      qty: r.qty != null && r.qty !== '' ? String(r.qty) : '',
+      product_code: r.product_code || '',
+    })),
+  );
   while (next.length < MIN_SIZE_ROWS) next.push({ size: '', qty: '', product_code: '' });
   return next;
 };

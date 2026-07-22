@@ -7,7 +7,7 @@ import { alpha } from '@mui/material/styles';
 import { ArrowBack, Print, Edit, CheckCircle, Autorenew } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, companyAPI } from '../services/api';
-import { normalizeGarmentSize } from '../utils/normalizeGarmentSize';
+import { normalizeGarmentSize, sortSizeBreakdownEntries } from '../utils/normalizeGarmentSize';
 import { slate } from '../theme/appTheme';
 
 // ── Number to words ───────────────────────────────────────────────────────────
@@ -75,6 +75,7 @@ function groupLines(lines) {
   });
   return Array.from(map.values()).map((g) => ({
     ...g,
+    sizes: sortSizeBreakdownEntries(g.sizes),
     line_amount: g.unit_price && g.quantity
       ? g.quantity * g.unit_price * (1 - g.discount / 100)
       : 0,
