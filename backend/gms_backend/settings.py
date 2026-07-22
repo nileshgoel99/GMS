@@ -10,6 +10,11 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
+# Username login is case-insensitive (shivangi == Shivangi)
+AUTHENTICATION_BACKENDS = [
+    'accounts.backends.CaseInsensitiveModelBackend',
+]
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',

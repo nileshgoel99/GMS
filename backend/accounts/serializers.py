@@ -105,9 +105,12 @@ class UserCreateSerializer(serializers.Serializer):
     is_active = serializers.BooleanField(default=True)
 
     def validate_username(self, value):
-        if User.objects.filter(username__iexact=value).exists():
+        username = (value or '').strip()
+        if not username:
+            raise serializers.ValidationError('Username is required.')
+        if User.objects.filter(username__iexact=username).exists():
             raise serializers.ValidationError('Username already exists.')
-        return value
+        return username
 
     def validate_password(self, value):
         validate_password(value)
@@ -122,6 +125,8 @@ class UserCreateSerializer(serializers.Serializer):
         role_id = validated_data.pop('role_id')
         is_active = validated_data.pop('is_active', True)
         password = validated_data.pop('password')
+        # Store usernames lowercase so login/display stay consistent
+        validated_data['username'] = validated_data['username'].lower()
         user = User(**validated_data, is_active=is_active)
         user.set_password(password)
         user.save()
