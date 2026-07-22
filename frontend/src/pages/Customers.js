@@ -513,10 +513,17 @@ const Customers = () => {
       ...dataGridSx['& .MuiDataGrid-cell'],
       display: 'flex',
       alignItems: 'center',
-      py: 0,
+      py: 1,
       fontWeight: 400,
       fontSize: '0.8125rem',
       color: slate[700],
+    },
+    '& .MuiDataGrid-cell--nameWrap': {
+      whiteSpace: 'normal !important',
+      lineHeight: 1.4,
+      wordBreak: 'break-word',
+      overflow: 'visible',
+      alignItems: 'flex-start',
     },
     '& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus': { outline: 'none' },
     '& .MuiDataGrid-footerContainer': {
@@ -558,18 +565,23 @@ const Customers = () => {
     {
       field: 'company_legal_name',
       headerName: 'Legal name',
-      minWidth: 200,
-      flex: 1.35,
+      minWidth: 220,
+      flex: 1.6,
+      cellClassName: 'MuiDataGrid-cell--nameWrap',
       renderCell: (p) => (
-        <Tooltip title={p.value || ''} enterDelay={600}>
-          <Typography
-            noWrap
-            sx={{ ...cellPrimary, cursor: 'pointer', '&:hover': { color: theme.palette.primary.main } }}
-            onClick={() => handleViewDetail(p.row)}
-          >
-            {p.value || '—'}
-          </Typography>
-        </Tooltip>
+        <Typography
+          sx={{
+            ...cellPrimary,
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
+            cursor: 'pointer',
+            py: 0.25,
+            '&:hover': { color: theme.palette.primary.main },
+          }}
+          onClick={() => handleViewDetail(p.row)}
+        >
+          {p.value || '—'}
+        </Typography>
       ),
     },
     {
@@ -696,7 +708,7 @@ const Customers = () => {
       hideFooter={compactFooter && gridRows.length <= 25}
       loading={loading}
       disableRowSelectionOnClick
-      rowHeight={44}
+      getRowHeight={() => 'auto'}
       columnHeaderHeight={44}
       onRowDoubleClick={(params) => handleViewDetail(params.row)}
       sx={{

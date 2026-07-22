@@ -83,6 +83,9 @@ const emptyForm = () => ({
   buyer_name: '',
   buyer_address: '',
   buyer_contact: '',
+  ship_to_customer: '',
+  ship_to_name: '',
+  ship_to_address: '',
   supplier_code: '',
   currency: 'USD',
   delivery_terms: 'FOB-FREE ON BOARD',
@@ -101,6 +104,16 @@ const emptyForm = () => ({
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+const formatCustomerAddress = (cust) => {
+  if (!cust) return '';
+  return [
+    cust.address_line1,
+    cust.address_line2,
+    [cust.city, cust.region_state, cust.postal_code].filter(Boolean).join(', '),
+    cust.country,
+  ].filter(Boolean).join('\n');
+};
+
 const lineQty = (line) =>
   (line.size_breakdown || []).reduce((s, r) => s + (parseInt(r.qty) || 0), 0);
 
@@ -786,6 +799,36 @@ export default function BuyerPOEditorPage() {
     return Number.isNaN(n) ? null : n;
   }, [id, isCreate]);
 
+  // Entities under the same customer_code as the selected Bill To (for Ship To)
+  const shipToOptions = useMemo(() => {
+    const billTo = customers.find((c) => c.id === formData.customer);
+    const code = (billTo?.customer_code || '').trim().toUpperCase();
+    if (!code) return [];
+    return customers.filter(
+      (c) => (c.customer_code || '').trim().toUpperCase() === code,
+    );
+  }, [customers, formData.customer]);
+
+  const applyShipTo = useCallback((shipCustId, billToCust) => {
+    // Empty / same as bill-to → clear distinct ship-to snapshot
+    if (!shipCustId || (billToCust && shipCustId === billToCust.id)) {
+      return {
+        ship_to_customer: '',
+        ship_to_name: '',
+        ship_to_address: '',
+      };
+    }
+    const ship = customers.find((c) => c.id === shipCustId);
+    if (!ship) {
+      return { ship_to_customer: shipCustId, ship_to_name: '', ship_to_address: '' };
+    }
+    return {
+      ship_to_customer: ship.id,
+      ship_to_name: ship.company_legal_name || '',
+      ship_to_address: formatCustomerAddress(ship),
+    };
+  }, [customers]);
+
   // Load customers
   useEffect(() => {
     customersAPI.getAll({ page_size: 500 })
@@ -816,6 +859,9 @@ export default function BuyerPOEditorPage() {
           buyer_name:      po.buyer_name || '',
           buyer_address:   po.buyer_address || '',
           buyer_contact:   po.buyer_contact || '',
+          ship_to_customer: po.ship_to_customer || '',
+          ship_to_name:    po.ship_to_name || '',
+          ship_to_address: po.ship_to_address || '',
           supplier_code:   po.supplier_code || '',
           currency:        po.currency || 'USD',
           delivery_terms:  po.delivery_terms || '',
@@ -912,8 +958,9 @@ export default function BuyerPOEditorPage() {
 
     const payload = {
       ...formData,
-      customer:        formData.customer || null,
-      ex_factory_date: formData.ex_factory_date || null,
+      customer:          formData.customer || null,
+      ship_to_customer:  formData.ship_to_customer || null,
+      ex_factory_date:   formData.ex_factory_date || null,
       lines: lines.map((l) => ({
         item_code:      l.item_code,
         item_name:      l.item_name,
@@ -1193,23 +1240,19 @@ export default function BuyerPOEditorPage() {
           <Typography sx={groupLabelSx}>Buyer details</Typography>
           <Grid container spacing={3}>
             <Grid item xs={12} sm={4}>
-              <TextField size="small" fullWidth select label="Link to customer master"
+              <TextField size="small" fullWidth select label="Bill To (customer master)"
                 value={formData.customer}
                 onChange={(e) => {
                     const cust = customers.find((c) => c.id === e.target.value);
-                    const addrParts = cust ? [
-                      cust.address_line1,
-                      cust.address_line2,
-                      [cust.city, cust.region_state, cust.postal_code].filter(Boolean).join(', '),
-                      cust.country,
-                    ].filter(Boolean) : [];
-                    const derivedAddress = addrParts.join('\n');
+                    const derivedAddress = formatCustomerAddress(cust);
                     setFormData((f) => ({
                       ...f,
                       customer: e.target.value,
                       buyer_name: cust ? (cust.company_legal_name || f.buyer_name) : f.buyer_name,
                       buyer_contact: cust?.primary_contact_name || f.buyer_contact,
                       buyer_address: cust ? (derivedAddress || f.buyer_address) : f.buyer_address,
+                      // Reset Ship To when Bill To changes (default: same as Bill To)
+                      ...applyShipTo('', cust),
                     }));
                   }}
                 sx={fieldSx}
@@ -1232,18 +1275,86 @@ export default function BuyerPOEditorPage() {
                 value={formData.buyer_contact} onChange={(e) => setField('buyer_contact', e.target.value)}
                 placeholder="Contact name" sx={fieldSx} />
             </Grid>
+            <Grid item xs={12}>
+              <TextField size="small" fullWidth multiline minRows={1} maxRows={4}
+                label="Bill To Address"
+                value={formData.buyer_address} onChange={(e) => setField('buyer_address', e.target.value)}
+                placeholder="Auto-filled from customer master — edit freely…"
+                helperText="Auto-filled when Bill To customer is selected. Click to expand."
+                sx={{
+                  ...fieldSx,
+                  '& .MuiInputBase-root': { bgcolor: '#fcfcfc' },
+                  '& .MuiFormHelperText-root': { fontSize: '0.7rem', color: slate[400], mt: 0.5 },
+                }} />
+            </Grid>
+
+            {/* Ship To — same customer_code group */}
+            <Grid item xs={12} sm={6}>
+              <TextField
+                size="small"
+                fullWidth
+                select
+                label="Ship To"
+                value={formData.ship_to_customer || formData.customer || ''}
+                disabled={!formData.customer || shipToOptions.length === 0}
+                onChange={(e) => {
+                  const billTo = customers.find((c) => c.id === formData.customer);
+                  setFormData((f) => ({
+                    ...f,
+                    ...applyShipTo(e.target.value, billTo),
+                  }));
+                }}
+                helperText={
+                  !formData.customer
+                    ? 'Select Bill To first'
+                    : shipToOptions.length <= 1
+                      ? 'Only one entity under this customer code — Ship To matches Bill To'
+                      : 'Pick another company under the same customer code if delivery differs'
+                }
+                sx={{
+                  ...fieldSx,
+                  '& .MuiFormHelperText-root': { fontSize: '0.7rem', color: slate[400], mt: 0.5 },
+                }}
+              >
+                {shipToOptions.map((c) => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.company_legal_name}
+                    {c.id === formData.customer ? ' (same as Bill To)' : ''}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                size="small"
+                fullWidth
+                label="Ship To Company Name"
+                value={formData.ship_to_name}
+                onChange={(e) => setField('ship_to_name', e.target.value)}
+                disabled={!formData.ship_to_customer}
+                placeholder={formData.ship_to_customer ? '' : 'Same as Bill To'}
+                sx={fieldSx}
+              />
+            </Grid>
+            {formData.ship_to_customer ? (
               <Grid item xs={12}>
-                <TextField size="small" fullWidth multiline minRows={1} maxRows={4}
-                  label="Buyer Address"
-                  value={formData.buyer_address} onChange={(e) => setField('buyer_address', e.target.value)}
-                  placeholder="Auto-filled from customer master — edit freely…"
-                  helperText="Auto-filled when customer selected. Click to expand."
+                <TextField
+                  size="small"
+                  fullWidth
+                  multiline
+                  minRows={1}
+                  maxRows={4}
+                  label="Ship To Address"
+                  value={formData.ship_to_address}
+                  onChange={(e) => setField('ship_to_address', e.target.value)}
+                  placeholder="Auto-filled from selected Ship To entity"
                   sx={{
                     ...fieldSx,
                     '& .MuiInputBase-root': { bgcolor: '#fcfcfc' },
-                    '& .MuiFormHelperText-root': { fontSize: '0.7rem', color: slate[400], mt: 0.5 },
-                  }} />
+                  }}
+                />
               </Grid>
+            ) : null}
           </Grid>
         </Box>
       </Collapse>

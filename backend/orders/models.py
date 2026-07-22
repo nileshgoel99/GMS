@@ -317,6 +317,17 @@ class BuyerPO(models.Model):
     buyer_name = models.CharField(max_length=200, blank=True, default='')
     buyer_address = models.TextField(blank=True, default='')
     buyer_contact = models.CharField(max_length=200, blank=True, default='', help_text='e.g. Mr. Himanshu Banka')
+    # Optional Ship To: another legal entity under the same customer_code
+    ship_to_customer = models.ForeignKey(
+        'customers.Customer',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ship_to_buyer_pos',
+        help_text='Ship-to entity (must share customer_code with Bill To customer when set)',
+    )
+    ship_to_name = models.CharField(max_length=200, blank=True, default='')
+    ship_to_address = models.TextField(blank=True, default='')
     supplier_code = models.CharField(max_length=50, blank=True, default='', help_text="Buyer's supplier code for us")
 
     currency = models.CharField(max_length=3, default='USD')

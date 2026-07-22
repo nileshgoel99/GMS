@@ -621,6 +621,7 @@ class BuyerPOLineSerializer(serializers.ModelSerializer):
 
 class BuyerPOListSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
+    ship_to_customer_name = serializers.SerializerMethodField()
     lines_count = serializers.SerializerMethodField()
     pi_id = serializers.IntegerField(source='pi.id', read_only=True, allow_null=True)
 
@@ -628,13 +629,18 @@ class BuyerPOListSerializer(serializers.ModelSerializer):
         model = BuyerPO
         fields = [
             'id', 'po_number', 'po_date', 'buyer_name', 'buyer_contact',
-            'customer', 'customer_name', 'currency', 'status',
+            'customer', 'customer_name',
+            'ship_to_customer', 'ship_to_customer_name', 'ship_to_name', 'ship_to_address',
+            'currency', 'status',
             'ex_factory_date', 'total_qty', 'total_value', 'lines_count',
             'po_document', 'pi_ref', 'pi_id', 'created_at',
         ]
 
     def get_customer_name(self, obj):
         return obj.customer.company_legal_name if obj.customer else None
+
+    def get_ship_to_customer_name(self, obj):
+        return obj.ship_to_customer.company_legal_name if obj.ship_to_customer else None
 
     def get_lines_count(self, obj):
         return obj.lines.count()
@@ -643,6 +649,7 @@ class BuyerPOListSerializer(serializers.ModelSerializer):
 class BuyerPOSerializer(serializers.ModelSerializer):
     lines = BuyerPOLineSerializer(many=True)
     customer_name = serializers.SerializerMethodField()
+    ship_to_customer_name = serializers.SerializerMethodField()
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     indent_count = serializers.SerializerMethodField()
 
@@ -651,7 +658,9 @@ class BuyerPOSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'po_number', 'po_date',
             'customer', 'customer_name', 'buyer_name', 'buyer_address',
-            'buyer_contact', 'supplier_code', 'currency',
+            'buyer_contact',
+            'ship_to_customer', 'ship_to_customer_name', 'ship_to_name', 'ship_to_address',
+            'supplier_code', 'currency',
             'delivery_terms', 'payment_terms', 'delivery_method',
             'freight_terms', 'packaging_terms', 'ex_factory_date',
             'total_qty', 'total_value', 'status', 'notes', 'pi',
@@ -664,10 +673,32 @@ class BuyerPOSerializer(serializers.ModelSerializer):
     def get_customer_name(self, obj):
         return obj.customer.company_legal_name if obj.customer else None
 
+    def get_ship_to_customer_name(self, obj):
+        return obj.ship_to_customer.company_legal_name if obj.ship_to_customer else None
+
     def get_indent_count(self, obj):
         if not obj.pi_id:
             return 0
         return obj.pi.indents.count()
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        customer = attrs.get('customer', getattr(self.instance, 'customer', None) if self.instance else None)
+        ship_to = attrs.get('ship_to_customer', getattr(self.instance, 'ship_to_customer', None) if self.instance else None)
+        # Explicit null clears ship-to on update
+        if 'ship_to_customer' in attrs and attrs['ship_to_customer'] is None:
+            return attrs
+        if ship_to and customer:
+            code_a = (customer.customer_code or '').strip().upper()
+            code_b = (ship_to.customer_code or '').strip().upper()
+            if code_a and code_b and code_a != code_b:
+                raise serializers.ValidationError({
+                    'ship_to_customer': (
+                        'Ship To must be under the same customer code as Bill To '
+                        f'({customer.customer_code}).'
+                    ),
+                })
+        return attrs
 
     def _save_lines(self, po, lines_data):
         po.lines.all().delete()

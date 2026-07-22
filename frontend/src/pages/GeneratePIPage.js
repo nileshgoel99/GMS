@@ -311,6 +311,17 @@ export default function GeneratePIPage() {
           {po?.buyer_address && (
             <Typography sx={{ fontFamily: 'inherit', fontSize: '10pt', whiteSpace: 'pre-line' }}>{po.buyer_address}</Typography>
           )}
+          {(po?.ship_to_name || po?.ship_to_address) && (
+            <Box sx={{ mt: 1.5 }}>
+              <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '10pt', mb: 0.3 }}>SHIP TO,</Typography>
+              {po?.ship_to_name && (
+                <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '11pt' }}>{po.ship_to_name}</Typography>
+              )}
+              {po?.ship_to_address && (
+                <Typography sx={{ fontFamily: 'inherit', fontSize: '10pt', whiteSpace: 'pre-line' }}>{po.ship_to_address}</Typography>
+              )}
+            </Box>
+          )}
         </Box>
         <Box sx={{ minWidth: 200, textAlign: 'left' }}>
           {[

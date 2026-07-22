@@ -171,9 +171,13 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                   </Box>
                   <Collapse in={showBuyer}>
                     <Box sx={{ px: 3, pb: 2.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                      <F label="Company"  value={po.buyer_name} />
+                      <F label="Bill To"  value={po.buyer_name} />
                       <F label="Contact"  value={po.buyer_contact} />
-                      {po.buyer_address && <F label="Address" value={po.buyer_address} />}
+                      {po.buyer_address && <F label="Bill To Address" value={po.buyer_address} />}
+                      {(po.ship_to_name || po.ship_to_customer_name) && (
+                        <F label="Ship To" value={po.ship_to_name || po.ship_to_customer_name} />
+                      )}
+                      {po.ship_to_address && <F label="Ship To Address" value={po.ship_to_address} />}
                     </Box>
                   </Collapse>
                 </Grid>

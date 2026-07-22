@@ -70,9 +70,10 @@ class BuyerPOLineInline(admin.TabularInline):
 
 @admin.register(BuyerPO)
 class BuyerPOAdmin(admin.ModelAdmin):
-    list_display = ['po_number', 'po_date', 'buyer_name', 'customer', 'currency', 'total_qty', 'total_value', 'status', 'ex_factory_date']
+    list_display = ['po_number', 'po_date', 'buyer_name', 'customer', 'ship_to_name', 'currency', 'total_qty', 'total_value', 'status', 'ex_factory_date']
     list_filter = ['status', 'currency', 'po_date']
-    search_fields = ['po_number', 'buyer_name', 'buyer_contact', 'lines__item_code']
+    search_fields = ['po_number', 'buyer_name', 'buyer_contact', 'ship_to_name', 'lines__item_code']
     readonly_fields = ['created_at', 'updated_at', 'total_qty', 'total_value']
+    raw_id_fields = ['customer', 'ship_to_customer', 'pi']
     inlines = [BuyerPOLineInline]
     date_hierarchy = 'po_date'
