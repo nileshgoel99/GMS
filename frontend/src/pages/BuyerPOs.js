@@ -144,7 +144,6 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                 <Grid item xs={6} sm={3}><F label="PO Date"         value={formatDateDisplay(po.po_date)} /></Grid>
                 <Grid item xs={6} sm={3}><F label="Ex-Factory Date" value={formatDateDisplay(po.ex_factory_date)} /></Grid>
                 <Grid item xs={6} sm={3}><F label="Currency"        value={po.currency} /></Grid>
-                <Grid item xs={6} sm={3}><F label="Supplier Code"   value={po.supplier_code} mono /></Grid>
               </Grid>
             </Box>
 
@@ -206,7 +205,6 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                       {po.payment_terms   && <F label="Terms of Payment"  value={po.payment_terms} />}
                       <Grid container spacing={2}>
                         {po.delivery_method && <Grid item xs={12} sm={4}><F label="Delivery Method"  value={po.delivery_method} /></Grid>}
-                        {po.freight_terms   && <Grid item xs={12} sm={4}><F label="Freight Terms"    value={po.freight_terms} /></Grid>}
                         {po.packaging_terms && <Grid item xs={12} sm={4}><F label="Packaging Terms"  value={po.packaging_terms} /></Grid>}
                       </Grid>
                     </Box>
@@ -259,10 +257,9 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
 
                   {/* Line body */}
                   <Box sx={{ px: 2, py: 1.5 }}>
-                    {(line.fabric || line.customer_ref || line.delivery_date) && (
+                    {(line.fabric || line.delivery_date) && (
                       <Grid container spacing={2} sx={{ mb: line.size_breakdown?.length ? 1.5 : 0 }}>
                         {line.fabric        && <Grid item xs={12} sm={6}><F label="Fabric" value={line.fabric} /></Grid>}
-                        {line.customer_ref  && <Grid item xs={6}  sm={3}><F label="Customer Ref" value={line.customer_ref} /></Grid>}
                         {line.delivery_date && <Grid item xs={6}  sm={3}><F label="Delivery Date" value={line.delivery_date} /></Grid>}
                       </Grid>
                     )}
@@ -278,6 +275,16 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                             </TableRow>
                           </TableHead>
                           <TableBody>
+                            {(line.size_breakdown || []).some((r) => r.product_code) && (
+                              <TableRow>
+                                {line.size_breakdown.map((r, si) => (
+                                  <TableCell key={si} sx={{ fontWeight: 500, fontSize: '0.7rem', color: slate[500] }}>
+                                    {r.product_code || '—'}
+                                  </TableCell>
+                                ))}
+                                <TableCell sx={{ fontSize: '0.7rem', color: slate[400], bgcolor: alpha(slate[100], 0.5) }}>Code</TableCell>
+                              </TableRow>
+                            )}
                             <TableRow>
                               {line.size_breakdown.map((r, si) => (
                                 <TableCell key={si} sx={{ fontWeight: 600, fontSize: '0.875rem' }}>{fmtNum(r.qty)}</TableCell>

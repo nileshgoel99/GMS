@@ -29,6 +29,7 @@ import GeneratePIPage from './pages/GeneratePIPage';
 import UsersPage from './pages/UsersPage';
 import ProfilePage from './pages/ProfilePage';
 import DocumentationRoute from './components/DocumentationRoute';
+import TicketsPage from './pages/TicketsPage';
 
 // Forces a full remount when navigating between different PO IDs (new vs edit)
 function BuyerPOEditorPageKeyed() {
@@ -261,6 +262,16 @@ function App() {
                 <PrivateRoute module="users">
                   <Layout>
                     <UsersPage />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/tickets"
+              element={
+                <PrivateRoute adminOnly>
+                  <Layout>
+                    <TicketsPage />
                   </Layout>
                 </PrivateRoute>
               }

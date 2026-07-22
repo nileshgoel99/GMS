@@ -59,8 +59,9 @@ const AccessDenied = ({ homePath = '/' }) => (
  * @param {object} props
  * @param {React.ReactNode} props.children
  * @param {string} [props.module] — optional explicit module; otherwise derived from URL
+ * @param {boolean} [props.adminOnly] — require admin role
  */
-const PrivateRoute = ({ children, module: moduleProp }) => {
+const PrivateRoute = ({ children, module: moduleProp, adminOnly = false }) => {
   const { isAuthenticated, loading, user } = useAuth();
   const location = useLocation();
 
@@ -68,8 +69,17 @@ const PrivateRoute = ({ children, module: moduleProp }) => {
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
-  const module = moduleProp || moduleForPath(location.pathname);
   const homePath = getHomePath(user);
+  const isAdminUser = Boolean(user?.is_admin || user?.role === 'ADMIN');
+
+  if (adminOnly && !isAdminUser) {
+    if (location.pathname === homePath) {
+      return <AccessDenied homePath={homePath} />;
+    }
+    return <Navigate to={homePath} replace />;
+  }
+
+  const module = moduleProp || moduleForPath(location.pathname);
 
   if (module && !hasModuleAccess(user, module)) {
     if (location.pathname === homePath) {

@@ -6,7 +6,7 @@ def normalize_garment_size(value) -> str:
 
 
 def normalize_size_breakdown_list(raw) -> list:
-    """Normalize [{size, qty}] lists and merge duplicate size labels."""
+    """Normalize [{size, qty, product_code?}] lists and merge duplicate size labels."""
     if not isinstance(raw, list):
         return []
 
@@ -19,12 +19,21 @@ def normalize_size_breakdown_list(raw) -> list:
         if not size:
             continue
         qty = int(entry.get('qty', 0) or 0)
+        product_code = str(entry.get('product_code') or '').strip()
         if size not in merged:
-            merged[size] = 0
+            merged[size] = {'qty': 0, 'product_code': ''}
             order.append(size)
-        merged[size] += qty
+        merged[size]['qty'] += qty
+        if product_code and not merged[size]['product_code']:
+            merged[size]['product_code'] = product_code
 
-    return [{'size': size, 'qty': merged[size]} for size in order]
+    out = []
+    for size in order:
+        row = {'size': size, 'qty': merged[size]['qty']}
+        if merged[size]['product_code']:
+            row['product_code'] = merged[size]['product_code']
+        out.append(row)
+    return out
 
 
 def normalize_size_breakdown_sheet(raw) -> list:

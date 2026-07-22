@@ -42,7 +42,7 @@ export function sortGarmentSizes(sizes) {
   });
 }
 
-/** Normalize and merge [{ size, qty }] rows by uppercase size label. */
+/** Normalize and merge [{ size, qty, product_code? }] rows by uppercase size label. */
 export function normalizeSizeBreakdownEntries(breakdown) {
   if (!Array.isArray(breakdown)) return [];
 
@@ -51,10 +51,21 @@ export function normalizeSizeBreakdownEntries(breakdown) {
     const size = normalizeGarmentSize(entry?.size);
     if (!size) return;
     const qty = parseInt(entry?.qty, 10) || 0;
-    merged.set(size, (merged.get(size) || 0) + qty);
+    const product_code = String(entry?.product_code ?? '').trim();
+    const existing = merged.get(size);
+    if (existing) {
+      existing.qty += qty;
+      if (!existing.product_code && product_code) existing.product_code = product_code;
+    } else {
+      merged.set(size, { qty, product_code });
+    }
   });
 
-  return [...merged.entries()].map(([size, qty]) => ({ size, qty }));
+  return [...merged.entries()].map(([size, { qty, product_code }]) => {
+    const row = { size, qty };
+    if (product_code) row.product_code = product_code;
+    return row;
+  });
 }
 
 /** Normalize size keys in intent sheet maps, merging duplicate labels. */

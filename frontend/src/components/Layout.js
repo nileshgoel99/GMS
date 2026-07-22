@@ -46,11 +46,14 @@ import {
   Storefront as StorefrontIcon,
   PrecisionManufacturing as PrecisionManufacturingIcon,
   Warehouse as WarehouseIcon,
+  ConfirmationNumber as ConfirmationNumberIcon,
+  BugReport as BugReportIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { layoutDrawerWidth, navChrome, slate } from '../theme/appTheme';
 import { hasModuleAccess, dashboardTitleForUser } from '../config/permissions';
+import ReportTicketModal from './ReportTicketModal';
 
 const DRAWER_COLLAPSED_WIDTH = 88;
 const NAV_EXPANDED_KEY = 'gms.nav.expandedGroups';
@@ -63,6 +66,7 @@ const defaultExpandedState = {
   stock: false,
   floor: false,
   organization: false,
+  support: true,
 };
 
 const navGroups = [
@@ -131,6 +135,15 @@ const navGroups = [
       { text: 'Users & roles', icon: <ManageAccountsIcon />, path: '/users', module: 'users' },
     ],
   },
+  {
+    id: 'support',
+    label: 'Support',
+    icon: <ConfirmationNumberIcon sx={{ fontSize: 16 }} />,
+    accent: '#ef4444',
+    items: [
+      { text: 'Tickets', icon: <ConfirmationNumberIcon />, path: '/tickets', module: null, adminOnly: true },
+    ],
+  },
 ];
 
 const routeMeta = {
@@ -153,6 +166,7 @@ const routeMeta = {
   '/profile': { title: 'My profile' },
   '/documentation': { title: 'Documentation' },
   '/users': { title: 'Users & roles' },
+  '/tickets': { title: 'Tickets' },
 };
 
 const pathMatchesNav = (pathname, path) => {
@@ -163,6 +177,7 @@ const pathMatchesNav = (pathname, path) => {
   if (path === '/purchase-bills') return pathname === '/purchase-bills' || pathname.startsWith('/purchase-bills/');
   if (path === '/sales') return pathname === '/sales' || pathname.startsWith('/sales/');
   if (path === '/users') return pathname === '/users' || pathname.startsWith('/users/');
+  if (path === '/tickets') return pathname === '/tickets' || pathname.startsWith('/tickets/');
   if (path === '/inventory') return pathname === '/inventory' || pathname.startsWith('/inventory/');
   return pathname === path || pathname.startsWith(`${path}/`);
 };
@@ -182,9 +197,12 @@ const Layout = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState(loadExpandedGroups);
+  const [reportOpen, setReportOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, user } = useAuth();
+
+  const isAdminUser = Boolean(user?.is_admin || user?.role === 'ADMIN');
 
   const compactNav = collapsed && !(isMobile && mobileOpen);
   const drawerWidth = collapsed ? DRAWER_COLLAPSED_WIDTH : layoutDrawerWidth;
@@ -193,9 +211,12 @@ const Layout = ({ children }) => {
   const visibleNavGroups = useMemo(() => navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => !item.module || hasModuleAccess(user, item.module)),
+      items: group.items.filter((item) => {
+        if (item.adminOnly && !isAdminUser) return false;
+        return !item.module || hasModuleAccess(user, item.module);
+      }),
     }))
-    .filter((group) => group.items.length > 0), [user]);
+    .filter((group) => group.items.length > 0), [user, isAdminUser]);
 
   const activeGroupId = useMemo(() => {
     const match = visibleNavGroups.find((group) =>
@@ -817,6 +838,36 @@ const Layout = ({ children }) => {
           {children}
         </Box>
       </Box>
+
+      <Tooltip title="Report a bug or request a feature" placement="left">
+        <IconButton
+          onClick={() => setReportOpen(true)}
+          aria-label="Report a bug or request a feature"
+          sx={{
+            position: 'fixed',
+            right: { xs: 16, sm: 22 },
+            bottom: { xs: 16, sm: 22 },
+            zIndex: (t) => t.zIndex.drawer + 2,
+            width: 44,
+            height: 44,
+            bgcolor: theme.palette.primary.main,
+            color: '#fff',
+            boxShadow: `0 4px 14px ${alpha(theme.palette.primary.main, 0.4)}`,
+            '&:hover': {
+              bgcolor: theme.palette.primary.dark,
+              boxShadow: `0 6px 18px ${alpha(theme.palette.primary.main, 0.5)}`,
+            },
+          }}
+        >
+          <BugReportIcon sx={{ fontSize: 22 }} />
+        </IconButton>
+      </Tooltip>
+
+      <ReportTicketModal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        pageUrl={`${location.pathname}${location.search || ''}`}
+      />
     </Box>
   );
 };

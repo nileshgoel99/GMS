@@ -228,4 +228,12 @@ export const productionAPI = {
   createReturn: (data) => api.post('/production/returns/', data),
 };
 
+export const ticketsAPI = {
+  getAll: (params) => api.get('/tickets/', { params }),
+  getById: (id) => api.get(`/tickets/${id}/`),
+  create: (formData) => api.post('/tickets/', formData),
+  update: (id, data) => api.patch(`/tickets/${id}/`, data),
+  remove: (id) => api.delete(`/tickets/${id}/`),
+};
+
 export default api;

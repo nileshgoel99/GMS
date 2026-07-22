@@ -17,6 +17,8 @@ import {
   Tab,
   Collapse,
   Autocomplete,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import {
@@ -59,6 +61,21 @@ const SECTIONS = [
 ];
 
 // ── Default structures ────────────────────────────────────────────────────────
+const MIN_SIZE_ROWS = 3;
+
+const emptySizeRows = (count = MIN_SIZE_ROWS) =>
+  Array.from({ length: count }, () => ({ size: '', qty: '', product_code: '' }));
+
+const padSizeRows = (rows) => {
+  const next = (rows || []).map((r) => ({
+    size: r.size || '',
+    qty: r.qty != null && r.qty !== '' ? String(r.qty) : '',
+    product_code: r.product_code || '',
+  }));
+  while (next.length < MIN_SIZE_ROWS) next.push({ size: '', qty: '', product_code: '' });
+  return next;
+};
+
 const emptyLine = (exFactoryDate = '') => ({
   _key: Date.now() + Math.random(),
   item_code: '',
@@ -66,9 +83,8 @@ const emptyLine = (exFactoryDate = '') => ({
   fabric: '',
   color: '',
   customer_ref: '',
-  size_breakdown: [
-    { size: '', qty: '' },
-  ],
+  size_level_codes: false,
+  size_breakdown: emptySizeRows(),
   uom: 'PCS',
   unit_price: '',
   discount: '',
@@ -86,6 +102,7 @@ const emptyForm = () => ({
   ship_to_customer: '',
   ship_to_name: '',
   ship_to_address: '',
+  add_ship_to: false,
   supplier_code: '',
   currency: 'USD',
   delivery_terms: 'FOB-FREE ON BOARD',
@@ -247,9 +264,20 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
         i === si ? { ...r, size: normalizeGarmentSize(val) } : r
       ),
     });
-  const addSize   = () => onChange({ size_breakdown: [...line.size_breakdown, { size: '', qty: '' }] });
-  const removeSize = (si) =>
+  const setSizeProductCode = (si, val) =>
+    onChange({
+      size_breakdown: line.size_breakdown.map((r, i) =>
+        i === si ? { ...r, product_code: val } : r
+      ),
+    });
+  const addSize = () => onChange({
+    size_breakdown: [...line.size_breakdown, { size: '', qty: '', product_code: '' }],
+  });
+  const removeSize = (si) => {
+    if (line.size_breakdown.length <= MIN_SIZE_ROWS) return;
     onChange({ size_breakdown: line.size_breakdown.filter((_, i) => i !== si) });
+  };
+  const showProductCode = Boolean(line.size_level_codes);
 
   const qty = lineQty(line);
   const amt = lineAmt(line);
@@ -462,20 +490,9 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
           </Grid>
         </Grid>
 
-        {/* Row 2: customer ref + delivery date */}
-        <Grid container spacing={2.5} sx={{ mb: 3 }}>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              size="small"
-              fullWidth
-              label="Customer Ref / OdL No."
-              value={line.customer_ref}
-              onChange={(e) => onChange({ customer_ref: e.target.value })}
-              placeholder="e.g. 5 OR 37087"
-              sx={fieldSx}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
+        {/* Delivery date + size grid side by side */}
+        <Grid container spacing={2.5} sx={{ mb: 1 }} alignItems="flex-start">
+          <Grid item xs={12} sm={4} md={3}>
             <TextField
               size="small"
               fullWidth
@@ -488,116 +505,201 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
               FormHelperTextProps={{ sx: { fontSize: '0.68rem', color: slate[400] } }}
               sx={fieldSx}
             />
-          </Grid>
-        </Grid>
-
-        {/* Size breakdown — horizontal chips */}
-        <Box sx={{ bgcolor: '#f8fafc', borderRadius: 2.5, border: `1px solid ${slate[200]}`, p: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, gap: 1.5 }}>
-            <Box sx={{ width: 4, height: 14, bgcolor: theme.palette.primary.main, borderRadius: 1 }} />
-            <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: slate[500] }}>
-              Size breakdown
-            </Typography>
-            {qty > 0 && (
-              <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: slate[400] }}>
-                · {fmtNum(qty)} pcs total
-              </Typography>
-            )}
-          </Box>
-
-          {/* Horizontal wrapping pairs */}
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'flex-start' }}>
-            {line.size_breakdown.map((r, si) => (
-              <Box
-                key={si}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'stretch',
-                  border: `1px solid ${slate[200]}`,
-                  borderRadius: 1.5,
-                  overflow: 'hidden',
-                  bgcolor: '#fff',
-                  boxShadow: `0 1px 3px ${alpha(slate[900], 0.04)}`,
-                }}
-              >
-                {/* Size name */}
-                <Box sx={{ borderRight: `1px solid ${slate[200]}` }}>
-                  <input
-                    value={r.size}
-                    onChange={(e) => setSizeName(si, e.target.value)}
-                    placeholder="Size"
-                    style={{
-                      width: 72,
-                      height: '100%',
-                      border: 'none',
-                      outline: 'none',
-                      textAlign: 'center',
-                      fontWeight: 800,
-                      fontSize: '0.9rem',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                      color: slate[700],
-                      background: 'transparent',
-                      padding: '10px 6px',
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                </Box>
-                {/* Qty */}
-                <input
-                  type="number"
-                  value={r.qty}
-                  onChange={(e) => setSizeQty(si, e.target.value)}
-                  placeholder="Qty"
-                  min={0}
-                  style={{
-                    width: 76,
-                    height: '100%',
-                    border: 'none',
-                    outline: 'none',
-                    textAlign: 'center',
-                    fontWeight: 700,
-                    fontSize: '0.9rem',
-                    color: slate[900],
-                    background: 'transparent',
-                    padding: '10px 6px',
-                    fontFamily: 'inherit',
-                    MozAppearance: 'textfield',
-                  }}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  checked={showProductCode}
+                  onChange={(e) => onChange({ size_level_codes: e.target.checked })}
                 />
-                {/* Remove */}
-                {line.size_breakdown.length > 1 && (
-                  <Box
-                    onClick={() => removeSize(si)}
-                    sx={{
-                      display: 'flex', alignItems: 'center', px: 0.5,
-                      borderLeft: `1px solid ${slate[100]}`,
-                      cursor: 'pointer', color: slate[300],
-                      '&:hover': { color: 'error.main', bgcolor: alpha('#ef4444', 0.06) },
-                    }}
-                  >
-                    <RemoveCircleOutline sx={{ fontSize: 13 }} />
-                  </Box>
+              }
+              label={
+                <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: slate[700] }}>
+                  Add size-level PRODUCT code
+                </Typography>
+              }
+              sx={{ mt: 0.5, ml: 0.25, alignItems: 'center' }}
+            />
+          </Grid>
+          <Grid item xs={12} sm={8} md={9}>
+            <Box sx={{
+              borderRadius: 1.5,
+              border: `1px solid ${slate[300]}`,
+              overflow: 'hidden',
+              bgcolor: '#fff',
+              width: '100%',
+              maxWidth: showProductCode ? 520 : 360,
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.75, bgcolor: slate[50], borderBottom: `1px solid ${slate[200]}` }}>
+                <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: slate[500] }}>
+                  Size breakdown
+                </Typography>
+                {qty > 0 && (
+                  <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: slate[400] }}>
+                    · {fmtNum(qty)} pcs
+                  </Typography>
                 )}
               </Box>
-            ))}
 
-            {/* Add size */}
-            <Box
-              onClick={addSize}
-              sx={{
-                display: 'flex', alignItems: 'center', gap: 0.5,
-                border: `1px dashed ${alpha(theme.palette.primary.main, 0.35)}`,
-                borderRadius: 1.5, px: 1.5, py: '6px',
-                cursor: 'pointer', color: theme.palette.primary.main,
-                fontSize: '0.75rem', fontWeight: 700,
-                '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.05), borderColor: theme.palette.primary.main },
-              }}
-            >
-              <AddCircleOutline sx={{ fontSize: 14 }} /> Add
+              <Box
+                component="table"
+                sx={{
+                  borderCollapse: 'collapse',
+                  tableLayout: 'fixed',
+                  width: '100%',
+                  fontFamily: 'inherit',
+                  '& th, & td': {
+                    borderRight: `1px solid ${slate[200]}`,
+                    borderBottom: `1px solid ${slate[200]}`,
+                    p: 0,
+                  },
+                  '& th:last-child, & td:last-child': { borderRight: 'none' },
+                  '& tr:last-child td': { borderBottom: 'none' },
+                }}
+              >
+                <Box component="thead">
+                  <Box component="tr" sx={{ bgcolor: '#e8f0e4' }}>
+                    {showProductCode && (
+                      <Box component="th" sx={{ width: '42%', py: 0.65, textAlign: 'center', fontSize: '0.65rem', fontWeight: 800, color: slate[600], letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                        Product code
+                      </Box>
+                    )}
+                    <Box component="th" sx={{ width: showProductCode ? '24%' : '44%', py: 0.65, textAlign: 'center', fontSize: '0.65rem', fontWeight: 800, color: slate[600], letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                      Size
+                    </Box>
+                    <Box component="th" sx={{ width: showProductCode ? '24%' : '44%', py: 0.65, textAlign: 'center', fontSize: '0.65rem', fontWeight: 800, color: slate[600], letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                      Qty
+                    </Box>
+                    <Box component="th" sx={{ width: 36 }} />
+                  </Box>
+                </Box>
+                <Box component="tbody">
+                  {line.size_breakdown.map((r, si) => (
+                    <Box
+                      component="tr"
+                      key={si}
+                      sx={{
+                        bgcolor: si % 2 === 0 ? '#fff' : alpha(slate[100], 0.45),
+                        '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) },
+                      }}
+                    >
+                      {showProductCode && (
+                        <Box component="td">
+                          <input
+                            value={r.product_code || ''}
+                            onChange={(e) => setSizeProductCode(si, e.target.value)}
+                            placeholder="Code"
+                            style={{
+                              width: '100%',
+                              border: 'none',
+                              outline: 'none',
+                              background: 'transparent',
+                              fontWeight: 600,
+                              fontSize: '0.8rem',
+                              color: slate[800],
+                              padding: '8px 8px',
+                              fontFamily: 'inherit',
+                              textAlign: 'left',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                        </Box>
+                      )}
+                      <Box component="td">
+                        <input
+                          value={r.size}
+                          onChange={(e) => setSizeName(si, e.target.value)}
+                          placeholder="Size"
+                          maxLength={8}
+                          style={{
+                            width: '100%',
+                            border: 'none',
+                            outline: 'none',
+                            background: 'transparent',
+                            fontWeight: 700,
+                            fontSize: '0.85rem',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.02em',
+                            color: slate[800],
+                            padding: '8px 6px',
+                            fontFamily: 'inherit',
+                            textAlign: 'center',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      </Box>
+                      <Box component="td">
+                        <input
+                          type="number"
+                          value={r.qty}
+                          onChange={(e) => setSizeQty(si, e.target.value)}
+                          placeholder="0"
+                          min={0}
+                          max={99999}
+                          style={{
+                            width: '100%',
+                            border: 'none',
+                            outline: 'none',
+                            background: 'transparent',
+                            fontWeight: 700,
+                            fontSize: '0.85rem',
+                            color: slate[900],
+                            padding: '8px 6px',
+                            fontFamily: 'inherit',
+                            textAlign: 'center',
+                            boxSizing: 'border-box',
+                            MozAppearance: 'textfield',
+                          }}
+                        />
+                      </Box>
+                      <Box component="td" sx={{ textAlign: 'center' }}>
+                        {line.size_breakdown.length > MIN_SIZE_ROWS && (
+                          <Box
+                            onClick={() => removeSize(si)}
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: 24,
+                              height: 24,
+                              cursor: 'pointer',
+                              color: slate[300],
+                              borderRadius: 0.75,
+                              '&:hover': { color: 'error.main', bgcolor: alpha('#ef4444', 0.08) },
+                            }}
+                          >
+                            <RemoveCircleOutline sx={{ fontSize: 14 }} />
+                          </Box>
+                        )}
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+
+              <Box
+                onClick={addSize}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 0.5,
+                  py: 0.65,
+                  borderTop: `1px solid ${slate[200]}`,
+                  bgcolor: slate[50],
+                  cursor: 'pointer',
+                  color: theme.palette.primary.main,
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.06) },
+                }}
+              >
+                <AddCircleOutline sx={{ fontSize: 15 }} />
+                Add row
+              </Box>
             </Box>
-          </Box>
-        </Box>
+          </Grid>
+        </Grid>
 
         {/* ── Calculation strip ─── */}
         <Box
@@ -862,6 +964,7 @@ export default function BuyerPOEditorPage() {
           ship_to_customer: po.ship_to_customer || '',
           ship_to_name:    po.ship_to_name || '',
           ship_to_address: po.ship_to_address || '',
+          add_ship_to:     Boolean(po.ship_to_customer),
           supplier_code:   po.supplier_code || '',
           currency:        po.currency || 'USD',
           delivery_terms:  po.delivery_terms || '',
@@ -887,14 +990,22 @@ export default function BuyerPOEditorPage() {
             fabric:         l.fabric || '',
             color:          l.color || '',
             customer_ref:   l.customer_ref || '',
-            size_breakdown: l.size_breakdown?.length
-              ? normalizeSizeBreakdownEntries(
-                  l.size_breakdown.map((s) => ({
+            size_breakdown: padSizeRows(
+              l.size_breakdown?.length
+                ? normalizeSizeBreakdownEntries(
+                    l.size_breakdown.map((s) => ({
+                      size: s.size,
+                      qty: s.qty != null ? String(s.qty) : '',
+                      product_code: s.product_code || '',
+                    })),
+                  ).map((s) => ({
                     size: s.size,
                     qty: s.qty != null ? String(s.qty) : '',
-                  })),
-                ).map((s) => ({ size: s.size, qty: s.qty != null ? String(s.qty) : '' }))
-              : [{ size: '', qty: '' }],
+                    product_code: s.product_code || '',
+                  }))
+                : [],
+            ),
+            size_level_codes: (l.size_breakdown || []).some((s) => Boolean(s.product_code)),
             uom:           l.uom || 'PCS',
             unit_price:    l.unit_price != null ? String(l.unit_price) : '',
             discount:      l.discount != null ? String(l.discount) : '',
@@ -959,7 +1070,9 @@ export default function BuyerPOEditorPage() {
     const payload = {
       ...formData,
       customer:          formData.customer || null,
-      ship_to_customer:  formData.ship_to_customer || null,
+      ship_to_customer:  formData.add_ship_to ? (formData.ship_to_customer || null) : null,
+      ship_to_name:      formData.add_ship_to ? (formData.ship_to_name || '') : '',
+      ship_to_address:   formData.add_ship_to ? (formData.ship_to_address || '') : '',
       ex_factory_date:   formData.ex_factory_date || null,
       lines: lines.map((l) => ({
         item_code:      l.item_code,
@@ -969,7 +1082,16 @@ export default function BuyerPOEditorPage() {
         customer_ref:   l.customer_ref,
         size_breakdown: normalizeSizeBreakdownEntries(
           l.size_breakdown.filter((r) => r.size),
-        ),
+        ).map((r) => {
+          if (!l.size_level_codes) {
+            return { size: r.size, qty: r.qty };
+          }
+          return {
+            size: r.size,
+            qty: r.qty,
+            ...(r.product_code ? { product_code: r.product_code } : {}),
+          };
+        }),
         uom:           l.uom || 'PCS',
         unit_price:    l.unit_price !== '' ? parseFloat(l.unit_price) : null,
         discount:      l.discount !== '' ? parseFloat(l.discount) : null,
@@ -977,6 +1099,7 @@ export default function BuyerPOEditorPage() {
         notes:         l.notes,
       })),
     };
+    delete payload.add_ship_to;
 
     setSaving(true);
     try {
@@ -1201,7 +1324,7 @@ export default function BuyerPOEditorPage() {
           }}>
           {/* PO meta */}
           <Typography sx={groupLabelSx}>PO identity & logistics</Typography>
-          <Grid container spacing={3} sx={{ mb: 5 }}>
+          <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid item xs={12} sm={4}>
               <TextField size="small" fullWidth label="PO Number *"
                 value={formData.po_number} onChange={(e) => setField('po_number', e.target.value)}
@@ -1222,11 +1345,6 @@ export default function BuyerPOEditorPage() {
                 value={formData.currency} onChange={(e) => setField('currency', e.target.value)} sx={fieldSx} />
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField size="small" fullWidth label="Supplier Code"
-                value={formData.supplier_code} onChange={(e) => setField('supplier_code', e.target.value)}
-                placeholder="e.g. 004724" sx={fieldSx} />
-            </Grid>
-            <Grid item xs={12} sm={4}>
               <TextField size="small" fullWidth select label="Status"
                 value={formData.status} onChange={(e) => setField('status', e.target.value)} sx={fieldSx}>
                 {STATUS_OPTIONS.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
@@ -1234,128 +1352,179 @@ export default function BuyerPOEditorPage() {
             </Grid>
           </Grid>
 
-          <Divider sx={{ mb: 4, borderStyle: 'dashed' }} />
+          <Divider sx={{ mb: 3, borderStyle: 'dashed' }} />
 
-          {/* Buyer info */}
-          <Typography sx={groupLabelSx}>Buyer details</Typography>
-          <Grid container spacing={3}>
-            <Grid item xs={12} sm={4}>
-              <TextField size="small" fullWidth select label="Bill To (customer master)"
-                value={formData.customer}
-                onChange={(e) => {
-                    const cust = customers.find((c) => c.id === e.target.value);
-                    const derivedAddress = formatCustomerAddress(cust);
+          {/* Buyer details — compact Bill To; Ship To optional */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+            <Typography sx={{ ...groupLabelSx, mb: 0 }}>Buyer details</Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  checked={Boolean(formData.add_ship_to)}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    const billTo = customers.find((c) => c.id === formData.customer);
                     setFormData((f) => ({
                       ...f,
-                      customer: e.target.value,
-                      buyer_name: cust ? (cust.company_legal_name || f.buyer_name) : f.buyer_name,
-                      buyer_contact: cust?.primary_contact_name || f.buyer_contact,
-                      buyer_address: cust ? (derivedAddress || f.buyer_address) : f.buyer_address,
-                      // Reset Ship To when Bill To changes (default: same as Bill To)
-                      ...applyShipTo('', cust),
+                      add_ship_to: on,
+                      ...(on ? {} : applyShipTo('', billTo)),
                     }));
                   }}
-                sx={fieldSx}
-              >
-                <MenuItem value="">— Select Customer —</MenuItem>
-                {customers.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>
-                    {c.company_legal_name} {c.customer_code ? `(${c.customer_code})` : ''}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField size="small" fullWidth label="Buyer / Company Name"
-                value={formData.buyer_name} onChange={(e) => setField('buyer_name', e.target.value)}
-                placeholder="e.g. COFRA S.R.L." sx={fieldSx} />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField size="small" fullWidth label="Buyer Contact Person"
-                value={formData.buyer_contact} onChange={(e) => setField('buyer_contact', e.target.value)}
-                placeholder="Contact name" sx={fieldSx} />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField size="small" fullWidth multiline minRows={1} maxRows={4}
-                label="Bill To Address"
-                value={formData.buyer_address} onChange={(e) => setField('buyer_address', e.target.value)}
-                placeholder="Auto-filled from customer master — edit freely…"
-                helperText="Auto-filled when Bill To customer is selected. Click to expand."
-                sx={{
-                  ...fieldSx,
-                  '& .MuiInputBase-root': { bgcolor: '#fcfcfc' },
-                  '& .MuiFormHelperText-root': { fontSize: '0.7rem', color: slate[400], mt: 0.5 },
-                }} />
-            </Grid>
+                />
+              }
+              label={
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: slate[700] }}>
+                  Add ship to
+                </Typography>
+              }
+              sx={{ mr: 0 }}
+            />
+          </Box>
 
-            {/* Ship To — same customer_code group */}
-            <Grid item xs={12} sm={6}>
-              <TextField
-                size="small"
-                fullWidth
-                select
-                label="Ship To"
-                value={formData.ship_to_customer || formData.customer || ''}
-                disabled={!formData.customer || shipToOptions.length === 0}
-                onChange={(e) => {
-                  const billTo = customers.find((c) => c.id === formData.customer);
-                  setFormData((f) => ({
-                    ...f,
-                    ...applyShipTo(e.target.value, billTo),
-                  }));
-                }}
-                helperText={
-                  !formData.customer
-                    ? 'Select Bill To first'
-                    : shipToOptions.length <= 1
-                      ? 'Only one entity under this customer code — Ship To matches Bill To'
-                      : 'Pick another company under the same customer code if delivery differs'
-                }
-                sx={{
-                  ...fieldSx,
-                  '& .MuiFormHelperText-root': { fontSize: '0.7rem', color: slate[400], mt: 0.5 },
-                }}
-              >
-                {shipToOptions.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>
-                    {c.company_legal_name}
-                    {c.id === formData.customer ? ' (same as Bill To)' : ''}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                size="small"
-                fullWidth
-                label="Ship To Company Name"
-                value={formData.ship_to_name}
-                onChange={(e) => setField('ship_to_name', e.target.value)}
-                disabled={!formData.ship_to_customer}
-                placeholder={formData.ship_to_customer ? '' : 'Same as Bill To'}
-                sx={fieldSx}
-              />
-            </Grid>
-            {formData.ship_to_customer ? (
+          <Box
+            sx={{
+              p: 2,
+              borderRadius: 2,
+              border: `1px solid ${slate[200]}`,
+              bgcolor: '#fff',
+            }}
+          >
+            <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: slate[500], mb: 1.5 }}>
+              Bill To
+            </Typography>
+            <Grid container spacing={1.75}>
+              <Grid item xs={12} sm={6} md={4}>
+                <TextField size="small" fullWidth select label="Customer master"
+                  value={formData.customer}
+                  onChange={(e) => {
+                      const cust = customers.find((c) => c.id === e.target.value);
+                      const derivedAddress = formatCustomerAddress(cust);
+                      setFormData((f) => ({
+                        ...f,
+                        customer: e.target.value,
+                        buyer_name: cust ? (cust.company_legal_name || f.buyer_name) : f.buyer_name,
+                        buyer_contact: cust?.primary_contact_name || f.buyer_contact,
+                        buyer_address: cust ? (derivedAddress || f.buyer_address) : f.buyer_address,
+                        ...(f.add_ship_to ? {} : applyShipTo('', cust)),
+                      }));
+                    }}
+                  sx={fieldSx}
+                >
+                  <MenuItem value="">— Select Customer —</MenuItem>
+                  {customers.map((c) => (
+                    <MenuItem key={c.id} value={c.id}>
+                      {c.company_legal_name} {c.customer_code ? `(${c.customer_code})` : ''}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <TextField size="small" fullWidth label="Company Name"
+                  value={formData.buyer_name} onChange={(e) => setField('buyer_name', e.target.value)}
+                  placeholder="e.g. COFRA S.R.L." sx={fieldSx} />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <TextField size="small" fullWidth label="Contact Person"
+                  value={formData.buyer_contact} onChange={(e) => setField('buyer_contact', e.target.value)}
+                  placeholder="Contact name" sx={fieldSx} />
+              </Grid>
               <Grid item xs={12}>
-                <TextField
-                  size="small"
-                  fullWidth
-                  multiline
-                  minRows={1}
-                  maxRows={4}
-                  label="Ship To Address"
-                  value={formData.ship_to_address}
-                  onChange={(e) => setField('ship_to_address', e.target.value)}
-                  placeholder="Auto-filled from selected Ship To entity"
+                <TextField size="small" fullWidth multiline minRows={1} maxRows={3}
+                  label="Address"
+                  value={formData.buyer_address} onChange={(e) => setField('buyer_address', e.target.value)}
+                  placeholder="Auto-filled from customer master — edit freely…"
                   sx={{
                     ...fieldSx,
                     '& .MuiInputBase-root': { bgcolor: '#fcfcfc' },
-                  }}
-                />
+                  }} />
               </Grid>
-            ) : null}
-          </Grid>
+            </Grid>
+          </Box>
+
+          <Collapse in={Boolean(formData.add_ship_to)}>
+            <Box
+              sx={{
+                mt: 1.75,
+                p: 2,
+                borderRadius: 2,
+                border: `1px solid ${slate[200]}`,
+                bgcolor: '#fff',
+              }}
+            >
+              <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: slate[500], mb: 1.5 }}>
+                Ship To
+              </Typography>
+              <Grid container spacing={1.75}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    select
+                    label="Ship To company"
+                    value={formData.ship_to_customer || ''}
+                    disabled={!formData.customer || shipToOptions.length === 0}
+                    onChange={(e) => {
+                      const billTo = customers.find((c) => c.id === formData.customer);
+                      setFormData((f) => ({
+                        ...f,
+                        ...applyShipTo(e.target.value, billTo),
+                      }));
+                    }}
+                    helperText={
+                      !formData.customer
+                        ? 'Select Bill To first'
+                        : shipToOptions.length <= 1
+                          ? 'Only one entity under this code — same as Bill To'
+                          : 'Another company under the same customer code'
+                    }
+                    sx={{
+                      ...fieldSx,
+                      '& .MuiFormHelperText-root': { fontSize: '0.7rem', color: slate[400], mt: 0.5 },
+                    }}
+                  >
+                    <MenuItem value="">— Select Ship To —</MenuItem>
+                    {shipToOptions.map((c) => (
+                      <MenuItem key={c.id} value={c.id}>
+                        {c.company_legal_name}
+                        {c.id === formData.customer ? ' (same as Bill To)' : ''}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    label="Company Name"
+                    value={formData.ship_to_name}
+                    onChange={(e) => setField('ship_to_name', e.target.value)}
+                    disabled={!formData.ship_to_customer}
+                    placeholder="Auto-filled"
+                    sx={fieldSx}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    multiline
+                    minRows={1}
+                    maxRows={3}
+                    label="Address"
+                    value={formData.ship_to_address}
+                    onChange={(e) => setField('ship_to_address', e.target.value)}
+                    disabled={!formData.ship_to_customer}
+                    placeholder="Auto-filled from selected Ship To entity"
+                    sx={{
+                      ...fieldSx,
+                      '& .MuiInputBase-root': { bgcolor: '#fcfcfc' },
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </Box>
+          </Collapse>
         </Box>
       </Collapse>
     </Box>
@@ -1478,16 +1647,12 @@ export default function BuyerPOEditorPage() {
                   value={formData.payment_terms} onChange={(e) => setField('payment_terms', e.target.value)}
                   placeholder="e.g. 60 DAYS FROM B/L DATE, D/A" sx={fieldSx} />
               </Grid>
-              <Grid item xs={12} sm={4}>
+              <Grid item xs={12} sm={6}>
                 <TextField size="small" fullWidth label="Delivery Method"
                   value={formData.delivery_method} onChange={(e) => setField('delivery_method', e.target.value)}
                   placeholder="e.g. BY SEA CARRIER" sx={fieldSx} />
               </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField size="small" fullWidth label="Terms of Freight"
-                  value={formData.freight_terms} onChange={(e) => setField('freight_terms', e.target.value)} sx={fieldSx} />
-              </Grid>
-              <Grid item xs={12} sm={4}>
+              <Grid item xs={12} sm={6}>
                 <TextField size="small" fullWidth label="Packaging Terms"
                   value={formData.packaging_terms} onChange={(e) => setField('packaging_terms', e.target.value)}
                   placeholder="e.g. STANDARD PACKAGING" sx={fieldSx} />
