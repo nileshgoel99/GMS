@@ -502,6 +502,7 @@ const Customers = () => {
     },
     '& .MuiDataGrid-row': {
       ...dataGridSx['& .MuiDataGrid-row'],
+      maxHeight: 'none !important',
     },
     '& .MuiDataGrid-row.customer-row--alt': {
       bgcolor: `${alpha(slate[200], 0.42)} !important`,
@@ -517,13 +518,23 @@ const Customers = () => {
       fontWeight: 400,
       fontSize: '0.8125rem',
       color: slate[700],
+      // Required for getRowHeight auto — default max-height clips wrapped text
+      maxHeight: 'none !important',
     },
-    '& .MuiDataGrid-cell--nameWrap': {
+    // Legal name: defeat DataGrid nowrap + ellipsis so full name always shows
+    '& .customer-name-cell': {
       whiteSpace: 'normal !important',
-      lineHeight: 1.4,
+      lineHeight: '1.4 !important',
       wordBreak: 'break-word',
-      overflow: 'visible',
+      overflow: 'visible !important',
+      textOverflow: 'clip !important',
       alignItems: 'flex-start',
+      py: 1.25,
+    },
+    '& .customer-name-cell, & .customer-name-cell *': {
+      whiteSpace: 'normal !important',
+      overflow: 'visible !important',
+      textOverflow: 'clip !important',
     },
     '& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus': { outline: 'none' },
     '& .MuiDataGrid-footerContainer': {
@@ -565,17 +576,23 @@ const Customers = () => {
     {
       field: 'company_legal_name',
       headerName: 'Legal name',
-      minWidth: 220,
-      flex: 1.6,
-      cellClassName: 'MuiDataGrid-cell--nameWrap',
+      minWidth: 260,
+      flex: 2,
+      cellClassName: 'customer-name-cell',
       renderCell: (p) => (
         <Typography
+          component="div"
           sx={{
             ...cellPrimary,
+            width: '100%',
             whiteSpace: 'normal',
             wordBreak: 'break-word',
+            overflowWrap: 'anywhere',
+            overflow: 'visible',
+            textOverflow: 'clip',
             cursor: 'pointer',
             py: 0.25,
+            lineHeight: 1.4,
             '&:hover': { color: theme.palette.primary.main },
           }}
           onClick={() => handleViewDetail(p.row)}
@@ -709,6 +726,7 @@ const Customers = () => {
       loading={loading}
       disableRowSelectionOnClick
       getRowHeight={() => 'auto'}
+      getEstimatedRowHeight={() => 56}
       columnHeaderHeight={44}
       onRowDoubleClick={(params) => handleViewDetail(params.row)}
       sx={{
@@ -849,7 +867,7 @@ const Customers = () => {
                       sx={{ height: 22, fontWeight: 600, fontSize: '0.7rem' }}
                     />
                   </Box>
-                  <Box sx={{ height: Math.min(44 * items.length + 52, 320), width: '100%' }}>
+                  <Box sx={{ minHeight: Math.min(56 * items.length + 52, 360), width: '100%' }}>
                     {renderDataGrid(items, groupedColumns, { compactFooter: true, localStriping: true })}
                   </Box>
                 </Box>
