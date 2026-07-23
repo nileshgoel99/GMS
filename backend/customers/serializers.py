@@ -1,6 +1,20 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import URLValidator
 from rest_framework import serializers
 
 from .models import Customer, CustomerContact
+
+
+def normalize_website(value):
+    """Accept bare domains (edufire.co.uk) by prefixing https:// when needed."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if '://' not in raw:
+        raw = f'https://{raw}'
+    return raw
 
 
 class CustomerContactSerializer(serializers.ModelSerializer):
@@ -47,6 +61,8 @@ class CustomerSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     display_name = serializers.CharField(read_only=True)
     contacts = CustomerContactSerializer(many=True, required=False)
+    # CharField so bare domains are not rejected before we prepend https://
+    website = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Customer
@@ -58,6 +74,18 @@ class CustomerSerializer(serializers.ModelSerializer):
         if not code:
             raise serializers.ValidationError('Customer code is required.')
         return code
+
+    def validate_website(self, value):
+        normalized = normalize_website(value)
+        if not normalized:
+            return None
+        try:
+            URLValidator()(normalized)
+        except DjangoValidationError:
+            raise serializers.ValidationError(
+                'Enter a valid website (e.g. edufire.co.uk or https://edufire.co.uk).'
+            )
+        return normalized
 
     def validate(self, attrs):
         contacts = attrs.get('contacts')

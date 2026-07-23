@@ -29,17 +29,38 @@ import {
   Search,
   Warning,
   Inventory2,
-  Outbound,
   History,
   Close,
   Assignment,
+  Layers,
+  GridView,
+  LocalOffer,
+  ViewWeek,
+  LinearScale,
+  RadioButtonChecked,
+  Timeline,
+  ShoppingBag,
+  Category as CategoryIcon,
+  ChevronRight,
+  Style,
+  Business,
+  FileDownload,
+  Description,
+  Send,
+  AccessTime,
+  DonutLarge,
+  Palette,
+  Straighten,
+  Link as LinkIcon,
+  Tag,
+  FiberManualRecord,
+  ExpandMore,
+  ExpandLess,
+  Unarchive,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import PageHeader from '../components/PageHeader';
-import InventoryItemParticulars, {
-  PropertyCards,
-  InventoryItemFull,
-} from '../components/inventory/InventoryItemParticulars';
+import { InventoryItemFull } from '../components/inventory/InventoryItemParticulars';
 import { extractTrimProperties, getItemDisplayName } from '../utils/extractTrimProperties';
 import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
@@ -103,33 +124,6 @@ const stockTone = (row) => {
   return { key: 'ok', color: '#047857' };
 };
 
-const StockQty = ({ row }) => {
-  const qty = parseFloat(row.current_stock) || 0;
-  const tone = stockTone(row);
-
-  return (
-    <Box sx={{ minWidth: 72, textAlign: 'right' }}>
-      <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 0.5 }}>
-        <Typography
-          className="font-numeric"
-          sx={{
-            fontWeight: 800,
-            fontSize: '1rem',
-            color: tone.color,
-            fontVariantNumeric: 'tabular-nums',
-            lineHeight: 1.1,
-          }}
-        >
-          {fmtQty(qty)}
-        </Typography>
-        <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: slate[500] }}>
-          {row.unit}
-        </Typography>
-      </Box>
-    </Box>
-  );
-};
-
 const FilterChip = ({ active, label, count, onClick, color = 'default' }) => (
   <Chip
     label={count != null ? `${label} · ${count}` : label}
@@ -148,6 +142,274 @@ const FilterChip = ({ active, label, count, onClick, color = 'default' }) => (
   />
 );
 
+const CATEGORY_CARD_META = {
+  _ALL: {
+    label: 'Total SKUs',
+    sub: 'All items',
+    color: '#059669',
+    Icon: Layers,
+  },
+  FABRIC: {
+    label: 'Fabric',
+    sub: 'Categories',
+    color: '#2563eb',
+    Icon: GridView,
+  },
+  LABEL: {
+    label: 'Label',
+    sub: 'Categories',
+    color: '#7c3aed',
+    Icon: LocalOffer,
+  },
+  TAPE: {
+    label: 'Tape',
+    sub: 'Categories',
+    color: '#ea580c',
+    Icon: ViewWeek,
+  },
+  ZIPPER: {
+    label: 'Zipper',
+    sub: 'Categories',
+    color: '#0d9488',
+    Icon: LinearScale,
+  },
+  BUTTON: {
+    label: 'Button',
+    sub: 'Categories',
+    color: '#db2777',
+    Icon: RadioButtonChecked,
+  },
+  THREAD: {
+    label: 'Thread',
+    sub: 'Categories',
+    color: '#ca8a04',
+    Icon: Timeline,
+  },
+  POLYBAG: {
+    label: 'Polybag',
+    sub: 'Categories',
+    color: '#0891b2',
+    Icon: ShoppingBag,
+  },
+  OTHER: {
+    label: 'Other',
+    sub: 'Categories',
+    color: '#64748b',
+    Icon: CategoryIcon,
+  },
+};
+
+const CATEGORY_CARD_ORDER = [
+  'FABRIC',
+  'LABEL',
+  'TAPE',
+  'ZIPPER',
+  'BUTTON',
+  'THREAD',
+  'POLYBAG',
+  'OTHER',
+];
+
+const SummaryStatCard = ({ meta, count, onClick }) => {
+  const { label, sub, color, Icon } = meta;
+  return (
+    <Box
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
+      sx={{
+        flex: '1 1 160px',
+        minWidth: 150,
+        maxWidth: 220,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        px: 1.75,
+        py: 1.5,
+        borderRadius: 2.5,
+        bgcolor: '#fff',
+        border: `1px solid ${slate[200]}`,
+        borderLeft: `4px solid ${color}`,
+        boxShadow: `0 1px 3px ${alpha(slate[900], 0.06)}`,
+        cursor: 'pointer',
+        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+        '&:hover': {
+          transform: 'translateY(-2px)',
+          boxShadow: `0 6px 16px ${alpha(slate[900], 0.1)}`,
+        },
+        '&:focus-visible': {
+          outline: `2px solid ${color}`,
+          outlineOffset: 2,
+        },
+      }}
+    >
+      <Box
+        sx={{
+          width: 42,
+          height: 42,
+          borderRadius: '50%',
+          bgcolor: alpha(color, 0.12),
+          color,
+          display: 'grid',
+          placeItems: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <Icon sx={{ fontSize: 22 }} />
+      </Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography
+          className="font-numeric"
+          sx={{
+            fontWeight: 800,
+            fontSize: '1.55rem',
+            color: slate[900],
+            lineHeight: 1.1,
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {count}
+        </Typography>
+        <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: slate[800], lineHeight: 1.2 }}>
+          {label}
+        </Typography>
+        <Typography sx={{ fontSize: '0.68rem', fontWeight: 500, color: slate[500] }}>
+          {sub}
+        </Typography>
+      </Box>
+    </Box>
+  );
+};
+
+const CATEGORY_MODAL_GREEN = '#0b5c4d';
+
+const propertyIconForLabel = (label) => {
+  const l = (label || '').toLowerCase();
+  if (l.includes('color') || l.includes('colour')) return Palette;
+  if (l.includes('size') || l.includes('width') || l.includes('length') || l.includes('cms')) return Straighten;
+  if (l.includes('material') || l.includes('chain') || l.includes('fabric')) return LinkIcon;
+  if (l.includes('number') || l.includes('#') || l === 'no' || l === 'no.') return Tag;
+  if (l.includes('type') || l.includes('puller') || l.includes('end')) return CategoryIcon;
+  return Style;
+};
+
+const SpecPropertyChip = ({ label, value, accent }) => {
+  const Icon = propertyIconForLabel(label);
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 0.65,
+        px: 0.85,
+        py: 0.55,
+        borderRadius: 1.25,
+        bgcolor: alpha(accent, 0.06),
+        border: `1px solid ${alpha(accent, 0.16)}`,
+        minWidth: 0,
+      }}
+    >
+      <Icon sx={{ fontSize: 14, color: accent, mt: '1px', flexShrink: 0 }} />
+      <Box sx={{ minWidth: 0 }}>
+        <Typography
+          sx={{
+            fontSize: '0.58rem',
+            fontWeight: 700,
+            color: slate[500],
+            lineHeight: 1.15,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {label}
+        </Typography>
+        <Typography
+          sx={{
+            fontSize: '0.72rem',
+            fontWeight: 800,
+            color: slate[800],
+            lineHeight: 1.25,
+            wordBreak: 'break-word',
+          }}
+        >
+          {value}
+        </Typography>
+      </Box>
+    </Box>
+  );
+};
+
+const StockStatusBadge = ({ tone }) => {
+  const map = {
+    ok: { label: 'In Stock', color: '#15803d', bg: alpha('#22c55e', 0.12) },
+    low: { label: 'Low Stock', color: '#b45309', bg: alpha('#f59e0b', 0.14) },
+    empty: { label: 'Out of Stock', color: slate[600], bg: alpha(slate[500], 0.12) },
+  };
+  const s = map[tone] || map.ok;
+  return (
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.45,
+        px: 0.85,
+        py: 0.25,
+        borderRadius: 999,
+        bgcolor: s.bg,
+      }}
+    >
+      <FiberManualRecord sx={{ fontSize: 8, color: s.color }} />
+      <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, color: s.color, lineHeight: 1.2 }}>
+        {s.label}
+      </Typography>
+    </Box>
+  );
+};
+
+const getItemSku = (row) =>
+  row.item_code || row.sku || row.code || (row.id != null ? String(row.id) : '—');
+
+/** Gray bordered "Label: Value" pills for the inventory table */
+const SpecPills = ({ item, limit = 4 }) => {
+  const properties = extractTrimProperties(item || {}).slice(0, limit);
+  if (!properties.length) {
+    return <Typography sx={{ fontSize: '0.78rem', color: slate[400] }}>—</Typography>;
+  }
+  return (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.55 }}>
+      {properties.map(({ label, value }) => (
+        <Box
+          key={`${label}-${value}`}
+          sx={{
+            px: 0.95,
+            py: 0.35,
+            borderRadius: 999,
+            bgcolor: slate[50],
+            border: `1px solid ${slate[200]}`,
+          }}
+        >
+          <Typography sx={{ fontSize: '0.7rem', fontWeight: 600, color: slate[700], lineHeight: 1.3 }}>
+            <Box component="span" sx={{ color: slate[500], fontWeight: 600 }}>{label}: </Box>
+            {value}
+          </Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+};
+
+const INVENTORY_TABLE_COLS = {
+  xs: 'minmax(0, 1fr) auto',
+  md: 'minmax(180px, 1.35fr) minmax(200px, 1.9fr) minmax(110px, 0.95fr) 108px 104px 108px',
+};
+
 const Inventory = () => {
   const [items, setItems] = useState([]);
   const [lowStockItems, setLowStockItems] = useState([]);
@@ -158,6 +420,9 @@ const Inventory = () => {
   const [categoryFilter, setCategoryFilter] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [categoryModal, setCategoryModal] = useState(null); // { key, label, color, Icon, items }
+  const [categoryModalTab, setCategoryModalTab] = useState('history'); // history | release | details
+  const [collapsedCategories, setCollapsedCategories] = useState(() => new Set());
   const [releaseItem, setReleaseItem] = useState(null);
   const [releaseQty, setReleaseQty] = useState('');
   const [releaseRemarks, setReleaseRemarks] = useState('');
@@ -210,6 +475,126 @@ const Inventory = () => {
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [items]);
 
+  const summaryCards = useMemo(() => {
+    const byCat = new Map(categories);
+    const cards = [
+      {
+        key: '_ALL',
+        meta: CATEGORY_CARD_META._ALL,
+        count: items.length,
+        items,
+      },
+    ];
+    CATEGORY_CARD_ORDER.forEach((key) => {
+      const count = byCat.get(key) || 0;
+      if (!count) return;
+      const meta = CATEGORY_CARD_META[key] || {
+        label: key,
+        sub: 'Categories',
+        color: '#64748b',
+        Icon: CategoryIcon,
+      };
+      cards.push({
+        key,
+        meta,
+        count,
+        items: items.filter((r) => (r.category || 'OTHER').toUpperCase() === key),
+      });
+    });
+    // Any unexpected categories not in the preferred order
+    categories.forEach(([key, count]) => {
+      if (CATEGORY_CARD_ORDER.includes(key) || !count) return;
+      cards.push({
+        key,
+        meta: CATEGORY_CARD_META[key] || {
+          label: key.charAt(0) + key.slice(1).toLowerCase(),
+          sub: 'Categories',
+          color: '#64748b',
+          Icon: CategoryIcon,
+        },
+        count,
+        items: items.filter((r) => (r.category || 'OTHER').toUpperCase() === key),
+      });
+    });
+    return cards;
+  }, [categories, items]);
+
+  const openCategoryModal = (card) => {
+    setCategoryModalTab('history');
+    setCategoryModal({
+      key: card.key,
+      label: card.meta.label,
+      color: card.meta.color || CATEGORY_MODAL_GREEN,
+      Icon: card.meta.Icon || CategoryIcon,
+      items: card.items,
+    });
+  };
+
+  const closeCategoryModal = () => {
+    setCategoryModal(null);
+    setCategoryModalTab('history');
+  };
+
+  const categoryModalStats = useMemo(() => {
+    const rows = categoryModal?.items || [];
+    const totalItems = rows.length;
+    let totalStock = 0;
+    let lowCount = 0;
+    let zeroCountLocal = 0;
+    let inStockCount = 0;
+    const units = new Set();
+    rows.forEach((row) => {
+      const qty = parseFloat(row.current_stock) || 0;
+      totalStock += qty;
+      if (qty <= 0) zeroCountLocal += 1;
+      else if (row.needs_reorder || lowIdSet.has(row.id)) lowCount += 1;
+      else inStockCount += 1;
+      if (row.unit) units.add(row.unit);
+    });
+    return {
+      totalItems,
+      totalStock,
+      lowCount,
+      zeroCount: zeroCountLocal,
+      inStockCount,
+      unitLabel: units.size === 1 ? [...units][0] : units.size > 1 ? 'mixed' : '',
+    };
+  }, [categoryModal, lowIdSet]);
+
+  const exportCategoryModalCsv = () => {
+    if (!categoryModal?.items?.length) return;
+    const rows = [...categoryModal.items].sort((a, b) =>
+      getItemDisplayName(a).localeCompare(getItemDisplayName(b)),
+    );
+    const header = ['SKU', 'Name', 'Category', 'Specifications', 'Supplier', 'Stock', 'Unit', 'Status'];
+    const lines = rows.map((row) => {
+      const tone = stockTone(row);
+      const status = tone.key === 'empty' ? 'Out of Stock' : tone.key === 'low' ? 'Low Stock' : 'In Stock';
+      const specs = extractTrimProperties(row)
+        .map((p) => `${p.label}: ${p.value}`)
+        .join('; ');
+      const cells = [
+        getItemSku(row),
+        getItemDisplayName(row),
+        row.category || categoryModal.label,
+        specs,
+        (row.suppliers || []).join('; '),
+        fmtQty(row.current_stock),
+        row.unit || '',
+        status,
+      ];
+      return cells.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',');
+    });
+    const csv = [header.join(','), ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(categoryModal.label || 'inventory').toLowerCase().replace(/\s+/g, '-')}-stock.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const filtered = useMemo(() => {
     let rows = items;
     if (stockFilter === 'low') {
@@ -235,8 +620,25 @@ const Inventory = () => {
       if (!map.has(cat)) map.set(cat, []);
       map.get(cat).push(row);
     });
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const orderIndex = (key) => {
+      const i = CATEGORY_CARD_ORDER.indexOf(key);
+      return i === -1 ? 999 : i;
+    };
+    return [...map.entries()].sort((a, b) => {
+      const oi = orderIndex(a[0]) - orderIndex(b[0]);
+      if (oi !== 0) return oi;
+      return a[0].localeCompare(b[0]);
+    });
   }, [filtered]);
+
+  const toggleCategoryCollapse = (cat) => {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
 
   const zeroCount = useMemo(
     () => items.filter((r) => (parseFloat(r.current_stock) || 0) <= 0).length,
@@ -331,7 +733,7 @@ const Inventory = () => {
   const hasActiveFilters = Boolean(search.trim() || stockFilter !== 'all' || categoryFilter);
 
   return (
-    <Box sx={{ p: { xs: 1.5, sm: 2.5 }, maxWidth: 1280, mx: 'auto' }}>
+    <Box sx={{ p: { xs: 1.5, sm: 2.5 }, maxWidth: 1400, mx: 'auto' }}>
       <Box
         sx={{
           display: 'flex',
@@ -348,42 +750,25 @@ const Inventory = () => {
           subtitle="Search by trim name, color, size, or supplier — click a row for history"
           compact
         />
-        <Stack direction="row" spacing={1.25} sx={{ flexWrap: 'wrap' }}>
-          <Box
-            sx={{
-              px: 1.5,
-              py: 0.85,
-              borderRadius: 1.5,
-              border: `1px solid ${slate[200]}`,
-              bgcolor: '#fff',
-              minWidth: 88,
-            }}
-          >
-            <Typography sx={{ fontSize: '0.62rem', fontWeight: 700, color: slate[500], textTransform: 'uppercase' }}>
-              SKUs
-            </Typography>
-            <Typography className="font-numeric" sx={{ fontWeight: 800, fontSize: '1.2rem', color: slate[900] }}>
-              {stats?.total_items ?? items.length}
-            </Typography>
-          </Box>
-          <Box
-            sx={{
-              px: 1.5,
-              py: 0.85,
-              borderRadius: 1.5,
-              border: `1px solid ${alpha('#b45309', 0.25)}`,
-              bgcolor: alpha('#f59e0b', 0.06),
-              minWidth: 88,
-            }}
-          >
-            <Typography sx={{ fontSize: '0.62rem', fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>
-              Low stock
-            </Typography>
-            <Typography className="font-numeric" sx={{ fontWeight: 800, fontSize: '1.2rem', color: '#b45309' }}>
-              {stats?.low_stock_items ?? lowStockItems.length}
-            </Typography>
-          </Box>
-        </Stack>
+      </Box>
+
+      {/* Category summary cards */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 1.5,
+          mb: 2.5,
+        }}
+      >
+        {summaryCards.map((card) => (
+          <SummaryStatCard
+            key={card.key}
+            meta={card.meta}
+            count={card.count}
+            onClick={() => openCategoryModal(card)}
+          />
+        ))}
       </Box>
 
       {/* Search & filters */}
@@ -492,7 +877,7 @@ const Inventory = () => {
         elevation={0}
         sx={{
           border: `1px solid ${slate[200]}`,
-          borderRadius: 2,
+          borderRadius: 2.5,
           overflow: 'hidden',
           bgcolor: '#fff',
           minHeight: 280,
@@ -520,149 +905,792 @@ const Inventory = () => {
             )}
           </Box>
         ) : (
-          grouped.map(([category, rows], gIdx) => (
-            <Box key={category}>
-              <Box
-                sx={{
-                  px: 2,
-                  py: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  bgcolor: gIdx % 2 === 0 ? alpha('#0f766e', 0.04) : alpha(slate[900], 0.03),
-                  borderBottom: `1px solid ${slate[100]}`,
-                  borderTop: gIdx > 0 ? `1px solid ${slate[100]}` : 'none',
-                  position: 'sticky',
-                  top: 0,
-                  zIndex: 1,
-                }}
-              >
+          <>
+            {/* Column headers */}
+            <Box
+              sx={{
+                display: { xs: 'none', md: 'grid' },
+                gridTemplateColumns: INVENTORY_TABLE_COLS.md,
+                gap: 1.5,
+                alignItems: 'center',
+                px: 2.25,
+                py: 1.2,
+                borderBottom: `1px solid ${slate[200]}`,
+                bgcolor: '#fff',
+                position: 'sticky',
+                top: 0,
+                zIndex: 3,
+              }}
+            >
+              {['Item Name', 'Specifications', 'Supplier', 'Stock', 'Status', 'Actions'].map((h, i) => (
                 <Typography
+                  key={h}
                   sx={{
-                    fontSize: '0.68rem',
+                    fontSize: '0.66rem',
                     fontWeight: 800,
-                    letterSpacing: '0.08em',
+                    letterSpacing: '0.07em',
                     textTransform: 'uppercase',
-                    color: slate[600],
+                    color: slate[400],
+                    textAlign: i >= 3 ? 'right' : 'left',
                   }}
                 >
-                  {category}
+                  {h}
                 </Typography>
-                <Chip
-                  size="small"
-                  label={rows.length}
-                  sx={{ height: 20, fontSize: '0.65rem', fontWeight: 800, bgcolor: '#fff', border: `1px solid ${slate[200]}` }}
-                />
-              </Box>
+              ))}
+            </Box>
 
-              {rows.map((row) => {
-                const tone = stockTone(row);
-                const suppliers = row.suppliers || [];
-                return (
+            {grouped.map(([category, rows]) => {
+              const meta = CATEGORY_CARD_META[category] || {
+                label: category,
+                color: CATEGORY_MODAL_GREEN,
+                Icon: CategoryIcon,
+              };
+              const CatIcon = meta.Icon || CategoryIcon;
+              const accent = CATEGORY_MODAL_GREEN;
+              const collapsed = collapsedCategories.has(category);
+
+              return (
+                <Box key={category}>
+                  {/* Category accordion header */}
                   <Box
-                    key={row.id}
-                    onClick={() => openDetail(row)}
+                    onClick={() => toggleCategoryCollapse(category)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleCategoryCollapse(category);
+                      }
+                    }}
                     sx={{
-                      display: 'grid',
-                      gridTemplateColumns: {
-                        xs: '1fr auto',
-                        md: 'minmax(140px, 1.1fr) minmax(180px, 1.6fr) minmax(100px, 0.9fr) 120px 88px',
-                      },
-                      gap: { xs: 1, md: 1.5 },
+                      px: 2.25,
+                      py: 1.15,
+                      display: 'flex',
                       alignItems: 'center',
-                      px: { xs: 1.5, sm: 2 },
-                      py: 1.35,
+                      gap: 1.1,
+                      bgcolor: alpha(accent, 0.06),
+                      borderBottom: `1px solid ${slate[200]}`,
+                      borderTop: `1px solid ${slate[100]}`,
                       cursor: 'pointer',
-                      borderBottom: `1px solid ${slate[100]}`,
-                      bgcolor: tone.key === 'low' ? alpha('#f59e0b', 0.04) : 'transparent',
-                      transition: 'background-color 0.12s ease',
-                      '&:hover': { bgcolor: alpha('#0f766e', 0.05) },
-                      '&:last-child': { borderBottom: 0 },
+                      userSelect: 'none',
+                      '&:hover': { bgcolor: alpha(accent, 0.1) },
                     }}
                   >
-                    <Box sx={{ minWidth: 0 }}>
-                      <InventoryItemParticulars item={row} compact />
-                      <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, display: { xs: 'flex', md: 'none' }, flexWrap: 'wrap' }}>
-                        <PropertyCards item={row} dense />
-                      </Stack>
-                      {suppliers.length > 0 && (
-                        <Typography
-                          sx={{
-                            mt: 0.4,
-                            fontSize: '0.7rem',
-                            color: slate[500],
-                            display: { xs: 'block', md: 'none' },
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {suppliers.join(', ')}
-                        </Typography>
-                      )}
-                    </Box>
-
-                    <Box sx={{ display: { xs: 'none', md: 'block' }, minWidth: 0 }}>
-                      <PropertyCards item={row} dense />
-                    </Box>
-
-                    <Box sx={{ display: { xs: 'none', md: 'block' }, minWidth: 0 }}>
-                      {suppliers.length === 0 ? (
-                        <Typography sx={{ fontSize: '0.78rem', color: slate[400] }}>—</Typography>
-                      ) : (
-                        <Typography
-                          sx={{
-                            fontSize: '0.78rem',
-                            fontWeight: 600,
-                            color: slate[700],
-                            lineHeight: 1.35,
-                            overflow: 'hidden',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                          }}
-                        >
-                          {suppliers.join(', ')}
-                        </Typography>
-                      )}
-                    </Box>
-
-                    <Box sx={{ justifySelf: 'end' }}>
-                      <StockQty row={row} />
-                    </Box>
-
-                    <Stack
-                      direction="row"
-                      spacing={0.25}
-                      justifyContent="flex-end"
-                      onClick={(e) => e.stopPropagation()}
-                      sx={{ display: { xs: 'none', md: 'flex' } }}
+                    <Box
+                      sx={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 1.25,
+                        bgcolor: alpha(accent, 0.12),
+                        color: accent,
+                        display: 'grid',
+                        placeItems: 'center',
+                        flexShrink: 0,
+                      }}
                     >
-                      <Tooltip title="History">
-                        <IconButton size="small" onClick={() => openDetail(row)}>
-                          <History fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Release to production">
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            disabled={(parseFloat(row.current_stock) || 0) <= 0}
-                            onClick={(e) => openRelease(row, e)}
-                          >
-                            <Outbound fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </Stack>
+                      <CatIcon sx={{ fontSize: 16 }} />
+                    </Box>
+                    <Typography
+                      sx={{
+                        fontSize: '0.78rem',
+                        fontWeight: 800,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        color: accent,
+                      }}
+                    >
+                      {meta.label || category}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: slate[500] }}>
+                      {rows.length} item{rows.length === 1 ? '' : 's'}
+                    </Typography>
+                    <Box sx={{ ml: 'auto', color: accent, display: 'grid', placeItems: 'center' }}>
+                      {collapsed ? <ExpandMore fontSize="small" /> : <ExpandLess fontSize="small" />}
+                    </Box>
                   </Box>
-                );
-              })}
-            </Box>
-          ))
+
+                  {!collapsed &&
+                    rows.map((row) => {
+                      const tone = stockTone(row);
+                      const suppliers = row.suppliers || [];
+                      const stockColor =
+                        tone.key === 'empty' ? slate[500] : tone.key === 'low' ? '#b45309' : accent;
+
+                      return (
+                        <Box
+                          key={row.id}
+                          onClick={() => openDetail(row)}
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: INVENTORY_TABLE_COLS,
+                            gap: { xs: 1, md: 1.5 },
+                            alignItems: 'center',
+                            px: { xs: 1.75, sm: 2.25 },
+                            py: 1.5,
+                            cursor: 'pointer',
+                            bgcolor: '#fff',
+                            borderBottom: `1px solid ${slate[200]}`,
+                            transition: 'background-color 0.12s ease',
+                            '&:hover': { bgcolor: alpha(accent, 0.04) },
+                          }}
+                        >
+                          {/* Item name */}
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, minWidth: 0 }}>
+                            <Box
+                              sx={{
+                                width: 44,
+                                height: 44,
+                                borderRadius: 1.5,
+                                bgcolor: alpha(accent, 0.1),
+                                color: accent,
+                                display: 'grid',
+                                placeItems: 'center',
+                                flexShrink: 0,
+                                border: `1px solid ${alpha(accent, 0.18)}`,
+                                overflow: 'hidden',
+                              }}
+                            >
+                              {row.image_url || row.thumbnail_url ? (
+                                <Box
+                                  component="img"
+                                  src={row.image_url || row.thumbnail_url}
+                                  alt=""
+                                  sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                              ) : (
+                                <CatIcon sx={{ fontSize: 22 }} />
+                              )}
+                            </Box>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: '0.9rem',
+                                  color: slate[900],
+                                  lineHeight: 1.3,
+                                }}
+                              >
+                                {getItemDisplayName(row)}
+                              </Typography>
+                              <Typography sx={{ mt: 0.3, fontSize: '0.72rem', fontWeight: 600, color: slate[500] }}>
+                                ID: {getItemSku(row)}
+                              </Typography>
+                              <Box sx={{ mt: 0.7, display: { xs: 'block', md: 'none' } }}>
+                                <SpecPills item={row} limit={3} />
+                                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.75 }} flexWrap="wrap" useFlexGap>
+                                  <Typography sx={{ fontSize: '0.72rem', color: slate[500] }}>
+                                    {suppliers[0] || '—'}
+                                  </Typography>
+                                  <StockStatusBadge tone={tone.key} />
+                                </Stack>
+                              </Box>
+                            </Box>
+                          </Box>
+
+                          {/* Specifications */}
+                          <Box sx={{ display: { xs: 'none', md: 'block' }, minWidth: 0 }}>
+                            <SpecPills item={row} />
+                          </Box>
+
+                          {/* Supplier */}
+                          <Box sx={{ display: { xs: 'none', md: 'block' }, minWidth: 0 }}>
+                            <Typography
+                              sx={{
+                                fontSize: '0.84rem',
+                                fontWeight: 600,
+                                color: slate[700],
+                                overflow: 'hidden',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                              }}
+                            >
+                              {suppliers.length ? suppliers.join(', ') : '—'}
+                            </Typography>
+                          </Box>
+
+                          {/* Stock */}
+                          <Box sx={{ textAlign: { xs: 'right', md: 'right' } }}>
+                            <Box
+                              sx={{
+                                display: 'inline-flex',
+                                alignItems: 'baseline',
+                                gap: 0.45,
+                                justifyContent: 'flex-end',
+                              }}
+                            >
+                              <Typography
+                                className="font-numeric"
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: '0.95rem',
+                                  color: stockColor,
+                                  fontVariantNumeric: 'tabular-nums',
+                                  lineHeight: 1.15,
+                                }}
+                              >
+                                {fmtQty(row.current_stock)}
+                              </Typography>
+                              <Typography sx={{ fontSize: '0.7rem', fontWeight: 600, color: slate[500] }}>
+                                {(row.unit || '').toUpperCase()}
+                              </Typography>
+                            </Box>
+                          </Box>
+
+                          {/* Status */}
+                          <Box sx={{ display: { xs: 'none', md: 'flex' }, justifyContent: 'flex-end' }}>
+                            <StockStatusBadge tone={tone.key} />
+                          </Box>
+
+                          {/* Actions */}
+                          <Stack
+                            direction="row"
+                            spacing={0.15}
+                            justifyContent="flex-end"
+                            alignItems="center"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Tooltip title="Stock history">
+                              <IconButton
+                                size="small"
+                                onClick={() => openDetail(row)}
+                                sx={{ color: slate[500], '&:hover': { color: accent, bgcolor: alpha(accent, 0.08) } }}
+                              >
+                                <History fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Release to production">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  disabled={(parseFloat(row.current_stock) || 0) <= 0}
+                                  onClick={(e) => openRelease(row, e)}
+                                  sx={{
+                                    color: accent,
+                                    '&:hover': { bgcolor: alpha(accent, 0.1) },
+                                    '&.Mui-disabled': { color: slate[300] },
+                                  }}
+                                >
+                                  <Unarchive fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <Tooltip title="View details">
+                              <IconButton
+                                size="small"
+                                onClick={() => openDetail(row)}
+                                sx={{ color: slate[400], '&:hover': { color: accent, bgcolor: alpha(accent, 0.08) } }}
+                              >
+                                <ChevronRight fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                        </Box>
+                      );
+                    })}
+                </Box>
+              );
+            })}
+          </>
         )}
       </Paper>
+
+      {/* Category summary modal */}
+      <Dialog
+        open={Boolean(categoryModal)}
+        onClose={closeCategoryModal}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            maxHeight: '90vh',
+            borderRadius: 3,
+            overflow: 'hidden',
+            border: `1px solid ${slate[200]}`,
+            boxShadow: `0 28px 60px ${alpha(slate[900], 0.18)}`,
+          },
+        }}
+      >
+        {categoryModal && (() => {
+          const accent = CATEGORY_MODAL_GREEN;
+          const mint = alpha(accent, 0.1);
+          const ModalIcon = categoryModal.Icon || CategoryIcon;
+          const modalGridCols = {
+            xs: 'minmax(0, 1fr) auto 24px',
+            md: 'minmax(170px, 1.15fr) minmax(220px, 1.8fr) minmax(120px, 0.9fr) minmax(120px, 0.95fr) 24px',
+          };
+          const sortedRows = [...(categoryModal.items || [])]
+            .filter((row) => {
+              if (categoryModalTab !== 'release') return true;
+              return (parseFloat(row.current_stock) || 0) > 0;
+            })
+            .sort((a, b) => {
+              const na = getItemDisplayName(a).localeCompare(getItemDisplayName(b));
+              if (na !== 0) return na;
+              return String(a.id).localeCompare(String(b.id));
+            });
+
+          const unitSuffix = categoryModalStats.unitLabel
+            ? ` ${String(categoryModalStats.unitLabel).toUpperCase()}`
+            : '';
+
+          const tabs = [
+            { key: 'history', label: 'Stock History', Icon: AccessTime },
+            { key: 'release', label: 'Release Stock', Icon: Send },
+            { key: 'details', label: 'Item Details', Icon: Description },
+          ];
+
+          const headerStats = [
+            { label: 'SKUs', value: categoryModalStats.totalItems, Icon: Inventory2 },
+            { label: 'In Stock', value: categoryModalStats.inStockCount, Icon: DonutLarge },
+            { label: 'Low Stock', value: categoryModalStats.lowCount, Icon: AccessTime },
+            { label: 'Out of Stock', value: categoryModalStats.zeroCount, Icon: LocalOffer },
+          ];
+
+          const onRowClick = (row) => {
+            if (categoryModalTab === 'release') openRelease(row);
+            else openDetail(row);
+          };
+
+          return (
+            <>
+              {/* Header */}
+              <Box sx={{ px: { xs: 2, sm: 2.75 }, pt: 2.5, pb: 0, bgcolor: '#fff' }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: { xs: 1.5, md: 2 },
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, flex: '1 1 220px', minWidth: 0 }}>
+                    <Box
+                      sx={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: '50%',
+                        bgcolor: mint,
+                        color: accent,
+                        display: 'grid',
+                        placeItems: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <ModalIcon sx={{ fontSize: 28 }} />
+                    </Box>
+                    <Box sx={{ minWidth: 0, pt: 0.15 }}>
+                      <Typography
+                        sx={{
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          letterSpacing: '0.12em',
+                          textTransform: 'uppercase',
+                          color: accent,
+                          mb: 0.25,
+                        }}
+                      >
+                        Inventory Category
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontWeight: 800,
+                          fontSize: { xs: '1.45rem', sm: '1.7rem' },
+                          color: accent,
+                          lineHeight: 1.15,
+                        }}
+                      >
+                        {categoryModal.label}
+                      </Typography>
+                      <Typography sx={{ mt: 0.45, fontSize: '0.8rem', color: slate[500] }}>
+                        View stock history and manage release options
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  {/* Mid summary cards */}
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ flex: '0 1 auto', alignItems: 'center', display: { xs: 'none', sm: 'flex' } }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        px: 1.5,
+                        py: 1.1,
+                        borderRadius: 2,
+                        border: `1px solid ${slate[200]}`,
+                        bgcolor: '#fff',
+                        minWidth: 110,
+                      }}
+                    >
+                      <Inventory2 sx={{ fontSize: 20, color: accent }} />
+                      <Box>
+                        <Typography className="font-numeric" sx={{ fontWeight: 800, fontSize: '1.05rem', color: accent, lineHeight: 1.1 }}>
+                          {categoryModalStats.totalItems}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: slate[500] }}>SKUs</Typography>
+                      </Box>
+                    </Box>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        px: 1.5,
+                        py: 1.1,
+                        borderRadius: 2,
+                        border: `1px solid ${slate[200]}`,
+                        bgcolor: '#fff',
+                        minWidth: 150,
+                      }}
+                    >
+                      <Layers sx={{ fontSize: 20, color: accent }} />
+                      <Box>
+                        <Typography className="font-numeric" sx={{ fontWeight: 800, fontSize: '1.05rem', color: accent, lineHeight: 1.1 }}>
+                          {fmtQty(categoryModalStats.totalStock)}{unitSuffix}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: slate[500] }}>Total Stock</Typography>
+                      </Box>
+                    </Box>
+                  </Stack>
+
+                  {/* Right stats panel */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'stretch',
+                      gap: { xs: 1.25, sm: 1.75 },
+                      px: { xs: 1.25, sm: 1.75 },
+                      py: 1.15,
+                      borderRadius: 2,
+                      border: `1px solid ${slate[200]}`,
+                      bgcolor: '#fff',
+                      flex: { xs: '1 1 100%', md: '0 1 auto' },
+                      ml: { md: 'auto' },
+                    }}
+                  >
+                    {headerStats.map(({ label, value, Icon }, i) => (
+                      <Box
+                        key={label}
+                        sx={{
+                          minWidth: 58,
+                          textAlign: 'center',
+                          px: { xs: 0.5, sm: 0.75 },
+                          borderRight: i < headerStats.length - 1 ? `1px solid ${slate[100]}` : 'none',
+                        }}
+                      >
+                        <Icon sx={{ fontSize: 18, color: accent, mb: 0.25 }} />
+                        <Typography className="font-numeric" sx={{ fontWeight: 800, fontSize: '1rem', color: accent, lineHeight: 1.1 }}>
+                          {value}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.62rem', fontWeight: 600, color: slate[600], mt: 0.15 }}>
+                          {label}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+
+                  <IconButton
+                    size="small"
+                    onClick={closeCategoryModal}
+                    aria-label="Close"
+                    sx={{
+                      color: slate[500],
+                      ml: { xs: 'auto', md: 0 },
+                      '&:hover': { bgcolor: alpha(slate[900], 0.06) },
+                    }}
+                  >
+                    <Close fontSize="small" />
+                  </IconButton>
+                </Box>
+
+                {/* Tabs */}
+                <Stack direction="row" spacing={0} sx={{ mt: 2.25, borderBottom: `1px solid ${slate[200]}` }}>
+                  {tabs.map(({ key, label, Icon }) => {
+                    const active = categoryModalTab === key;
+                    return (
+                      <Box
+                        key={key}
+                        component="button"
+                        type="button"
+                        onClick={() => setCategoryModalTab(key)}
+                        sx={{
+                          appearance: 'none',
+                          border: 0,
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 0.75,
+                          px: { xs: 1.25, sm: 1.75 },
+                          py: 1.15,
+                          fontFamily: 'inherit',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          color: active ? accent : slate[500],
+                          borderBottom: active ? `3px solid ${accent}` : '3px solid transparent',
+                          mb: '-1px',
+                          transition: 'color 0.15s ease',
+                          '&:hover': { color: accent },
+                        }}
+                      >
+                        <Icon sx={{ fontSize: 18 }} />
+                        {label}
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              </Box>
+
+              <DialogContent sx={{ p: 0, bgcolor: '#fff' }}>
+                {sortedRows.length === 0 ? (
+                  <Box sx={{ py: 7, textAlign: 'center' }}>
+                    <Inventory2 sx={{ fontSize: 42, color: slate[300], mb: 1 }} />
+                    <Typography sx={{ color: slate[500], fontWeight: 600 }}>
+                      {categoryModalTab === 'release'
+                        ? 'No items available to release'
+                        : 'No items in this category'}
+                    </Typography>
+                  </Box>
+                ) : (
+                  <>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: modalGridCols,
+                        gap: { xs: 1, md: 1.75 },
+                        alignItems: 'center',
+                        px: { xs: 2, sm: 2.75 },
+                        py: 1.2,
+                        borderBottom: `1px solid ${slate[200]}`,
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 2,
+                        bgcolor: '#fff',
+                      }}
+                    >
+                      {['Item Details', 'Specifications', 'Supplier', 'Available Stock'].map((h, i) => (
+                        <Typography
+                          key={h}
+                          sx={{
+                            fontSize: '0.66rem',
+                            fontWeight: 800,
+                            letterSpacing: '0.07em',
+                            textTransform: 'uppercase',
+                            color: slate[400],
+                            display: i === 0 || i === 3 ? 'block' : { xs: 'none', md: 'block' },
+                            textAlign: i === 3 ? 'right' : 'left',
+                            pr: i === 3 ? 2.5 : 0,
+                          }}
+                        >
+                          {h}
+                        </Typography>
+                      ))}
+                      <Box />
+                    </Box>
+
+                    {sortedRows.map((row) => {
+                      const tone = stockTone(row);
+                      const suppliers = row.suppliers || [];
+                      const props = extractTrimProperties(row).slice(0, 6);
+                      const stockColor =
+                        tone.key === 'empty' ? slate[500] : tone.key === 'low' ? '#b45309' : accent;
+
+                      return (
+                        <Box
+                          key={row.id}
+                          onClick={() => onRowClick(row)}
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: modalGridCols,
+                            gap: { xs: 1, md: 1.75 },
+                            alignItems: 'center',
+                            px: { xs: 2, sm: 2.75 },
+                            py: 1.65,
+                            cursor: 'pointer',
+                            bgcolor: '#fff',
+                            borderBottom: `1px solid ${slate[200]}`,
+                            transition: 'background-color 0.12s ease',
+                            '&:hover': { bgcolor: mint },
+                          }}
+                        >
+                          {/* Item details */}
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.15, minWidth: 0 }}>
+                            <Box
+                              sx={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 1.25,
+                                bgcolor: mint,
+                                color: accent,
+                                display: 'grid',
+                                placeItems: 'center',
+                                flexShrink: 0,
+                                mt: 0.15,
+                              }}
+                            >
+                              <ModalIcon sx={{ fontSize: 18 }} />
+                            </Box>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography
+                                sx={{
+                                  fontWeight: 800,
+                                  fontSize: '0.92rem',
+                                  color: slate[900],
+                                  lineHeight: 1.25,
+                                }}
+                              >
+                                {getItemDisplayName(row)}
+                              </Typography>
+                              <Box
+                                sx={{
+                                  display: 'inline-flex',
+                                  mt: 0.45,
+                                  px: 0.75,
+                                  py: 0.2,
+                                  borderRadius: 1,
+                                  bgcolor: slate[100],
+                                  border: `1px solid ${slate[200]}`,
+                                }}
+                              >
+                                <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, color: slate[600] }}>
+                                  SKU: {getItemSku(row)}
+                                </Typography>
+                              </Box>
+                              <Box sx={{ mt: 0.75, display: { xs: 'grid', md: 'none' }, gridTemplateColumns: '1fr 1fr', gap: 0.55 }}>
+                                {props.map((p) => (
+                                  <SpecPropertyChip key={`${p.label}-${p.value}`} label={p.label} value={p.value} accent={accent} />
+                                ))}
+                              </Box>
+                            </Box>
+                          </Box>
+
+                          {/* Specifications */}
+                          <Box
+                            sx={{
+                              display: { xs: 'none', md: 'grid' },
+                              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                              gap: 0.6,
+                              minWidth: 0,
+                            }}
+                          >
+                            {props.length === 0 ? (
+                              <Typography sx={{ fontSize: '0.78rem', color: slate[400] }}>—</Typography>
+                            ) : (
+                              props.map((p) => (
+                                <SpecPropertyChip key={`${p.label}-${p.value}`} label={p.label} value={p.value} accent={accent} />
+                              ))
+                            )}
+                          </Box>
+
+                          {/* Supplier */}
+                          <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.7, minWidth: 0 }}>
+                            <Business sx={{ fontSize: 16, color: accent, flexShrink: 0 }} />
+                            <Typography
+                              sx={{
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                color: slate[700],
+                                overflow: 'hidden',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                              }}
+                            >
+                              {suppliers.length ? suppliers.join(', ') : '—'}
+                            </Typography>
+                          </Box>
+
+                          {/* Available stock */}
+                          <Box sx={{ justifySelf: 'end', textAlign: 'right', pr: 0.25 }}>
+                            <Typography
+                              className="font-numeric"
+                              sx={{
+                                fontWeight: 800,
+                                fontSize: '1.05rem',
+                                color: stockColor,
+                                lineHeight: 1.15,
+                                fontVariantNumeric: 'tabular-nums',
+                              }}
+                            >
+                              {fmtQty(row.current_stock)} {(row.unit || '').toUpperCase()}
+                            </Typography>
+                            <Box sx={{ mt: 0.45, display: 'flex', justifyContent: 'flex-end' }}>
+                              <StockStatusBadge tone={tone.key} />
+                            </Box>
+                          </Box>
+
+                          <Box sx={{ display: 'grid', placeItems: 'center', color: slate[300] }}>
+                            <ChevronRight fontSize="small" />
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                  </>
+                )}
+              </DialogContent>
+
+              <DialogActions
+                sx={{
+                  px: { xs: 2, sm: 2.75 },
+                  py: 1.6,
+                  bgcolor: '#fff',
+                  borderTop: `1px solid ${slate[200]}`,
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 1,
+                }}
+              >
+                <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: slate[600] }}>
+                  Total:{' '}
+                  <Box component="span" sx={{ color: accent, fontWeight: 800 }}>
+                    {categoryModalStats.totalItems} items
+                  </Box>
+                  {' · '}
+                  <Box component="span" className="font-numeric" sx={{ color: slate[900], fontWeight: 800 }}>
+                    {fmtQty(categoryModalStats.totalStock)}{unitSuffix}
+                  </Box>
+                </Typography>
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    onClick={exportCategoryModalCsv}
+                    variant="outlined"
+                    startIcon={<FileDownload />}
+                    disabled={!categoryModal.items?.length}
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      borderColor: slate[300],
+                      color: slate[700],
+                      '&:hover': { borderColor: slate[400], bgcolor: slate[50] },
+                    }}
+                  >
+                    Export
+                  </Button>
+                  <Button
+                    onClick={closeCategoryModal}
+                    variant="contained"
+                    disableElevation
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      px: 2.5,
+                      bgcolor: accent,
+                      '&:hover': { bgcolor: accent, filter: 'brightness(0.92)' },
+                    }}
+                  >
+                    Close
+                  </Button>
+                </Stack>
+              </DialogActions>
+            </>
+          );
+        })()}
+      </Dialog>
 
       {/* Detail dialog */}
       <Dialog open={Boolean(detailItem)} onClose={closeDetail} maxWidth="md" fullWidth>
@@ -814,7 +1842,7 @@ const Inventory = () => {
           {detailItem && parseFloat(detailItem.current_stock) > 0 && (
             <Button
               variant="contained"
-              startIcon={<Outbound />}
+              startIcon={<Unarchive />}
               onClick={() => openRelease(detailItem)}
             >
               Release stock

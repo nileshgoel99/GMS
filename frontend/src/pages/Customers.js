@@ -222,6 +222,15 @@ const customerToForm = (c) => {
   };
 };
 
+const normalizeWebsite = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+    return `https://${raw}`;
+  }
+  return raw;
+};
+
 const formToPayload = (formData) => {
   const contacts = (formData.contacts || [])
     .filter((c) => (c.name || '').trim())
@@ -244,7 +253,7 @@ const formToPayload = (formData) => {
     postal_code: formData.postal_code,
     address_line1: formData.address_line1,
     address_line2: formData.address_line2,
-    website: formData.website,
+    website: normalizeWebsite(formData.website) || null,
     tax_id_vat: formData.tax_id_vat,
     default_currency: formData.default_currency,
     preferred_language: formData.preferred_language,
@@ -477,13 +486,39 @@ const Customers = () => {
     return idx;
   }, [filteredRows]);
 
-  const cellMuted = { fontSize: '0.8125rem', fontWeight: 400, color: slate[600], lineHeight: 1.4 };
-  const cellPrimary = { fontSize: '0.875rem', fontWeight: 600, color: slate[900], lineHeight: 1.4 };
+  const cellMuted = {
+    fontSize: '0.8125rem',
+    fontWeight: 400,
+    color: slate[600],
+    lineHeight: 1.45,
+    whiteSpace: 'normal',
+    wordBreak: 'break-word',
+    overflowWrap: 'anywhere',
+    width: '100%',
+  };
+  const cellPrimary = {
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    color: slate[900],
+    lineHeight: 1.45,
+  };
 
   const customersGridSx = {
     ...dataGridSx,
     width: '100%',
     bgcolor: '#fff',
+    // Override DataGrid single-line ellipsis so long values wrap fully
+    '& .MuiDataGrid-cell, & .MuiDataGrid-cellContent, & .MuiDataGrid-cell *': {
+      whiteSpace: 'normal !important',
+      wordBreak: 'break-word',
+      overflowWrap: 'anywhere',
+      textOverflow: 'clip !important',
+    },
+    '& .MuiDataGrid-cell, & .MuiDataGrid-cellContent': {
+      overflow: 'visible !important',
+      lineHeight: '1.45 !important',
+      maxHeight: 'none !important',
+    },
     '& .MuiDataGrid-columnHeaders': {
       ...dataGridSx['& .MuiDataGrid-columnHeaders'],
       minHeight: '44px !important',
@@ -513,28 +548,12 @@ const Customers = () => {
     '& .MuiDataGrid-cell': {
       ...dataGridSx['& .MuiDataGrid-cell'],
       display: 'flex',
-      alignItems: 'center',
-      py: 1,
+      alignItems: 'flex-start',
+      py: 1.25,
       fontWeight: 400,
       fontSize: '0.8125rem',
       color: slate[700],
-      // Required for getRowHeight auto — default max-height clips wrapped text
       maxHeight: 'none !important',
-    },
-    // Legal name: defeat DataGrid nowrap + ellipsis so full name always shows
-    '& .customer-name-cell': {
-      whiteSpace: 'normal !important',
-      lineHeight: '1.4 !important',
-      wordBreak: 'break-word',
-      overflow: 'visible !important',
-      textOverflow: 'clip !important',
-      alignItems: 'flex-start',
-      py: 1.25,
-    },
-    '& .customer-name-cell, & .customer-name-cell *': {
-      whiteSpace: 'normal !important',
-      overflow: 'visible !important',
-      textOverflow: 'clip !important',
     },
     '& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus': { outline: 'none' },
     '& .MuiDataGrid-footerContainer': {
@@ -548,8 +567,8 @@ const Customers = () => {
   const codeColumn = {
     field: 'customer_code',
     headerName: 'Code',
-    minWidth: 88,
-    flex: 0.45,
+    minWidth: 100,
+    flex: 0.5,
     renderCell: (p) => (
       <Typography
         component="span"
@@ -564,7 +583,9 @@ const Customers = () => {
           py: 0.35,
           borderRadius: 1,
           border: `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
-          lineHeight: 1.2,
+          lineHeight: 1.35,
+          whiteSpace: 'normal',
+          wordBreak: 'break-word',
         }}
       >
         {p.value || '—'}
@@ -576,84 +597,63 @@ const Customers = () => {
     {
       field: 'company_legal_name',
       headerName: 'Legal name',
-      minWidth: 260,
-      flex: 2,
-      cellClassName: 'customer-name-cell',
+      minWidth: 280,
+      flex: 2.2,
       renderCell: (p) => (
-        <Typography
-          component="div"
+        <Box
+          onClick={() => handleViewDetail(p.row)}
           sx={{
             ...cellPrimary,
             width: '100%',
             whiteSpace: 'normal',
             wordBreak: 'break-word',
             overflowWrap: 'anywhere',
-            overflow: 'visible',
-            textOverflow: 'clip',
             cursor: 'pointer',
-            py: 0.25,
-            lineHeight: 1.4,
+            py: 0.15,
             '&:hover': { color: theme.palette.primary.main },
           }}
-          onClick={() => handleViewDetail(p.row)}
         >
           {p.value || '—'}
-        </Typography>
+        </Box>
       ),
     },
     {
       field: 'primary_contact_name',
       headerName: 'Contact',
-      minWidth: 120,
-      flex: 0.6,
-      renderCell: (p) => (
-        <Typography noWrap sx={cellMuted}>
-          {p.value || '—'}
-        </Typography>
-      ),
+      minWidth: 130,
+      flex: 0.7,
+      renderCell: (p) => <Box sx={cellMuted}>{p.value || '—'}</Box>,
     },
     {
       field: 'country',
       headerName: 'Country',
-      minWidth: 90,
-      flex: 0.45,
-      renderCell: (p) => (
-        <Typography noWrap sx={cellMuted}>
-          {p.value || '—'}
-        </Typography>
-      ),
+      minWidth: 100,
+      flex: 0.5,
+      renderCell: (p) => <Box sx={cellMuted}>{p.value || '—'}</Box>,
     },
     {
       field: 'city',
       headerName: 'City',
-      minWidth: 80,
-      flex: 0.4,
-      renderCell: (p) => (
-        <Typography noWrap sx={cellMuted}>
-          {p.value || '—'}
-        </Typography>
-      ),
+      minWidth: 100,
+      flex: 0.5,
+      renderCell: (p) => <Box sx={cellMuted}>{p.value || '—'}</Box>,
     },
     {
       field: 'primary_email',
       headerName: 'Email',
-      minWidth: 180,
-      flex: 1,
+      minWidth: 200,
+      flex: 1.1,
       renderCell: (p) => (
-        <Tooltip title={p.value || ''}>
-          <Typography
-            noWrap
-            component="span"
-            sx={{
-              ...cellMuted,
-              fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
-              fontSize: '0.75rem',
-              color: p.value ? slate[700] : slate[400],
-            }}
-          >
-            {p.value || '—'}
-          </Typography>
-        </Tooltip>
+        <Box
+          sx={{
+            ...cellMuted,
+            fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+            fontSize: '0.75rem',
+            color: p.value ? slate[700] : slate[400],
+          }}
+        >
+          {p.value || '—'}
+        </Box>
       ),
     },
     {
@@ -726,13 +726,17 @@ const Customers = () => {
       loading={loading}
       disableRowSelectionOnClick
       getRowHeight={() => 'auto'}
-      getEstimatedRowHeight={() => 56}
+      getEstimatedRowHeight={() => 72}
       columnHeaderHeight={44}
       onRowDoubleClick={(params) => handleViewDetail(params.row)}
       sx={{
         ...customersGridSx,
         height: '100%',
         border: 'none',
+        // Ensure auto-height rows remeasure after wrap
+        '& .MuiDataGrid-virtualScrollerRenderZone': {
+          width: '100%',
+        },
       }}
     />
   );
@@ -1061,7 +1065,8 @@ const Customers = () => {
                     label="Website"
                     value={formData.website}
                     onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                    placeholder="https://"
+                    placeholder="edufire.co.uk or https://…"
+                    helperText="Domain alone is fine — https:// is added automatically"
                     sx={compactField}
                   />
                 </Grid>

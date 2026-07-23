@@ -257,6 +257,15 @@ export const appTheme = createTheme({
         '*, *::before, *::after': {
           scrollBehavior: 'smooth',
         },
+        /* Hide number input spinner arrows (Chrome, Safari, Edge, Firefox) */
+        'input[type=number]': {
+          MozAppearance: 'textfield',
+        },
+        'input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button': {
+          WebkitAppearance: 'none',
+          margin: 0,
+          display: 'none',
+        },
       },
     },
     MuiCard: {

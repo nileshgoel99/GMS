@@ -6,6 +6,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, companyAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDMY } from '../utils/formatDate';
+import PIDocumentFooter from '../components/orders/PIDocumentFooter';
+import PIPrintSheet from '../components/orders/PIPrintSheet';
+import { bindPiPrintPageFooters, installPiPrintPageFooters } from '../utils/piPrintPageFooters';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
@@ -69,18 +72,81 @@ function getPiFooter(pi, company) {
 }
 
 const PRINT_STYLE = `
+@media screen {
+  .pi-print-sheet-foot { display: none !important; }
+}
 @media print {
-  body * { visibility: hidden !important; }
-  #pi-view-print-root, #pi-view-print-root * { visibility: visible !important; }
-  #pi-view-print-root {
-    position: fixed; left: 0; top: 0; width: 100%;
+  @page {
+    size: A4 portrait;
+    margin: 12mm 12mm 16mm 12mm;
+    @bottom-right {
+      content: "Page " counter(page) " / " counter(pages);
+      font-family: "Times New Roman", Times, serif;
+      font-size: 8pt;
+      color: #333;
+      vertical-align: top;
+      padding-top: 1mm;
+    }
+  }
+  html, body {
     background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  #pi-view-print-root,
+  #pi-view-print-root * {
+    visibility: visible !important;
+  }
+  #pi-view-print-root {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 6mm !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    min-height: 0 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  @page { size: A4 portrait; margin: 14mm 14mm; }
+  #pi-view-print-root .pi-print-sheet {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+  #pi-view-print-root .pi-print-sheet-body {
+    display: table-row-group !important;
+  }
+  #pi-view-print-root .pi-print-sheet-body > tr {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+  #pi-view-print-root .pi-print-sheet-foot {
+    display: table-footer-group !important;
+  }
+  #pi-view-print-root .pi-sheet-footer {
+    padding-top: 4px !important;
+    margin-top: 2mm !important;
+  }
+  #pi-view-print-root .pi-items-table {
+    page-break-inside: auto !important;
+  }
+  #pi-view-print-root .pi-items-table thead {
+    display: table-header-group !important;
+  }
+  #pi-view-print-root .pi-items-table tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
 }
-@media screen { #pi-view-print-root { display: none; } }
 `;
 
 // ── PI Document ───────────────────────────────────────────────────────────────
@@ -99,52 +165,86 @@ function PIDocument({ pi, company }) {
   const footer = getPiFooter(pi, company);
 
   return (
-    <Box sx={{ fontFamily: '"Times New Roman", serif', color: '#000', fontSize: '11pt', lineHeight: 1.4, p: 0 }}>
+    <PIPrintSheet
+      companyName={company.legal_name || 'J B INTERNATIONAL'}
+      centerText={pi.pi_number ? `PI ${pi.pi_number}` : 'PROFORMA INVOICE'}
+    >
+    <Box
+      sx={{
+        fontFamily: '"Times New Roman", Times, serif',
+        color: '#000',
+        fontSize: '10.5pt',
+        lineHeight: 1.45,
+        p: { xs: 1, sm: 0 },
+      }}
+    >
       {/* Letterhead */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5, pb: 1.5, borderBottom: '2px solid #000' }}>
-        <Box>
-          <Typography sx={{ fontFamily: 'inherit', fontWeight: 900, fontSize: '18pt', lineHeight: 1.1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: 2,
+          mb: 2.5,
+          pb: 1.75,
+          borderBottom: '2px solid #000',
+        }}
+      >
+        <Box sx={{ flex: 1, minWidth: 0, pr: 2 }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 900, fontSize: '16pt', lineHeight: 1.15 }}>
             {company.legal_name || 'J B INTERNATIONAL'}
           </Typography>
           {company.tagline && (
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#444', mt: 0.25 }}>{company.tagline}</Typography>
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#444', mt: 0.4 }}>{company.tagline}</Typography>
           )}
-          <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', mt: 0.5, whiteSpace: 'pre-line', color: '#222' }}>
+          <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', mt: 0.75, whiteSpace: 'pre-line', color: '#222', lineHeight: 1.4 }}>
             {companyAddress}
           </Typography>
           {company.phone && (
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#222' }}>
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#222', mt: 0.35 }}>
               TEL: {company.phone}{company.fax ? `  FAX: ${company.fax}` : ''}
             </Typography>
           )}
         </Box>
         {company.logo_url && (
-          <Box component="img" src={company.logo_url} alt="logo" sx={{ height: 64, objectFit: 'contain', ml: 2 }} />
+          <Box component="img" src={company.logo_url} alt="logo"
+            sx={{ height: 72, maxWidth: 120, objectFit: 'contain', flexShrink: 0 }} />
         )}
       </Box>
 
       {/* Title */}
-      <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '14pt', textAlign: 'center', textDecoration: 'underline', mb: 2, letterSpacing: '0.06em' }}>
+      <Typography
+        sx={{
+          fontFamily: 'inherit',
+          fontWeight: 700,
+          fontSize: '14pt',
+          textAlign: 'center',
+          textDecoration: 'underline',
+          mb: 2.5,
+          mt: 0.5,
+          letterSpacing: '0.08em',
+        }}
+      >
         PROFORMA INVOICE
       </Typography>
 
       {/* TO + Meta */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, gap: 3 }}>
-        <Box sx={{ flex: 1 }}>
-          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '10pt', mb: 0.3 }}>TO,</Typography>
-          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '11pt' }}>{pi.client_name}</Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2.5, gap: 4, alignItems: 'flex-start' }}>
+        <Box sx={{ flex: 1, minWidth: 0, pr: 2 }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '10pt', mb: 0.5 }}>TO,</Typography>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '11pt', mb: 0.35 }}>{pi.client_name}</Typography>
           {pi.client_address && (
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '10pt', whiteSpace: 'pre-line' }}>{pi.client_address}</Typography>
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '10pt', whiteSpace: 'pre-line', lineHeight: 1.45 }}>{pi.client_address}</Typography>
           )}
         </Box>
-        <Box sx={{ minWidth: 210 }}>
+        <Box sx={{ width: 220, flexShrink: 0 }}>
           {[
             ['DATE',          formatDateDMY(pi.order_date)],
             ['REF NO',        pi.pi_number],
             ['BUYER PO NO.',  pi.buyer_po_number ? `#${pi.buyer_po_number}` : ''],
           ].map(([label, val]) => val ? (
-            <Box key={label} sx={{ display: 'flex', gap: 1, mb: 0.25 }}>
-              <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '10pt', minWidth: 110 }}>{label}:</Typography>
+            <Box key={label} sx={{ display: 'flex', gap: 1.25, mb: 0.6, alignItems: 'baseline' }}>
+              <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '10pt', minWidth: 108 }}>{label}:</Typography>
               <Typography sx={{ fontFamily: 'inherit', fontSize: '10pt' }}>{val}</Typography>
             </Box>
           ) : null)}
@@ -152,13 +252,40 @@ function PIDocument({ pi, company }) {
       </Box>
 
       {/* Items table */}
-      <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', mb: 1.5, fontSize: '10pt', fontFamily: 'inherit' }}>
+      <Box
+        component="table"
+        className="pi-items-table"
+        sx={{
+          width: '100%',
+          tableLayout: 'fixed',
+          borderCollapse: 'collapse',
+          mb: 2.5,
+          fontSize: '9.5pt',
+          fontFamily: 'inherit',
+        }}
+      >
+        <Box component="colgroup">
+          <Box component="col" sx={{ width: '6%' }} />
+          <Box component="col" sx={{ width: '22%' }} />
+          <Box component="col" sx={{ width: '40%' }} />
+          <Box component="col" sx={{ width: '10%' }} />
+          <Box component="col" sx={{ width: '11%' }} />
+          <Box component="col" sx={{ width: '11%' }} />
+        </Box>
         <Box component="thead">
           <Box component="tr" sx={{ bgcolor: '#f0f0f0' }}>
-            {['S/N\nO.', 'ITEM', 'DESCRIPTION', 'QTY\nPCS.', `FOB UNIT\nPRICE (USD)`, `VALUE\n(USD)`].map((h) => (
+            {['S/N\nO.', 'ITEM', 'DESCRIPTION', 'QTY\nPCS.', `FOB UNIT\nPRICE (${currency})`, `VALUE\n(${currency})`].map((h) => (
               <Box component="th" key={h} sx={{
-                border: '1px solid #000', p: '5px 7px', fontWeight: 700, fontFamily: 'inherit',
-                verticalAlign: 'middle', textAlign: 'center', whiteSpace: 'pre-line', lineHeight: 1.3, fontSize: '9.5pt',
+                border: '1px solid #000',
+                px: '8px',
+                py: '8px',
+                fontWeight: 700,
+                fontFamily: 'inherit',
+                verticalAlign: 'middle',
+                textAlign: 'center',
+                whiteSpace: 'pre-line',
+                lineHeight: 1.35,
+                fontSize: '9pt',
               }}>{h}</Box>
             ))}
           </Box>
@@ -172,45 +299,43 @@ function PIDocument({ pi, company }) {
             const val   = parseFloat(line.line_value_usd || price * qty || 0);
             return (
               <Box component="tr" key={i}>
-                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', textAlign: 'center', verticalAlign: 'top', fontFamily: 'inherit' }}>{i + 1}.</Box>
-                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', fontWeight: 700, verticalAlign: 'top', fontFamily: 'inherit' }}>
+                <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '10px', textAlign: 'center', verticalAlign: 'top', fontFamily: 'inherit' }}>{i + 1}.</Box>
+                <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '10px', fontWeight: 700, verticalAlign: 'top', fontFamily: 'inherit', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                   {line.item_name}
                   {line.item_code && (
-                    <Box component="span" sx={{ display: 'block', mt: '4px', fontWeight: 400, fontSize: '8.5pt', color: '#444' }}>
+                    <Box component="span" sx={{ display: 'block', mt: '6px', fontWeight: 400, fontSize: '8.5pt', color: '#444' }}>
                       Code: <Box component="span" sx={{ fontWeight: 700, color: '#111' }}>{line.item_code}</Box>
                     </Box>
                   )}
                 </Box>
-                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', verticalAlign: 'top', fontFamily: 'inherit', fontSize: '9.5pt' }}>
+                <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '10px', verticalAlign: 'top', fontFamily: 'inherit', fontSize: '9.5pt', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                   {line.material && (
-                    <Box component="span" sx={{ display: 'block', fontWeight: 700, fontSize: '9.5pt', mb: '4px' }}>{line.material}</Box>
+                    <Box component="span" sx={{ display: 'block', fontWeight: 700, fontSize: '9.5pt', mb: '6px' }}>{line.material}</Box>
                   )}
                   {line.color && (
-                    <Box component="span" sx={{ display: 'inline-block', mb: '5px' }}>
-                      <Box component="span" sx={{ display: 'inline-block', px: '6px', py: '2px', border: '1px solid #666', borderRadius: '3px', fontSize: '8.5pt', fontStyle: 'italic', fontWeight: 600, color: '#222', background: '#f0f0f0' }}>
-                        Colour: {line.color}
-                      </Box>
+                    <Box component="span" sx={{ display: 'block', mb: '6px', fontSize: '9pt', fontWeight: 600 }}>
+                      Colour: {line.color}
                     </Box>
                   )}
-                  <Box component="span" sx={{ display: 'block', color: '#333', lineHeight: 1.5 }}>{sizeDesc}</Box>
+                  <Box component="span" sx={{ display: 'block', color: '#333', lineHeight: 1.55, wordBreak: 'break-word' }}>{sizeDesc}</Box>
                 </Box>
-                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', textAlign: 'center', verticalAlign: 'top', fontFamily: 'inherit' }}>{qty}</Box>
-                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', textAlign: 'center', verticalAlign: 'top', fontFamily: 'inherit' }}>{price.toFixed(3)}</Box>
-                <Box component="td" sx={{ border: '1px solid #000', p: '6px 7px', textAlign: 'right', verticalAlign: 'top', fontFamily: 'inherit' }}>{val.toFixed(3)}</Box>
+                <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '10px', textAlign: 'center', verticalAlign: 'top', fontFamily: 'inherit', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{qty}</Box>
+                <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '10px', textAlign: 'center', verticalAlign: 'top', fontFamily: 'inherit', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{price.toFixed(3)}</Box>
+                <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '10px', textAlign: 'right', verticalAlign: 'top', fontFamily: 'inherit', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{val.toFixed(3)}</Box>
               </Box>
             );
           })}
           <Box component="tr" sx={{ bgcolor: '#f0f0f0' }}>
-            <Box component="td" colSpan={3} sx={{ border: '1px solid #000', p: '5px 7px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit' }}>TOTAL:-</Box>
-            <Box component="td" sx={{ border: '1px solid #000', p: '5px 7px', fontWeight: 700, textAlign: 'center', fontFamily: 'inherit' }}>{totalQty}</Box>
-            <Box component="td" sx={{ border: '1px solid #000', fontFamily: 'inherit' }} />
-            <Box component="td" sx={{ border: '1px solid #000', p: '5px 7px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit' }}>{totalAmt.toFixed(3)}</Box>
+            <Box component="td" colSpan={3} sx={{ border: '1px solid #000', px: '8px', py: '8px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit' }}>TOTAL:-</Box>
+            <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '8px', fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{totalQty}</Box>
+            <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '8px', fontFamily: 'inherit' }} />
+            <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '8px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{totalAmt.toFixed(3)}</Box>
           </Box>
         </Box>
       </Box>
 
       {/* Footer */}
-      <Box sx={{ fontSize: '9.5pt', fontFamily: 'inherit', mt: 1.5 }}>
+      <Box sx={{ fontSize: '9.5pt', fontFamily: 'inherit', mt: 1, mb: 1 }}>
         {[
           ['VALUE IN WORD',     amountInWords(totalAmt, currency)],
           ['DATE OF DISPATCH',  footer.dateOfDispatch],
@@ -219,42 +344,59 @@ function PIDocument({ pi, company }) {
           ['PORT OF LOADING',   footer.portOfLoading],
           ['PORT OF DISCHARGE', footer.portOfDischarge],
         ].map(([label, val]) => (
-          <Box key={label} sx={{ display: 'flex', gap: 1, mb: 0.4 }}>
-            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', minWidth: 160 }}>{label}</Typography>
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt' }}>: {val || '—'}</Typography>
+          <Box key={label} sx={{ display: 'flex', gap: 1.5, mb: 0.85, fontFamily: 'inherit', alignItems: 'flex-start' }}>
+            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', minWidth: 150, flexShrink: 0 }}>{label}</Typography>
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', flex: 1, wordBreak: 'break-word' }}>: {val || '—'}</Typography>
           </Box>
         ))}
-        <Box sx={{ mt: 0.5 }}>
-          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>OUR BANK: </Typography>
-          <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>
-            - {footer.ourBank || '—'}
+        <Box sx={{ mt: 1.25, fontFamily: 'inherit' }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.35 }}>OUR BANK:</Typography>
+          <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', whiteSpace: 'pre-line', lineHeight: 1.45, pl: 0.5 }}>
+            {footer.ourBank || '—'}
           </Typography>
         </Box>
-        <Box sx={{ mt: 0.4 }}>
-          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', display: 'inline' }}>INTERMEDIARY BANK: </Typography>
-          <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', display: 'inline' }}>
-            - {footer.intermediaryBank || '—'}
+        <Box sx={{ mt: 1.25, fontFamily: 'inherit' }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.35 }}>INTERMEDIARY BANK:</Typography>
+          <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', whiteSpace: 'pre-line', lineHeight: 1.45, pl: 0.5 }}>
+            {footer.intermediaryBank || '—'}
           </Typography>
         </Box>
       </Box>
 
       {/* Signature */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 5, pt: 1, borderTop: '1px solid #ccc', fontFamily: 'inherit', fontSize: '9.5pt' }}>
-        <Box>
-          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt' }}>SIGNATURE &amp; SEAL</Typography>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          mt: 5,
+          pt: 2,
+          borderTop: '1px solid #999',
+          fontFamily: 'inherit',
+          fontSize: '9.5pt',
+          gap: 3,
+        }}
+      >
+        <Box sx={{ flex: 1 }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.5 }}>SIGNATURE &amp; SEAL</Typography>
           <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt' }}>FOR: {(pi.client_name || '').toUpperCase()}</Typography>
         </Box>
-        <Box sx={{ textAlign: 'right' }}>
-          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt' }}>SIGNATURE &amp; SEAL</Typography>
+        <Box sx={{ flex: 1, textAlign: 'right' }}>
+          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.5 }}>SIGNATURE &amp; SEAL</Typography>
           <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt' }}>FOR: {(company.legal_name || '').toUpperCase()}</Typography>
         </Box>
       </Box>
       {company.email && (
-        <Typography sx={{ fontFamily: 'inherit', fontSize: '8pt', textAlign: 'center', mt: 1.5, borderTop: '1px solid #eee', pt: 0.75, color: '#555' }}>
+        <Typography sx={{ fontFamily: 'inherit', fontSize: '8pt', textAlign: 'center', mt: 2.5, borderTop: '1px solid #ccc', pt: 1.25, color: '#555' }}>
           PLS. SEAL &amp; SIGN ON THE ABOVE AND RETURN US BY E-MAIL ID: {company.email}
         </Typography>
       )}
+
+      <PIDocumentFooter
+        company={company}
+        refLabel={[pi.pi_number && `Ref: ${pi.pi_number}`, pi.buyer_po_number && `Buyer PO: #${pi.buyer_po_number}`].filter(Boolean).join('\n')}
+      />
     </Box>
+    </PIPrintSheet>
   );
 }
 
@@ -276,6 +418,13 @@ export default function PIViewPage() {
     style.textContent = PRINT_STYLE;
     document.head.appendChild(style);
     return () => style.remove();
+  }, []);
+
+  useEffect(() => {
+    return bindPiPrintPageFooters('pi-view-print-root', () => ({
+      marginTopMm: 12,
+      marginBottomMm: 12,
+    }));
   }, []);
 
   useEffect(() => {
@@ -308,7 +457,13 @@ export default function PIViewPage() {
     })();
   }, [id, navigate]);
 
-  const handlePrint = useCallback(() => window.print(), []);
+  const handlePrint = useCallback(() => {
+    installPiPrintPageFooters('pi-view-print-root', {
+      marginTopMm: 12,
+      marginBottomMm: 12,
+    });
+    window.print();
+  }, []);
 
   const handleSaveDetails = async () => {
     setSavingDetails(true);
@@ -478,16 +633,20 @@ export default function PIViewPage() {
         </Paper>
       )}
 
-      {/* A4 document */}
+      {/* A4 document (also the sole print target) */}
       <Box sx={{ p: { xs: 2, sm: 4 }, bgcolor: '#f8fafc', borderRadius: '0 0 8px 8px', border: `1px solid ${slate[200]}`, borderTop: 'none' }}>
-        <Box sx={{ bgcolor: '#fff', p: { xs: 3, sm: 5 }, boxShadow: `0 4px 32px ${alpha(slate[900], 0.1)}`, borderRadius: 1, minHeight: 800 }}>
+        <Box
+          id="pi-view-print-root"
+          sx={{
+            bgcolor: '#fff',
+            p: { xs: 3, sm: 5 },
+            boxShadow: `0 4px 32px ${alpha(slate[900], 0.1)}`,
+            borderRadius: 1,
+            minHeight: 800,
+          }}
+        >
           <PIDocument pi={pi} company={company} />
         </Box>
-      </Box>
-
-      {/* Hidden print root */}
-      <Box id="pi-view-print-root">
-        <PIDocument pi={pi} company={company} />
       </Box>
     </Box>
   );

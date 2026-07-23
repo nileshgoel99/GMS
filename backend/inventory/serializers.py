@@ -87,6 +87,7 @@ class InventoryItemListSerializer(serializers.ModelSerializer):
             'name',
             'item_name',
             'property_lines',
+            'trim',
             'trim_name',
             'category',
             'color',

@@ -269,38 +269,6 @@ const Orders = () => {
       ),
     },
     {
-      field: 'garment_type',
-      headerName: 'Items',
-      flex: 1.25,
-      minWidth: 88,
-      sortable: false,
-      renderCell: (params) => {
-        const raw = params.value;
-        const text = raw == null || String(raw).trim() === '' ? '—' : String(raw);
-        const content = (
-          <Typography
-            sx={{
-              fontSize: '0.8rem',
-              lineHeight: 1.35,
-              color: text === '—' ? 'text.disabled' : 'text.primary',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              wordBreak: 'break-word',
-            }}
-          >
-            {text}
-          </Typography>
-        );
-        return cell('left', text === '—' ? content : (
-          <Tooltip title={text} placement="top-start" enterDelay={400}>
-            {content}
-          </Tooltip>
-        ));
-      },
-    },
-    {
       field: 'quantity',
       headerName: 'Pcs',
       minWidth: 60,

@@ -166,6 +166,9 @@ const COLOUR_SWATCH_MAP = {
   coffee: '#6f4e37',
   grey: '#6b7280',
   gray: '#6b7280',
+  anthracite: '#383838',
+  'anthracite grey': '#383838',
+  'anthracite gray': '#383838',
   'light grey': '#d1d5db',
   'light gray': '#d1d5db',
   'dark grey': '#374151',
@@ -243,10 +246,32 @@ const resolveColourSwatch = (input) => {
   return null;
 };
 
+/** Split dual-colour labels: "NAVY / WHITE", "BLACK & RED", "BLUE + YELLOW", "NAVY AND WHITE". */
+const parseColourParts = (input) => {
+  const raw = String(input || '').trim();
+  if (!raw) return [];
+  const parts = raw
+    .split(/\s*(?:\/|&|\+|,\s*|\band\b)\s*/i)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length >= 2) return parts.slice(0, 2);
+  return [raw];
+};
+
+const resolveColourSwatches = (input) =>
+  parseColourParts(input)
+    .map((part) => resolveColourSwatch(part))
+    .filter(Boolean);
+
+const isLightSwatch = (swatch) =>
+  /^(#fff|#ffffff|#f8fafc|#f5f5f0|#fffff0|#fffdd0|white|ivory|cream|off)/i.test(String(swatch || ''));
+
 const ColourSwatch = ({ color, size = 16 }) => {
-  const swatch = resolveColourSwatch(color);
-  if (!swatch) return null;
-  const isLight = /^(#fff|#f8fafc|white|ivory|cream|off)/i.test(String(swatch));
+  const swatches = resolveColourSwatches(color);
+  if (!swatches.length) return null;
+  const lightBorder = swatches.some(isLightSwatch);
+  const dual = swatches.length >= 2;
+
   return (
     <Box
       component="span"
@@ -256,10 +281,13 @@ const ColourSwatch = ({ color, size = 16 }) => {
         width: size,
         height: size,
         borderRadius: '50%',
-        bgcolor: swatch,
-        border: `1px solid ${isLight ? slate[300] : alpha(slate[900], 0.2)}`,
-        boxShadow: `inset 0 0 0 1px ${alpha('#fff', 0.15)}`,
         flexShrink: 0,
+        bgcolor: dual ? undefined : swatches[0],
+        background: dual
+          ? `linear-gradient(to right, ${swatches[0]} 50%, ${swatches[1]} 50%)`
+          : undefined,
+        border: `1px solid ${lightBorder ? slate[300] : alpha(slate[900], 0.2)}`,
+        boxShadow: `inset 0 0 0 1px ${alpha('#fff', 0.15)}`,
       }}
     />
   );
@@ -474,7 +502,7 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
             <Chip
               label={line.color}
               size="small"
-              {...(resolveColourSwatch(line.color)
+              {...(resolveColourSwatches(line.color).length
                 ? { icon: <ColourSwatch color={line.color} size={12} /> }
                 : {})}
               sx={{ 
@@ -602,7 +630,7 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
                 onChange={(e) => onChange({ color: e.target.value })}
                 placeholder="e.g. NAVY BLUE"
                 InputProps={{
-                  endAdornment: resolveColourSwatch(line.color) ? (
+                  endAdornment: resolveColourSwatches(line.color).length ? (
                     <InputAdornment position="end">
                       <ColourSwatch color={line.color} size={18} />
                     </InputAdornment>

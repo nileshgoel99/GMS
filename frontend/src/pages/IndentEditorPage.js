@@ -4,7 +4,7 @@ import {
   Box, Button, Typography, TextField, MenuItem, Grid, Paper,
   IconButton, Chip, Autocomplete, CircularProgress, Divider,
   Table, TableHead, TableBody, TableRow, TableCell, TableContainer, Tooltip,
-  Checkbox, FormControlLabel, Collapse, Snackbar, Alert,
+  Checkbox, FormControlLabel, Collapse, Snackbar, Alert, Popper,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
@@ -13,11 +13,17 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { hasModuleAccess } from '../config/permissions';
-import { ordersAPI } from '../services/api';
+import { ordersAPI, inventoryAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import { normalizeGarmentSize, sortGarmentSizes } from '../utils/normalizeGarmentSize';
 import { extractGsmFromFabricComposition, enrichFabricRowGsm } from '../utils/extractFabricGsm';
+import {
+  applyInventoryStockRemark,
+  findMatchingInventoryItem,
+  IN_STOCK_REMARK,
+  isInStockRemark,
+} from '../utils/matchInventoryStock';
 import AddTrimModal from '../components/trims/AddTrimModal';
 import { formatTrimPropertyLabel, isGarmentSizeTrimProperty, isNumericTrimProperty } from '../components/trims/trimConstants';
 
@@ -114,33 +120,62 @@ const emptyTrim = () => ({
   parts: [],
 });
 
-const IN_STOCK_REMARK = 'In stock';
-const isInStockRemark = (remarks) => String(remarks || '').trim().toLowerCase() === 'in stock';
+const asInventoryList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
+
+const fmtStockQty = (v) => {
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  if (!Number.isFinite(n)) return '';
+  const rounded = Math.round(n * 1e4) / 1e4;
+  return rounded.toLocaleString(undefined, { maximumFractionDigits: 4, minimumFractionDigits: 0 });
+};
 
 /** Compact clickable "In stock / Not in stock" indicator, replacing free-text remarks. */
-const InStockToggle = ({ checked, onToggle }) => (
-  <Box
-    onClick={onToggle}
-    sx={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 0.6,
-      px: 1,
-      py: 0.5,
-      borderRadius: 5,
-      cursor: 'pointer',
-      userSelect: 'none',
-      bgcolor: checked ? alpha('#16a34a', 0.1) : alpha('#94a3b8', 0.14),
-      border: `1px solid ${checked ? alpha('#16a34a', 0.35) : alpha('#94a3b8', 0.35)}`,
-      transition: 'background-color 0.15s ease',
-    }}
-  >
-    <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: checked ? '#16a34a' : '#94a3b8', flexShrink: 0 }} />
-    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: checked ? '#15803d' : '#64748b', whiteSpace: 'nowrap' }}>
-      {checked ? 'In stock' : 'Not in stock'}
-    </Typography>
-  </Box>
-);
+const InStockToggle = ({ checked, onToggle, stockQty, stockUnit }) => {
+  const qtyLabel = checked && stockQty != null && String(stockQty).trim() !== ''
+    ? `${fmtStockQty(stockQty)}${stockUnit ? ` ${String(stockUnit).toUpperCase()}` : ''}`
+    : '';
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.35, minWidth: 0 }}>
+      <Box
+        onClick={onToggle}
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.6,
+          px: 1,
+          py: 0.5,
+          borderRadius: 5,
+          cursor: 'pointer',
+          userSelect: 'none',
+          bgcolor: checked ? alpha('#16a34a', 0.1) : alpha('#94a3b8', 0.14),
+          border: `1px solid ${checked ? alpha('#16a34a', 0.35) : alpha('#94a3b8', 0.35)}`,
+          transition: 'background-color 0.15s ease',
+        }}
+      >
+        <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: checked ? '#16a34a' : '#94a3b8', flexShrink: 0 }} />
+        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: checked ? '#15803d' : '#64748b', whiteSpace: 'nowrap' }}>
+          {checked ? 'In stock' : 'Not in stock'}
+        </Typography>
+      </Box>
+      {qtyLabel ? (
+        <Typography
+          className="font-numeric"
+          sx={{
+            fontSize: '0.72rem',
+            fontWeight: 800,
+            color: '#15803d',
+            lineHeight: 1.15,
+            whiteSpace: 'nowrap',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+          title="Available inventory quantity"
+        >
+          {qtyLabel}
+        </Typography>
+      ) : null}
+    </Box>
+  );
+};
 
 const formatTrimVariant = (row) => {
   const pv = row.property_values || {};
@@ -346,32 +381,160 @@ const trimPartTotal = (row, part, piLines, colorQty, totalQty) =>
 const BOM_ROW_H = 46;
 const BOM_ROW_TOTAL = BOM_ROW_H + 18;
 const BOM_CELL_PAD_Y = (BOM_ROW_TOTAL - BOM_ROW_H) / 2;
-const BOM_TABLE_MIN_W = 1420;
-
 const FABRIC_COLS = [
-  { label: 'Fabric composition *', width: 280, align: 'left' },
-  { label: 'Color', width: 120, align: 'left' },
-  { label: 'GSM', width: 100, align: 'right' },
-  { label: 'Roll W (CMS)', width: 110, align: 'right' },
-  { label: 'Cons./pc', width: 100, align: 'right' },
-  { label: 'Unit', width: 90, align: 'center' },
-  { label: 'Total', width: 110, align: 'right' },
-  { label: 'In Stock', width: 120, align: 'center' },
-  { label: '', width: 84, align: 'center' },
+  { label: 'Fabric composition *', width: '22%', align: 'left' },
+  { label: 'Color', width: '11%', align: 'left' },
+  { label: 'GSM', width: '8%', align: 'right' },
+  { label: 'Roll W (CMS)', width: '9%', align: 'right' },
+  { label: 'Cons./pc', width: '9%', align: 'right' },
+  { label: 'Unit', width: '8%', align: 'center' },
+  { label: 'Total', width: '10%', align: 'right' },
+  { label: 'In Stock', width: '13%', align: 'center' },
+  { label: '', width: '10%', align: 'center' },
 ];
 
 const TRIM_COLS = [
-  { label: 'Trim & Properties', width: 480, align: 'left' },
-  { label: 'Supplier', width: 140, align: 'left' },
-  { label: 'Cons./pc', width: 105, align: 'right' },
-  { label: 'Unit', width: 95, align: 'center' },
-  { label: 'Total', width: 115, align: 'right' },
-  { label: 'Tot. Unit', width: 95, align: 'center' },
-  { label: 'In Stock', width: 120, align: 'center' },
-  { label: '', width: 84, align: 'center' },
+  { label: 'Trim & Properties', width: '38%', align: 'left' },
+  { label: 'Supplier', width: '12%', align: 'left' },
+  { label: 'Cons./pc', width: '8%', align: 'right' },
+  { label: 'Unit', width: '7%', align: 'center' },
+  { label: 'Total', width: '9%', align: 'right' },
+  { label: 'Tot. Unit', width: '7%', align: 'center' },
+  { label: 'In Stock', width: '11%', align: 'center' },
+  { label: '', width: '8%', align: 'center' },
 ];
 
-const TRIM_TABLE_MIN_W = 1280;
+/** Popper portaled above cards — prefers below the field, flips if needed. */
+const AutocompleteSelectPopper = React.forwardRef(function AutocompleteSelectPopper(props, ref) {
+  const { disablePortal, placement, style, modifiers, ...other } = props;
+  return (
+    <Popper
+      {...other}
+      ref={ref}
+      disablePortal={false}
+      placement="bottom-start"
+      style={{ zIndex: 13000, ...(style || {}) }}
+      modifiers={[
+        {
+          name: 'flip',
+          enabled: true,
+          options: { fallbackPlacements: ['top-start', 'bottom-end', 'top-end'] },
+        },
+        { name: 'preventOverflow', enabled: true, options: { altAxis: true, padding: 8 } },
+        { name: 'offset', options: { offset: [0, 4] } },
+      ]}
+    />
+  );
+});
+
+const AutocompleteMenuPaper = React.forwardRef(function AutocompleteMenuPaper(props, ref) {
+  return (
+    <Paper
+      {...props}
+      ref={ref}
+      elevation={8}
+      sx={{
+        ...(props.sx || {}),
+        bgcolor: '#fff',
+        border: `1px solid ${slate[200]}`,
+        borderRadius: 1.5,
+        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.14)',
+        mt: 0.25,
+      }}
+    />
+  );
+});
+
+const autocompleteSelectListboxProps = {
+  sx: {
+    maxHeight: 220,
+    py: 0.5,
+    bgcolor: '#fff',
+    '& .MuiAutocomplete-option': {
+      fontSize: '0.8125rem',
+      fontWeight: 600,
+      minHeight: 36,
+      color: slate[800],
+    },
+  },
+};
+
+// Back-compat aliases (older references)
+const AutocompleteTopPopper = AutocompleteSelectPopper;
+const autocompleteTopListboxProps = autocompleteSelectListboxProps;
+
+/** Select-style color field: pick from list or type a custom colour. */
+const ColorFreeSelect = ({ value, options = [], onChange, fieldSx, placeholder = 'Select or type color' }) => (
+  <Autocomplete
+    freeSolo
+    options={options}
+    value={value || ''}
+    onChange={(_, v) => onChange(typeof v === 'string' ? v : v || '')}
+    onInputChange={(_, v, reason) => {
+      if (reason === 'input' || reason === 'clear') onChange(v);
+    }}
+    PopperComponent={AutocompleteSelectPopper}
+    PaperComponent={AutocompleteMenuPaper}
+    ListboxProps={autocompleteSelectListboxProps}
+    forcePopupIcon
+    selectOnFocus
+    clearOnBlur={false}
+    handleHomeEndKeys
+    title={value || undefined}
+    sx={{
+      m: 0,
+      width: '100%',
+      minWidth: 0,
+      '& .MuiAutocomplete-popupIndicator': { color: slate[500] },
+      '& .MuiAutocomplete-clearIndicator': { color: slate[400] },
+      '& .MuiAutocomplete-inputRoot': {
+        overflow: 'visible !important',
+      },
+      '& .MuiAutocomplete-input': {
+        textOverflow: 'clip !important',
+        overflowX: 'auto !important',
+        overflowY: 'hidden !important',
+        whiteSpace: 'nowrap !important',
+        minWidth: '4ch !important',
+      },
+    }}
+    renderOption={(props, option) => (
+      <Box component="li" {...props} key={option} title={option}>
+        <Typography
+          sx={{
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            color: slate[800],
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
+          }}
+        >
+          {option}
+        </Typography>
+      </Box>
+    )}
+    renderInput={(params) => (
+      <TextField
+        {...params}
+        size="small"
+        fullWidth
+        placeholder={placeholder}
+        inputProps={{
+          ...params.inputProps,
+          title: value || placeholder,
+        }}
+        sx={{
+          ...fieldSx,
+          '& .MuiAutocomplete-input, & input': {
+            textOverflow: 'clip !important',
+            overflow: 'visible !important',
+            whiteSpace: 'nowrap !important',
+          },
+        }}
+      />
+    )}
+  />
+);
 const TRIM_ROW_MIN_H = 108;
 const TRIM_NAME_FIELD_H = 38;
 const TRIM_PROP_FIELD_H = 34;
@@ -456,34 +619,35 @@ const bomTotalFieldSx = (align = 'right') => ({
 
 const bomTableBaseSx = (slateColor) => ({
   width: '100%',
-  minWidth: BOM_TABLE_MIN_W,
   tableLayout: 'fixed',
   borderCollapse: 'collapse',
   '& .MuiTableBody-root .MuiTableRow-root': {
     height: BOM_ROW_TOTAL,
   },
   '& .MuiTableCell-root': {
-    px: '10px !important',
+    px: '8px !important',
     py: `${BOM_CELL_PAD_Y}px !important`,
     height: BOM_ROW_TOTAL,
     verticalAlign: 'middle !important',
     borderBottom: `1px solid ${slateColor[200]}`,
     borderRight: `1px solid ${slateColor[100]}`,
+    overflow: 'hidden',
     '&:last-child': { borderRight: 'none' },
   },
   '& .MuiTableCell-sizeSmall': {
-    px: '10px !important',
+    px: '8px !important',
     py: `${BOM_CELL_PAD_Y}px !important`,
   },
   '& .MuiTableHead-root .MuiTableCell-root': {
     verticalAlign: 'middle !important',
     bgcolor: alpha(slateColor[900], 0.04),
     fontWeight: 700,
-    fontSize: '0.8rem',
-    whiteSpace: 'nowrap',
+    fontSize: '0.72rem',
+    whiteSpace: 'normal',
+    lineHeight: 1.25,
     height: 44,
     py: '0 !important',
-    px: '10px !important',
+    px: '8px !important',
   },
 });
 
@@ -555,6 +719,15 @@ const trimPropFieldSx = (align = 'left') => ({
     height: `${TRIM_PROP_FIELD_H}px !important`,
     minHeight: `${TRIM_PROP_FIELD_H}px !important`,
     py: '0 !important',
+    flexWrap: 'nowrap',
+    overflow: 'hidden',
+  },
+  '& .MuiAutocomplete-input': {
+    minWidth: '0 !important',
+    width: '100% !important',
+  },
+  '& .MuiAutocomplete-endAdornment': {
+    right: 4,
   },
 });
 
@@ -618,7 +791,6 @@ const cartonBoxSectionSx = {
 
 const trimBomTableSx = (slateColor) => ({
   ...bomTableBaseSx(slateColor),
-  minWidth: TRIM_TABLE_MIN_W,
   '& .MuiTableBody-root .MuiTableRow-root': {
     height: 'auto',
     minHeight: TRIM_ROW_MIN_H,
@@ -652,6 +824,7 @@ const trimBomTableSx = (slateColor) => ({
     verticalAlign: 'middle !important',
     bgcolor: 'inherit',
     borderBottom: `1px solid ${slateColor[200]}`,
+    overflow: 'visible',
   },
 });
 
@@ -966,6 +1139,7 @@ export default function IndentEditorPage() {
   const [company,  setCompany]  = useState(null);
   const [piList,   setPiList]   = useState([]);
   const [trimsList, setTrimsList] = useState([]);
+  const [inventoryItems, setInventoryItems] = useState([]);
 
   // Form state
   const [indent,       setIndent]      = useState(null);
@@ -1048,12 +1222,51 @@ export default function IndentEditorPage() {
 
   const getTrimSchema = (row) => getTrimMaster(row)?.properties || [];
 
+  const withStockRemark = (row) => applyInventoryStockRemark(row, inventoryItems, trimsList);
+
   useEffect(() => {
     if (location.state?.saveMessage) {
       setSaveNotice(location.state.saveMessage);
       navigate(location.pathname + location.search, { replace: true, state: {} });
     }
   }, [location.pathname, location.search, location.state, navigate]);
+
+  // Load inventory so trim "In stock" can auto-match SKUs by properties
+  useEffect(() => {
+    (async () => {
+      try {
+        const all = [];
+        let page = 1;
+        let guard = 0;
+        while (guard < 40) {
+          guard += 1;
+          const res = await inventoryAPI.getAll({ is_active: true, page });
+          const chunk = asInventoryList(res.data);
+          all.push(...chunk);
+          if (!res.data?.next || !chunk.length) break;
+          page += 1;
+        }
+        setInventoryItems(all);
+      } catch (err) {
+        console.error('Failed to load inventory for stock matching:', err);
+      }
+    })();
+  }, []);
+
+  // Re-evaluate stock badges when inventory / trim library arrives
+  useEffect(() => {
+    if (!inventoryItems.length) return;
+    setTrimLines((prev) => {
+      let changed = false;
+      const next = prev.map((row) => {
+        if (!row.trim && !String(row.trim_name || '').trim()) return row;
+        const updated = applyInventoryStockRemark(row, inventoryItems, trimsList);
+        if (updated !== row) changed = true;
+        return updated;
+      });
+      return changed ? next : prev;
+    });
+  }, [inventoryItems, trimsList]);
 
   // Recalculate totals when selected PI lines change
   useEffect(() => {
@@ -1229,17 +1442,21 @@ export default function IndentEditorPage() {
     setTrimLines((prev) => {
       const next = [...prev];
       const nextValue = field === 'size_variant' ? normalizeGarmentSize(value) : value;
-      const updated = { ...next[i], [field]: nextValue };
+      let updated = { ...next[i], [field]: nextValue };
       if (field === 'consumption_per_pc' || field === 'color_variant' || field === 'size_variant') {
         if (hasTrimParts(updated)) {
           const parts = updated.parts.map((p) => ({
             ...p,
             total_consumption: trimPartTotal(updated, p, activeLines, colorQty, totalQty),
           }));
-          next[i] = { ...updated, parts, ...sumTrimParts(parts) };
-          return next;
+          updated = { ...updated, parts, ...sumTrimParts(parts) };
+        } else {
+          updated.total_consumption = trimRowTotal(updated, activeLines, colorQty, totalQty);
         }
-        updated.total_consumption = trimRowTotal(updated, activeLines, colorQty, totalQty);
+      }
+      // Auto stock match when identity / properties change; keep manual remarks toggle as-is
+      if (field === 'color_variant' || field === 'size_variant' || field === 'trim_name' || field === 'category') {
+        updated = withStockRemark(updated);
       }
       next[i] = updated;
       return next;
@@ -1305,7 +1522,7 @@ export default function IndentEditorPage() {
   const selectTrimFromLibrary = (i, trim) => {
     setTrimLines((prev) => {
       const next = [...prev];
-      next[i] = {
+      let row = {
         ...next[i],
         trim: trim?.id || null,
         trim_name: trim?.name || '',
@@ -1316,9 +1533,10 @@ export default function IndentEditorPage() {
         color_variant: '',
         size_variant: '',
       };
-      if (next[i].consumption_per_pc) {
-        next[i].total_consumption = trimRowTotal(next[i], activeLines, colorQty, totalQty);
+      if (row.consumption_per_pc) {
+        row.total_consumption = trimRowTotal(row, activeLines, colorQty, totalQty);
       }
+      next[i] = withStockRemark(row);
       return next;
     });
   };
@@ -1327,17 +1545,17 @@ export default function IndentEditorPage() {
     setTrimLines((prev) => {
       const next = [...prev];
       const nextValue = isGarmentSizeTrimProperty(propName) ? normalizeGarmentSize(value) : value;
-      const row = { ...next[i], property_values: { ...(next[i].property_values || {}), [propName]: nextValue } };
+      let row = { ...next[i], property_values: { ...(next[i].property_values || {}), [propName]: nextValue } };
       if (hasTrimParts(row)) {
         const parts = row.parts.map((p) => ({
           ...p,
           total_consumption: trimPartTotal(row, p, activeLines, colorQty, totalQty),
         }));
-        next[i] = { ...row, parts, ...sumTrimParts(parts) };
-        return next;
+        row = { ...row, parts, ...sumTrimParts(parts) };
+      } else {
+        row.total_consumption = trimRowTotal(row, activeLines, colorQty, totalQty);
       }
-      row.total_consumption = trimRowTotal(row, activeLines, colorQty, totalQty);
-      next[i] = row;
+      next[i] = withStockRemark(row);
       return next;
     });
   };
@@ -1354,7 +1572,7 @@ export default function IndentEditorPage() {
       selectTrimFromLibrary(trimModalTargetRow, newTrim);
     } else {
       setTrimLines((prev) => {
-        const entry = {
+        const entry = withStockRemark({
           ...emptyTrim(),
           trim: newTrim.id,
           trim_name: newTrim.name,
@@ -1362,7 +1580,7 @@ export default function IndentEditorPage() {
           unit: newTrim.default_unit || 'PCS',
           total_unit: newTrim.default_unit || 'PCS',
           property_values: initPropertyValues(newTrim.properties),
-        };
+        });
         const blankIdx = prev.findIndex((r) => !r.trim_name.trim());
         if (blankIdx >= 0) {
           const next = [...prev];
@@ -1838,13 +2056,13 @@ export default function IndentEditorPage() {
       )}
 
       {/* ── FABRIC ── */}
-      <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, border: `1px solid ${slate[200]}`, borderRadius: 2 }}>
+      <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, border: `1px solid ${slate[200]}`, borderRadius: 2, overflow: 'visible' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', flex: 1 }}>Fabric</Typography>
               <Button size="small" startIcon={<Add />} onClick={addFabricRow}
                 sx={{ fontWeight: 700, textTransform: 'none' }}>Add Row</Button>
             </Box>
-            <Box sx={{ overflowX: 'auto', overflowY: 'hidden', pb: '16px', border: `1px solid ${slate[200]}`, borderRadius: 1.5 }}>
+            <Box sx={{ overflow: 'visible', border: `1px solid ${slate[200]}`, borderRadius: 1.5 }}>
               <Table size="small" sx={bomTableSx}>
                 <BomColGroup cols={FABRIC_COLS} />
                 <TableHead>
@@ -1887,11 +2105,13 @@ export default function IndentEditorPage() {
                       </TableCell>
                       <TableCell sx={bodyCell('left')}>
                         <Box sx={bomCellInner('left')}>
-                          <Autocomplete freeSolo options={Object.keys(colorQty)} value={row.color}
-                            onChange={(_, v) => setFabricField(i, 'color', v || '')}
-                            onInputChange={(_, v) => setFabricField(i, 'color', v)}
-                            sx={{ m: 0, width: '100%' }}
-                            renderInput={(params) => <TextField {...params} size="small" fullWidth placeholder="Color" sx={bomFieldSx('left')} />} />
+                          <ColorFreeSelect
+                            value={row.color || ''}
+                            options={Object.keys(colorQty)}
+                            onChange={(v) => setFabricField(i, 'color', v)}
+                            fieldSx={bomFieldSx('left')}
+                            placeholder="Select or type color"
+                          />
                         </Box>
                       </TableCell>
                       <TableCell sx={bodyCell('right')}>
@@ -1965,7 +2185,7 @@ export default function IndentEditorPage() {
           </Paper>
 
           {/* ── TRIMS & ACCESSORIES ── */}
-      <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, border: `1px solid ${slate[200]}`, borderRadius: 2 }}>
+      <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, border: `1px solid ${slate[200]}`, borderRadius: 2, overflow: 'visible' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 2 }}>
               <Box sx={{ flex: 1, minWidth: 160 }}>
                 <Typography sx={{ fontWeight: 800, fontSize: '0.95rem' }}>Trims & Accessories</Typography>
@@ -1982,7 +2202,7 @@ export default function IndentEditorPage() {
               </Button>
             </Box>
 
-            <Box sx={{ overflowX: 'visible', pb: '28px', border: `1px solid ${slate[200]}`, borderRadius: 1.5 }}>
+            <Box sx={{ overflow: 'visible', border: `1px solid ${slate[200]}`, borderRadius: 1.5 }}>
               <Table size="small" sx={trimTableSx}>
                 <BomColGroup cols={TRIM_COLS} />
                 <TableHead>
@@ -1996,10 +2216,13 @@ export default function IndentEditorPage() {
                   {trimLines.map((row, i) => {
                     const schema = getTrimSchema(row);
                     const trimMaster = getTrimMaster(row);
+                    const stockMatch = findMatchingInventoryItem(row, inventoryItems, trimsList);
+                    const stockQty = stockMatch?.current_stock ?? row.matched_stock_qty;
+                    const stockUnit = stockMatch?.unit ?? row.matched_stock_unit;
                     return (
                       <TableRow key={i} hover className={i % 2 === 1 ? 'trim-row--alt' : undefined}>
-                        <TableCell sx={{ ...bodyCell('left'), verticalAlign: 'top' }}>
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, width: '100%', py: 0.25 }}>
+                        <TableCell sx={{ ...bodyCell('left'), verticalAlign: 'top', overflow: 'visible' }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, width: '100%', py: 0.25, overflow: 'visible' }}>
                             {/* Row 1 — Trim name */}
                             <Box>
                               <Typography sx={trimFieldLabelSx}>Trim Name *</Typography>
@@ -2078,14 +2301,18 @@ export default function IndentEditorPage() {
                             <Box sx={{
                               pt: 1.25,
                               borderTop: `1px dashed ${slate[200]}`,
+                              overflow: 'visible',
+                              position: 'relative',
+                              zIndex: 1,
                             }}>
                               <Typography sx={trimFieldLabelSx}>Properties</Typography>
                               {schema.length > 0 ? (
                                 <Box sx={{
-                                  display: 'flex',
-                                  flexWrap: 'wrap',
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
                                   gap: 1,
-                                  alignItems: 'flex-start',
+                                  alignItems: 'start',
+                                  overflow: 'visible',
                                 }}>
                                   {schema.map((prop) => {
                                     const isColorProp = /^colou?r$/i.test(String(prop.name).trim());
@@ -2096,9 +2323,10 @@ export default function IndentEditorPage() {
                                     <Box
                                       key={prop.name}
                                       sx={{
-                                        flex: '1 1 130px',
-                                        minWidth: 110,
-                                        maxWidth: 200,
+                                        minWidth: isColorProp ? 180 : 0,
+                                        width: '100%',
+                                        position: 'relative',
+                                        gridColumn: isColorProp ? 'span 2' : 'auto',
                                       }}
                                     >
                                       <Typography sx={{
@@ -2107,25 +2335,36 @@ export default function IndentEditorPage() {
                                         color: slate[600],
                                         mb: 0.35,
                                         lineHeight: 1.2,
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
+                                        whiteSpace: isColorProp ? 'normal' : 'nowrap',
+                                        overflow: isColorProp ? 'visible' : 'hidden',
+                                        textOverflow: isColorProp ? 'clip' : 'ellipsis',
                                       }}
                                       title={formatTrimPropertyLabel(prop)}
                                       >
                                         {prop.name}{prop.unit ? ` (${prop.unit})` : ''}
                                       </Typography>
                                       {isColorProp ? (
-                                        <Autocomplete
-                                          freeSolo
-                                          options={piColorOptions}
+                                        <ColorFreeSelect
                                           value={propValue}
-                                          onChange={(_, v) => setTrimPropertyValue(i, prop.name, v || '')}
-                                          onInputChange={(_, v) => setTrimPropertyValue(i, prop.name, v)}
-                                          sx={{ m: 0, width: '100%' }}
-                                          renderInput={(params) => (
-                                            <TextField {...params} size="small" fullWidth placeholder="From PI colours" sx={trimPropFieldSx('left')} />
-                                          )}
+                                          options={piColorOptions}
+                                          onChange={(v) => setTrimPropertyValue(i, prop.name, v)}
+                                          fieldSx={{
+                                            ...trimPropFieldSx('left'),
+                                            '& .MuiAutocomplete-inputRoot': {
+                                              height: `${TRIM_PROP_FIELD_H}px !important`,
+                                              minHeight: `${TRIM_PROP_FIELD_H}px !important`,
+                                              py: '0 !important',
+                                              flexWrap: 'nowrap',
+                                              overflow: 'visible !important',
+                                            },
+                                            '& .MuiAutocomplete-input, & input': {
+                                              textOverflow: 'clip !important',
+                                              overflow: 'visible !important',
+                                              whiteSpace: 'nowrap !important',
+                                              minWidth: '8ch !important',
+                                            },
+                                          }}
+                                          placeholder="Select or type color"
                                         />
                                       ) : isGarmentSizeProp ? (
                                         <Autocomplete
@@ -2133,7 +2372,15 @@ export default function IndentEditorPage() {
                                           options={piSizeOptions}
                                           value={propValue}
                                           onChange={(_, v) => setTrimPropertyValue(i, prop.name, v || '')}
-                                          onInputChange={(_, v) => setTrimPropertyValue(i, prop.name, v)}
+                                          onInputChange={(_, v, reason) => {
+                                            if (reason === 'input' || reason === 'clear') {
+                                              setTrimPropertyValue(i, prop.name, v);
+                                            }
+                                          }}
+                                          PopperComponent={AutocompleteSelectPopper}
+                                          PaperComponent={AutocompleteMenuPaper}
+                                          ListboxProps={autocompleteSelectListboxProps}
+                                          forcePopupIcon
                                           sx={{ m: 0, width: '100%' }}
                                           renderInput={(params) => (
                                             <TextField {...params} size="small" fullWidth placeholder="PI garment size (S, M, L…)" sx={trimPropFieldSx('left')} />
@@ -2260,10 +2507,34 @@ export default function IndentEditorPage() {
                           </>
                         )}
                         <TableCell sx={bodyCell('center')}>
-                          <Box sx={bomCellInner('center')}>
+                          <Box sx={{ ...bomCellInner('center'), flexDirection: 'column', minHeight: 'auto', py: 0.5 }}>
                             <InStockToggle
                               checked={isInStockRemark(row.remarks)}
-                              onToggle={() => setTrimField(i, 'remarks', isInStockRemark(row.remarks) ? '' : IN_STOCK_REMARK)}
+                              stockQty={isInStockRemark(row.remarks) ? stockQty : ''}
+                              stockUnit={isInStockRemark(row.remarks) ? stockUnit : ''}
+                              onToggle={() => {
+                                setTrimLines((prev) => {
+                                  const next = [...prev];
+                                  if (isInStockRemark(row.remarks)) {
+                                    next[i] = {
+                                      ...next[i],
+                                      remarks: '',
+                                      matched_stock_qty: '',
+                                      matched_stock_unit: '',
+                                    };
+                                  } else if (stockMatch) {
+                                    next[i] = applyInventoryStockRemark(next[i], inventoryItems, trimsList);
+                                  } else {
+                                    next[i] = {
+                                      ...next[i],
+                                      remarks: IN_STOCK_REMARK,
+                                      matched_stock_qty: '',
+                                      matched_stock_unit: '',
+                                    };
+                                  }
+                                  return next;
+                                });
+                              }}
                             />
                           </Box>
                         </TableCell>

@@ -114,7 +114,7 @@ export const formatTrimPropertyLabel = (prop) => {
 
 export const normalizeTrimPropertyName = (name) => {
   const trimmed = String(name || '').trim();
-  if (/^number$/i.test(trimmed)) return 'Number';
+  if (/^(number|no\.?|#)$/i.test(trimmed)) return 'Number';
   if (/^washes$/i.test(trimmed)) return 'Washes';
   if (/^microns$/i.test(trimmed)) return 'Microns';
   if (/^gsm$/i.test(trimmed)) return 'GSM';
@@ -123,5 +123,9 @@ export const normalizeTrimPropertyName = (name) => {
   if (/^ply$/i.test(trimmed)) return 'PLY';
   if (/^dimensions?$/i.test(trimmed)) return 'Dimensions';
   if (/^dim\.?\s*unit$/i.test(trimmed)) return 'Dim. Unit';
+  if (/^colou?r$/i.test(trimmed)) return 'Color';
+  if (/^(chain\s+)?material$/i.test(trimmed)) return 'Chain Material';
+  if (/^zipper\s*type$/i.test(trimmed)) return 'Zipper Type';
+  if (/^puller(\s*type)?$/i.test(trimmed)) return 'Puller Type';
   return trimmed;
 };
