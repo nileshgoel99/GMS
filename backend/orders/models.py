@@ -262,6 +262,14 @@ class IndentTrimLine(models.Model):
     )
     remarks = models.CharField(max_length=200, blank=True, default='', help_text='e.g. in stock')
     sort_order = models.PositiveIntegerField(default=0)
+    supplier = models.ForeignKey(
+        'suppliers.Supplier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='indent_trim_lines',
+        help_text='Supplier for this trim line on the indent (not the trim master)',
+    )
 
     class Meta:
         ordering = ['indent', 'sort_order', 'id']

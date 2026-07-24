@@ -26,7 +26,8 @@ class IndentFabricLineInline(admin.TabularInline):
 class IndentTrimLineInline(admin.TabularInline):
     model = IndentTrimLine
     extra = 0
-    fields = ['sort_order', 'trim_name', 'category', 'color_variant', 'size_variant', 'consumption_per_pc', 'unit', 'total_consumption', 'total_unit', 'parts', 'remarks']
+    fields = ['sort_order', 'trim_name', 'category', 'supplier', 'color_variant', 'size_variant', 'consumption_per_pc', 'unit', 'total_consumption', 'total_unit', 'parts', 'remarks']
+    autocomplete_fields = ['supplier']
 
 
 @admin.register(TrimMaster)

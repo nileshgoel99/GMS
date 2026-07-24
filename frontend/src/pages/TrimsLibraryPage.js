@@ -10,7 +10,7 @@ import { DataGrid } from '@mui/x-data-grid';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
 import { dataGridSx, slate } from '../theme/appTheme';
-import { ordersAPI, suppliersAPI } from '../services/api';
+import { ordersAPI } from '../services/api';
 import {
   TRIM_PROPERTY_NAME_SUGGESTIONS,
   TRIM_CATEGORY_SUGGESTIONS,
@@ -26,11 +26,10 @@ import {
   formatCartonBoxSummary,
 } from '../components/trims/trimConstants';
 import CartonBoxDefaultsFields from '../components/trims/CartonBoxDefaultsFields';
-import SupplierAutocomplete from '../components/suppliers/SupplierAutocomplete';
 
 const emptyProperty = () => ({ name: '', unit: '' });
 const emptyForm = () => ({
-  name: '', category: '', default_unit: 'PCS', notes: '', properties: [], supplier: null,
+  name: '', category: '', default_unit: 'PCS', notes: '', properties: [],
   cartonDefaults: emptyCartonDefaults(),
 });
 
@@ -45,24 +44,12 @@ export default function TrimsLibraryPage() {
   const [saving, setSaving]     = useState(false);
   const [search, setSearch]     = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [suppliers, setSuppliers] = useState([]);
   const initialLoadDone = useRef(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(t);
   }, [search]);
-
-  const loadSuppliers = useCallback(async () => {
-    try {
-      const res = await suppliersAPI.getAll({ is_active: true });
-      setSuppliers(asList(res.data));
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
-
-  useEffect(() => { loadSuppliers(); }, [loadSuppliers]);
 
   const load = useCallback(async () => {
     const showSpinner = !initialLoadDone.current;
@@ -90,7 +77,6 @@ export default function TrimsLibraryPage() {
       default_unit: row.default_unit || 'PCS',
       notes: row.notes || '',
       properties: (row.properties || []).map((p) => ({ name: p.name || '', unit: p.unit || '' })),
-      supplier: row.supplier || null,
       cartonDefaults: isCartonBoxCategory(row.category)
         ? cartonBoxFromDefaultValues(row.default_property_values || {})
         : emptyCartonDefaults(),
@@ -138,7 +124,6 @@ export default function TrimsLibraryPage() {
         default_unit: form.default_unit,
         notes: form.notes,
         properties,
-        supplier: form.supplier || null,
         default_property_values,
       };
       if (editing) {
@@ -257,16 +242,6 @@ export default function TrimsLibraryPage() {
     {
       field: 'default_unit', headerName: 'Default Unit', width: 110, align: 'center', headerAlign: 'center',
       renderCell: (p) => cell('center', <Chip label={p.value} size="small" variant="outlined" sx={{ fontSize: '0.7rem', fontWeight: 700 }} />),
-    },
-    {
-      field: 'supplier_name', headerName: 'Supplier', flex: 1, minWidth: 140,
-      renderCell: (p) => cell('left',
-        p.value ? (
-          <Typography sx={{ fontSize: '0.8rem', fontWeight: 600 }}>{p.value}</Typography>
-        ) : (
-          <Typography sx={{ fontSize: '0.8rem', color: 'text.disabled' }}>—</Typography>
-        )
-      ),
     },
     {
       field: 'actions', headerName: '', width: 100, sortable: false, align: 'center', headerAlign: 'center',
@@ -400,15 +375,6 @@ export default function TrimsLibraryPage() {
                 onChange={(e) => setForm((f) => ({ ...f, default_unit: e.target.value }))}>
                 {UNIT_OPTIONS.filter(Boolean).map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
               </TextField>
-            </Grid>
-
-            <Grid item xs={12}>
-              <SupplierAutocomplete
-                suppliers={suppliers}
-                value={form.supplier}
-                onChange={(id) => setForm((f) => ({ ...f, supplier: id }))}
-                onSuppliersChange={setSuppliers}
-              />
             </Grid>
 
             {/* Properties builder */}

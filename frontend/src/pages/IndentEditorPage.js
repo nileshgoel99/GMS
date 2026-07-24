@@ -13,7 +13,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { hasModuleAccess } from '../config/permissions';
-import { ordersAPI, inventoryAPI } from '../services/api';
+import { ordersAPI, inventoryAPI, suppliersAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import { normalizeGarmentSize, sortGarmentSizes } from '../utils/normalizeGarmentSize';
@@ -25,6 +25,7 @@ import {
   isInStockRemark,
 } from '../utils/matchInventoryStock';
 import AddTrimModal from '../components/trims/AddTrimModal';
+import SupplierAutocomplete from '../components/suppliers/SupplierAutocomplete';
 import { formatTrimPropertyLabel, isGarmentSizeTrimProperty, isNumericTrimProperty } from '../components/trims/trimConstants';
 
 // ── Print styles ─────────────────────────────────────────────────────────────
@@ -117,6 +118,7 @@ const emptyTrimPart = (label = '') => ({ label, consumption_per_pc: '', unit: 'M
 const emptyTrim = () => ({
   trim: null, trim_name: '', category: '', color_variant: '', size_variant: '',
   property_values: {}, consumption_per_pc: '', unit: 'PCS', total_consumption: '', total_unit: '', remarks: '',
+  supplier: null, supplier_name: '', supplier_country: '',
   parts: [],
 });
 
@@ -266,6 +268,7 @@ const serializeTrimLine = (row) => ({
   total_consumption: toApiDecimal(row.total_consumption),
   total_unit: row.total_unit || row.unit || '',
   remarks: row.remarks || '',
+  supplier: row.supplier || null,
   parts: (row.parts || []).map((p) => ({
     label: p.label || '',
     consumption_per_pc: toApiDecimal(p.consumption_per_pc),
@@ -394,8 +397,8 @@ const FABRIC_COLS = [
 ];
 
 const TRIM_COLS = [
-  { label: 'Trim & Properties', width: '38%', align: 'left' },
-  { label: 'Supplier', width: '12%', align: 'left' },
+  { label: 'Trim & Properties', width: '30%', align: 'left' },
+  { label: 'Supplier', width: '20%', align: 'left' },
   { label: 'Cons./pc', width: '8%', align: 'right' },
   { label: 'Unit', width: '7%', align: 'center' },
   { label: 'Total', width: '9%', align: 'right' },
@@ -682,6 +685,53 @@ const trimNameFieldSx = (align = 'left') => ({
   },
 });
 
+/** Supplier cell — wraps full name; equal padding keeps text vertically centered. */
+const SUPPLIER_FIELD_MIN_H = 40;
+const supplierFieldSx = {
+  width: '100%',
+  m: 0,
+  '& .MuiFormControl-root': { m: 0, width: '100%' },
+  '& .MuiInputBase-root': {
+    fontSize: '0.8125rem',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center !important',
+    boxSizing: 'border-box',
+    minHeight: SUPPLIER_FIELD_MIN_H,
+    height: 'auto !important',
+    py: '8px !important',
+    pl: '10px !important',
+    pr: '36px !important',
+  },
+  '& .MuiAutocomplete-inputRoot': {
+    height: 'auto !important',
+    minHeight: `${SUPPLIER_FIELD_MIN_H}px !important`,
+    alignItems: 'center !important',
+    flexWrap: 'nowrap',
+    py: '8px !important',
+  },
+  '& textarea.MuiInputBase-input, & textarea.MuiAutocomplete-input': {
+    padding: '0 !important',
+    margin: '0 !important',
+    height: 'auto !important',
+    minHeight: '0 !important',
+    maxHeight: 'none !important',
+    lineHeight: '1.4 !important',
+    whiteSpace: 'pre-wrap !important',
+    wordBreak: 'break-word',
+    overflowWrap: 'anywhere',
+    overflow: 'visible !important',
+    textOverflow: 'clip !important',
+    resize: 'none',
+    boxSizing: 'border-box',
+  },
+  '& .MuiAutocomplete-endAdornment': {
+    top: '50%',
+    transform: 'translateY(-50%)',
+    right: 4,
+  },
+};
+
 const trimPropFieldSx = (align = 'left') => ({
   width: '100%',
   m: 0,
@@ -897,7 +947,7 @@ const cellSx = { border: '1px solid #000', p: '4px 6px', fontSize: '8.5pt', font
 const thSx   = { ...cellSx, fontWeight: 700, bgcolor: '#e8e8e8', textAlign: 'center' };
 
 // ── Printed Indent Document ───────────────────────────────────────────────────
-function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedLines, trimsList = [] }) {
+function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedLines, suppliers = [] }) {
   const piLines = selectedLines || pi?.lines || [];
   const colorQty = buildColorQty(piLines);
   const colors = Object.keys(colorQty);
@@ -920,12 +970,18 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
   const companyName = company?.company_legal_name || 'JB INTERNATIONAL';
 
   const supplierLabelForTrim = (row) => {
-    if (!row?.trim) return '';
-    const master = trimsList.find((t) => t.id === row.trim);
-    if (!master?.supplier_name) return '';
-    return master.supplier_country
-      ? `${master.supplier_name} · ${master.supplier_country}`
-      : master.supplier_name;
+    if (row?.supplier_name) {
+      return row.supplier_country
+        ? `${row.supplier_name} · ${row.supplier_country}`
+        : row.supplier_name;
+    }
+    if (row?.supplier) {
+      const s = suppliers.find((x) => x.id === row.supplier);
+      if (s?.name) {
+        return s.country ? `${s.name} · ${s.country}` : s.name;
+      }
+    }
+    return '';
   };
 
   return (
@@ -1150,6 +1206,7 @@ export default function IndentEditorPage() {
   const [company,  setCompany]  = useState(null);
   const [piList,   setPiList]   = useState([]);
   const [trimsList, setTrimsList] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
 
   // Form state
@@ -1260,6 +1317,18 @@ export default function IndentEditorPage() {
         setInventoryItems(all);
       } catch (err) {
         console.error('Failed to load inventory for stock matching:', err);
+      }
+    })();
+  }, []);
+
+  // Load suppliers for per-trim-line picker
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await suppliersAPI.getAll({ is_active: true, page_size: 500 });
+        setSuppliers(asApiList(res.data));
+      } catch (err) {
+        console.error('Failed to load suppliers:', err);
       }
     })();
   }, []);
@@ -2266,9 +2335,6 @@ export default function IndentEditorPage() {
                                           {o.category && (
                                             <Chip label={o.category} size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700 }} />
                                           )}
-                                          {o.supplier_name && (
-                                            <Typography sx={{ fontSize: '0.68rem', color: 'text.secondary' }}>{o.supplier_name}</Typography>
-                                          )}
                                         </Box>
                                       </Box>
                                     )
@@ -2421,17 +2487,52 @@ export default function IndentEditorPage() {
                             </Box>
                           </Box>
                         </TableCell>
-                        <TableCell sx={bodyCell('left')}>
-                          <Box sx={bomCellInner('left')}>
-                            {trimMaster?.supplier_name ? (
-                              <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: 600, width: '100%' }}
-                                title={`${trimMaster.supplier_name}${trimMaster.supplier_country ? ` · ${trimMaster.supplier_country}` : ''}`}>
-                                {trimMaster.supplier_name}
-                                {trimMaster.supplier_country ? ` · ${trimMaster.supplier_country}` : ''}
-                              </Typography>
-                            ) : (
-                              <Typography sx={{ fontSize: '0.875rem', color: 'text.disabled' }}>—</Typography>
-                            )}
+                        <TableCell sx={{
+                          ...bodyCell('left'),
+                          verticalAlign: 'middle',
+                          overflow: 'visible !important',
+                          whiteSpace: 'normal',
+                        }}>
+                          <Box sx={{
+                            ...bomCellInner('left'),
+                            overflow: 'visible',
+                            alignItems: 'center',
+                            py: 0.75,
+                            minHeight: 0,
+                          }}>
+                            <SupplierAutocomplete
+                              compact
+                              suppliers={suppliers}
+                              value={row.supplier || null}
+                              onChange={(id) => {
+                                const s = id ? suppliers.find((x) => x.id === id) : null;
+                                const hint = (row.trim_name || row.category || '').trim();
+                                setTrimLines((prev) => {
+                                  const next = [...prev];
+                                  next[i] = {
+                                    ...next[i],
+                                    supplier: id,
+                                    supplier_name: s?.name || '',
+                                    supplier_country: s?.country || '',
+                                  };
+                                  return next;
+                                });
+                                if (id && hint) {
+                                  setSuppliers((prev) => prev.map((sup) => {
+                                    if (sup.id !== id) return sup;
+                                    const existing = Array.isArray(sup.supplies_in) ? sup.supplies_in : [];
+                                    if (existing.some((x) => String(x).toLowerCase() === hint.toLowerCase())) {
+                                      return sup;
+                                    }
+                                    return { ...sup, supplies_in: [...existing, hint] };
+                                  }));
+                                }
+                              }}
+                              onSuppliersChange={setSuppliers}
+                              suppliesInHint={row.trim_name || row.category || ''}
+                              placeholder="Supplier…"
+                              TextFieldProps={{ sx: supplierFieldSx }}
+                            />
                           </Box>
                         </TableCell>
                         {hasTrimParts(row) ? (
@@ -2724,7 +2825,7 @@ export default function IndentEditorPage() {
           fabricLines={fabricLines}
           trimLines={trimLines}
           company={company}
-          trimsList={trimsList}
+          suppliers={suppliers}
         />
       </Box>
     </Box>

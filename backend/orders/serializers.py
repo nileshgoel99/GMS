@@ -319,15 +319,18 @@ class IndentFabricLineSerializer(serializers.ModelSerializer):
 class IndentTrimLineSerializer(serializers.ModelSerializer):
     consumption_per_pc = BlankAsZeroDecimalField(max_digits=10, decimal_places=4, required=False)
     total_consumption = BlankAsZeroDecimalField(max_digits=14, decimal_places=4, required=False)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, default='')
+    supplier_country = serializers.CharField(source='supplier.country', read_only=True, default='')
 
     class Meta:
         model = IndentTrimLine
         fields = [
             'id', 'trim', 'trim_name', 'category', 'color_variant', 'size_variant',
             'property_values',
-            'consumption_per_pc', 'unit', 'total_consumption', 'total_unit', 'parts', 'remarks', 'sort_order',
+            'consumption_per_pc', 'unit', 'total_consumption', 'total_unit', 'parts', 'remarks',
+            'sort_order', 'supplier', 'supplier_name', 'supplier_country',
         ]
-        read_only_fields = ('id',)
+        read_only_fields = ('id', 'supplier_name', 'supplier_country')
 
 
 CARTON_BOX_CATEGORY = 'Carton Box'
@@ -482,6 +485,8 @@ class IndentSerializer(serializers.ModelSerializer):
         return validated_data
 
     def _save_lines(self, indent, fabric_data, trim_data):
+        from suppliers.models import Supplier
+
         indent.fabric_lines.all().delete()
         for i, row in enumerate(fabric_data or []):
             row.pop('id', None)
@@ -489,11 +494,27 @@ class IndentSerializer(serializers.ModelSerializer):
 
         indent.trim_lines.all().delete()
         for i, row in enumerate(trim_data or []):
+            row = dict(row)
             row.pop('id', None)
+            row.pop('supplier_name', None)
+            row.pop('supplier_country', None)
             trim_fk = row.pop('trim', None)
             if trim_fk and hasattr(trim_fk, 'pk'):
                 trim_fk = trim_fk.pk
-            IndentTrimLine.objects.create(indent=indent, trim_id=trim_fk, sort_order=i, **row)
+            supplier_fk = row.pop('supplier', None)
+            if supplier_fk and hasattr(supplier_fk, 'pk'):
+                supplier_fk = supplier_fk.pk
+            line = IndentTrimLine.objects.create(
+                indent=indent,
+                trim_id=trim_fk,
+                supplier_id=supplier_fk,
+                sort_order=i,
+                **row,
+            )
+            if line.supplier_id and line.trim_name:
+                supplier = Supplier.objects.filter(pk=line.supplier_id).first()
+                if supplier:
+                    supplier.add_supplies_in(line.trim_name, line.category or '')
 
     def _upsert_templates(self, indent):
         """Store fabric+trim defaults keyed by item_name for future auto-fill."""
@@ -517,6 +538,7 @@ class IndentSerializer(serializers.ModelSerializer):
                 'property_values': tl.property_values or {},
                 'consumption_per_pc': str(tl.consumption_per_pc),
                 'unit': tl.unit, 'total_unit': tl.total_unit, 'parts': tl.parts or [], 'remarks': tl.remarks,
+                'supplier': tl.supplier_id,
             }
             for tl in indent.trim_lines.all()
         ]

@@ -38,7 +38,7 @@ export default function SuppliersPage() {
   const closeModal = () => { setModalOpen(false); setEditing(null); };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this supplier? Trims linked to it will keep working but lose the supplier link.')) return;
+    if (!window.confirm('Delete this supplier? Indent lines linked to it will keep working but lose the supplier link.')) return;
     try {
       await suppliersAPI.delete(id);
       load();
@@ -129,6 +129,27 @@ export default function SuppliersPage() {
       renderCell: (p) => cell('left',
         <Typography sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>{formatTax(p.row)}</Typography>
       ),
+    },
+    {
+      field: 'supplies_in', headerName: 'Supplies In', flex: 1.4, minWidth: 160, sortable: false,
+      renderCell: (p) => {
+        const items = Array.isArray(p.value) ? p.value.filter(Boolean) : [];
+        if (!items.length) {
+          return cell('left', <Typography sx={{ fontSize: '0.8rem', color: 'text.disabled' }}>—</Typography>);
+        }
+        return cell('left',
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, py: 0.5 }}>
+            {items.slice(0, 4).map((s) => (
+              <Chip key={s} label={s} size="small" sx={{ height: 22, fontSize: '0.68rem', fontWeight: 600 }} />
+            ))}
+            {items.length > 4 && (
+              <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', alignSelf: 'center' }}>
+                +{items.length - 4}
+              </Typography>
+            )}
+          </Box>
+        );
+      },
     },
     {
       field: 'address', headerName: 'Address', flex: 1.5, minWidth: 160,

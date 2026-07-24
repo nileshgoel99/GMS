@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Box, Button, TextField, IconButton, Typography, Grid, MenuItem,
@@ -6,9 +6,8 @@ import {
 } from '@mui/material';
 import { Add, Delete, Close, Save, LibraryBooks } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
-import { ordersAPI, suppliersAPI } from '../../services/api';
+import { ordersAPI } from '../../services/api';
 import { slate } from '../../theme/appTheme';
-import SupplierAutocomplete from '../suppliers/SupplierAutocomplete';
 import {
   TRIM_PROPERTY_NAME_SUGGESTIONS,
   TRIM_CATEGORY_SUGGESTIONS,
@@ -18,7 +17,6 @@ import {
   normalizeTrimPropertyName,
   applyCartonBoxCategoryToForm,
   defaultValuesFromCartonBox,
-  cartonBoxFromDefaultValues,
   emptyCartonDefaults,
 } from './trimConstants';
 import CartonBoxDefaultsFields from './CartonBoxDefaultsFields';
@@ -27,32 +25,19 @@ export { TRIM_CATEGORY_SUGGESTIONS, TRIM_UNIT_OPTIONS } from './trimConstants';
 
 const emptyProperty = () => ({ name: '', unit: '' });
 export const emptyTrimForm = () => ({
-  name: '', category: '', default_unit: 'PCS', notes: '', properties: [], supplier: null,
+  name: '', category: '', default_unit: 'PCS', notes: '', properties: [],
   cartonDefaults: emptyCartonDefaults(),
 });
-
-const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 
 export default function AddTrimModal({
   open, onClose, onSaved, initialName = '', initialCategory = '', initialUnit = '',
 }) {
   const [form, setForm] = useState(emptyTrimForm());
   const [saving, setSaving] = useState(false);
-  const [suppliers, setSuppliers] = useState([]);
   const wasOpen = useRef(false);
-
-  const loadSuppliers = useCallback(async () => {
-    try {
-      const res = await suppliersAPI.getAll({ is_active: true });
-      setSuppliers(asList(res.data));
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
 
   useEffect(() => {
     if (open && !wasOpen.current) {
-      loadSuppliers();
       setForm({
         ...emptyTrimForm(),
         name: (initialName || '').toUpperCase(),
@@ -61,7 +46,7 @@ export default function AddTrimModal({
       });
     }
     wasOpen.current = open;
-  }, [open, initialName, initialCategory, initialUnit, loadSuppliers]);
+  }, [open, initialName, initialCategory, initialUnit]);
 
   const handleClose = () => {
     if (!saving) {
@@ -112,7 +97,6 @@ export default function AddTrimModal({
         category: form.category,
         default_unit: form.default_unit,
         notes: form.notes,
-        supplier: form.supplier || null,
         properties,
         default_property_values,
       });
@@ -160,16 +144,6 @@ export default function AddTrimModal({
               onChange={(e) => setForm((f) => ({ ...f, default_unit: e.target.value }))}>
               {TRIM_UNIT_OPTIONS.filter(Boolean).map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
             </TextField>
-          </Grid>
-
-          <Grid item xs={12}>
-            <SupplierAutocomplete
-              suppliers={suppliers}
-              value={form.supplier}
-              onChange={(id) => setForm((f) => ({ ...f, supplier: id }))}
-              onSuppliersChange={setSuppliers}
-              disabled={saving}
-            />
           </Grid>
 
           <Grid item xs={12}>

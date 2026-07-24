@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   Dialog, DialogContent, DialogActions,
   Box, Button, TextField, IconButton, Typography, Grid, MenuItem,
-  CircularProgress, Autocomplete, FormControlLabel, Switch, InputAdornment,
+  CircularProgress, Autocomplete, FormControlLabel, Switch, InputAdornment, Chip,
 } from '@mui/material';
 import {
   Close, Save, LocalShipping, Public, ContactMail, Receipt,
   Business, Home, LocationCity, Map, MarkunreadMailbox, Person,
   Email, Phone, Language, StickyNote2, CurrencyExchange, Badge,
-  CheckCircle,
+  CheckCircle, Category,
 } from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { suppliersAPI } from '../../services/api';
@@ -42,6 +42,7 @@ export const emptySupplierForm = () => ({
   tax_id_type: 'GST',
   gst: '',
   currency: '',
+  supplies_in: [],
   notes: '',
   is_active: true,
 });
@@ -49,6 +50,9 @@ export const emptySupplierForm = () => ({
 export function supplierToForm(row) {
   if (!row) return emptySupplierForm();
   const isIntl = row.is_international ?? (row.country && row.country !== 'India');
+  const supplies = Array.isArray(row.supplies_in)
+    ? row.supplies_in.map((x) => String(x || '').trim()).filter(Boolean)
+    : [];
   return {
     name: row.name || '',
     address: row.address || '',
@@ -64,6 +68,7 @@ export function supplierToForm(row) {
     tax_id_type: row.tax_id_type || (isIntl ? '' : 'GST'),
     gst: row.gst || '',
     currency: row.currency || '',
+    supplies_in: supplies,
     notes: row.notes || '',
     is_active: row.is_active !== false,
   };
@@ -209,6 +214,7 @@ export default function AddSupplierModal({ open, onClose, onSaved, editing = nul
         state_province: form.state_province.trim(),
         postal_code: form.postal_code.trim(),
         currency: form.is_international ? form.currency.trim() : '',
+        supplies_in: (form.supplies_in || []).map((x) => String(x).trim()).filter(Boolean),
       };
       let saved;
       if (editing) {
@@ -505,6 +511,47 @@ export default function AddSupplierModal({ open, onClose, onSaved, editing = nul
                     For overseas suppliers, enter VAT, EIN, company registration, or other local tax identifiers.
                   </Typography>
                 )}
+              </SectionCard>
+            </Grid>
+
+            {/* Supplies In */}
+            <Grid item xs={12}>
+              <SectionCard accent="#0f766e">
+                <SectionTitle
+                  icon={Category}
+                  title="Supplies In"
+                  subtitle="Trim names this supplier provides — auto-filled from indents, editable here"
+                />
+                <Autocomplete
+                  multiple
+                  freeSolo
+                  options={[]}
+                  value={form.supplies_in || []}
+                  onChange={(_, v) => setForm((f) => ({
+                    ...f,
+                    supplies_in: [...new Set(v.map((x) => String(x).trim()).filter(Boolean))],
+                  }))}
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={`${option}-${index}`}
+                        label={option}
+                        size="small"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      size="small"
+                      label="Trim types / names"
+                      placeholder="Type a trim name and press Enter"
+                      helperText="Used to segregate and prioritize suppliers when building indents"
+                    />
+                  )}
+                />
               </SectionCard>
             </Grid>
 

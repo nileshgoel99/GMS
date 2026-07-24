@@ -12,6 +12,7 @@ class SupplierListSerializer(serializers.ModelSerializer):
             'id', 'name', 'address', 'city', 'state_province', 'postal_code', 'country',
             'contact_person', 'email', 'phone', 'website',
             'is_international', 'tax_id_type', 'gst', 'currency',
+            'notes', 'supplies_in',
             'is_active', 'created_by_name', 'created_at',
         ]
 

@@ -41,6 +41,11 @@ class Supplier(models.Model):
     )
 
     notes = models.TextField(blank=True, default='')
+    supplies_in = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Trim names / categories this supplier provides (for segregation & filtering)',
+    )
     is_active = models.BooleanField(default=True)
 
     created_by = models.ForeignKey(
@@ -60,3 +65,20 @@ class Supplier(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.country})"
+
+    def add_supplies_in(self, *labels):
+        """Append trim names/categories to supplies_in (case-insensitive, no dupes)."""
+        items = list(self.supplies_in or [])
+        changed = False
+        for label in labels:
+            text = (label or '').strip()
+            if not text:
+                continue
+            if any(str(x).strip().lower() == text.lower() for x in items):
+                continue
+            items.append(text)
+            changed = True
+        if changed:
+            self.supplies_in = items
+            self.save(update_fields=['supplies_in', 'updated_at'])
+        return changed

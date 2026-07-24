@@ -163,6 +163,11 @@ export default function IndentViewModal({ open, indentId, onClose }) {
   const totalQty = useMemo(() => Object.values(colorQty).reduce((s, v) => s + v, 0), [colorQty]);
 
   const supplierForTrim = (row) => {
+    if (row?.supplier_name) {
+      return row.supplier_country
+        ? `${row.supplier_name} · ${row.supplier_country}`
+        : row.supplier_name;
+    }
     const master = row.trim ? trimsMap[row.trim] : null;
     if (!master?.supplier_name) return '—';
     return master.supplier_country
