@@ -63,12 +63,29 @@ def _company_address_block(company) -> str:
     return '<br/>'.join(_esc(x) for x in lines if (x or '').strip())
 
 
+def _format_company_phone(phone: str, country_code: str = '+91') -> str:
+    """Normalize company phone with country code for PI / PDF letterhead."""
+    raw = (phone or '').strip()
+    if not raw:
+        return ''
+    compact = ''.join(ch for ch in raw if ch.isdigit() or ch == '+')
+    cc_digits = ''.join(ch for ch in country_code if ch.isdigit())
+    national = compact[1:] if compact.startswith('+') else compact
+    if cc_digits and national.startswith(cc_digits):
+        national = national[len(cc_digits):]
+    national = national.lstrip('0')
+    if not national:
+        return country_code
+    return f'{country_code} {national}'
+
+
 def _company_contact_lines(company) -> str:
     if not company:
         return ''
     bits = []
-    if company.phone:
-        bits.append(f'Tel: {_esc(company.phone)}')
+    phone = _format_company_phone(company.phone)
+    if phone:
+        bits.append(f'Tel: {_esc(phone)}')
     if company.fax:
         bits.append(f'Fax: {_esc(company.fax)}')
     if company.email:
@@ -99,8 +116,9 @@ def _make_page_canvas(company):
         if company:
             foot = (company.pdf_footer_note or '').strip()
             if not foot:
+                phone = _format_company_phone(company.phone) if company.phone else ''
                 foot = ' · '.join(
-                    [x for x in [company.legal_name, company.phone, company.email] if (x or '').strip()]
+                    [x for x in [company.legal_name, phone, company.email] if (x or '').strip()]
                 )
         canvas.setFont('Helvetica', 7)
         canvas.setFillColor(SLATE_MUTED)

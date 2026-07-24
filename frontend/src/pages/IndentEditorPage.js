@@ -897,7 +897,7 @@ const cellSx = { border: '1px solid #000', p: '4px 6px', fontSize: '8.5pt', font
 const thSx   = { ...cellSx, fontWeight: 700, bgcolor: '#e8e8e8', textAlign: 'center' };
 
 // ── Printed Indent Document ───────────────────────────────────────────────────
-function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedLines }) {
+function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedLines, trimsList = [] }) {
   const piLines = selectedLines || pi?.lines || [];
   const colorQty = buildColorQty(piLines);
   const colors = Object.keys(colorQty);
@@ -918,6 +918,15 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
   const sizes = sortGarmentSizes(Object.keys(sizeBreakdown));
 
   const companyName = company?.company_legal_name || 'JB INTERNATIONAL';
+
+  const supplierLabelForTrim = (row) => {
+    if (!row?.trim) return '';
+    const master = trimsList.find((t) => t.id === row.trim);
+    if (!master?.supplier_name) return '';
+    return master.supplier_country
+      ? `${master.supplier_name} · ${master.supplier_country}`
+      : master.supplier_name;
+  };
 
   return (
     <Box sx={{ fontFamily: 'Arial, sans-serif', fontSize: '9.5pt', color: '#000', bgcolor: '#fff', p: 0 }}>
@@ -963,7 +972,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
       <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', mb: 1.5 }}>
         <Box component="thead">
           <Box component="tr">
-            {['MATERIAL', 'COLOR / VARIANT', 'GSM', 'ROLL W (CMS)', 'CONSUM.', 'UNIT', 'TOT CON.', 'IN STOCK'].map((h) => (
+            {['MATERIAL', 'COLOR / VARIANT', 'GSM', 'ROLL W (CMS)', 'CONSUM.', 'UNIT', 'TOT CON.', 'SUPPLIER', 'IN STOCK'].map((h) => (
               <Box component="th" key={h} sx={thSx}>{h}</Box>
             ))}
           </Box>
@@ -978,17 +987,19 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
               <Box component="td" sx={{ ...cellSx, textAlign: 'right' }}>{row.consumption_per_pc}</Box>
               <Box component="td" sx={{ ...cellSx, textAlign: 'center' }}>{row.unit}</Box>
               <Box component="td" sx={{ ...cellSx, textAlign: 'right', fontWeight: 700 }}>{row.total_consumption}</Box>
-              <Box component="td" sx={{ ...cellSx, textAlign: 'center' }}>{row.unit}</Box>
+              <Box component="td" sx={{ ...cellSx, textAlign: 'center', fontSize: '7.5pt', color: '#666' }}>—</Box>
               <Box component="td" sx={{ ...cellSx, textAlign: 'center', fontSize: '7.5pt' }}>{isInStockRemark(row.remarks) ? 'In stock' : '—'}</Box>
             </Box>
           ))}
           {trimLines.filter((r) => r.trim_name).map((row, i) => {
             const parts = row.parts?.length ? row.parts : null;
+            const supplierLabel = supplierLabelForTrim(row);
             return (
               <Box component="tr" key={`t${i}`}>
                 <Box component="td" sx={{ ...cellSx, textTransform: 'uppercase' }}>{row.trim_name}</Box>
                 <Box component="td" sx={cellSx}>{formatTrimVariant(row)}</Box>
-                <Box component="td" sx={cellSx}>—</Box>
+                <Box component="td" sx={{ ...cellSx, textAlign: 'center' }}>—</Box>
+                <Box component="td" sx={{ ...cellSx, textAlign: 'center' }}>—</Box>
                 <Box component="td" sx={{ ...cellSx, textAlign: 'right', whiteSpace: 'pre-line' }}>
                   {parts
                     ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${p.consumption_per_pc}`).join('\n')
@@ -1002,8 +1013,8 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
                     ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${p.total_consumption}`).join('\n')
                     : row.total_consumption}
                 </Box>
-                <Box component="td" sx={{ ...cellSx, textAlign: 'center', whiteSpace: 'pre-line' }}>
-                  {parts ? parts.map((p) => p.total_unit || p.unit).join('\n') : (row.total_unit || row.unit)}
+                <Box component="td" sx={{ ...cellSx, textAlign: 'left', fontSize: '7.5pt', fontWeight: supplierLabel ? 600 : 400 }}>
+                  {supplierLabel || '—'}
                 </Box>
                 <Box component="td" sx={{ ...cellSx, textAlign: 'center', fontSize: '7.5pt' }}>{isInStockRemark(row.remarks) ? 'In stock' : '—'}</Box>
               </Box>
@@ -2713,6 +2724,7 @@ export default function IndentEditorPage() {
           fabricLines={fabricLines}
           trimLines={trimLines}
           company={company}
+          trimsList={trimsList}
         />
       </Box>
     </Box>

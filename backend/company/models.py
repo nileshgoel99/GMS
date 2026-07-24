@@ -98,11 +98,50 @@ class CompanyProfile(models.Model):
         return  # singleton
 
 
+class CompanyBankAccount(models.Model):
+    """
+    Company 'OUR BANK' accounts — multiple allowed.
+    User picks which account to print on each Proforma Invoice.
+    """
+    name = models.CharField(
+        max_length=120,
+        help_text='Short label, e.g. PNB Kanpur / HDFC Current',
+    )
+    bank_details = models.TextField(
+        help_text='Full bank block printed on the PI (name, branch, A/C, IFSC/SWIFT, …)',
+    )
+    is_default = models.BooleanField(
+        default=False,
+        help_text='Pre-selected on Generate PI when no other preference is stored',
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['sort_order', 'name', 'id']
+        verbose_name = 'Company bank account'
+        verbose_name_plural = 'Company bank accounts'
+
+    def __str__(self):
+        label = self.name or 'Bank'
+        return f"{label}{' (default)' if self.is_default else ''}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.is_default:
+            type(self).objects.exclude(pk=self.pk).filter(is_default=True).update(is_default=False)
+            # Keep legacy profile field in sync for older PI fallbacks
+            profile = CompanyProfile.get_solo()
+            if (profile.our_bank_details or '').strip() != (self.bank_details or '').strip():
+                CompanyProfile.objects.filter(pk=profile.pk).update(our_bank_details=self.bank_details or '')
+
+
 class CompanyCurrencyBank(models.Model):
     """
     Per-currency correspondent / intermediary bank.
     One row per currency code (USD, EUR, GBP, …).
-    The primary OUR BANK stays on CompanyProfile; this model holds only the
+    OUR BANK accounts live on CompanyBankAccount; this model holds only the
     intermediary bank details that differ by currency.
     """
     currency = models.CharField(

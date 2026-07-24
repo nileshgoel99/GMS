@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import CompanyProfile, CompanyCurrencyBank
+from .models import CompanyProfile, CompanyCurrencyBank, CompanyBankAccount
 
 
 class CompanyCurrencyBankSerializer(serializers.ModelSerializer):
@@ -8,6 +8,21 @@ class CompanyCurrencyBankSerializer(serializers.ModelSerializer):
         model = CompanyCurrencyBank
         fields = ['id', 'currency', 'intermediary_bank_details', 'notes', 'updated_at']
         read_only_fields = ('id', 'updated_at')
+
+
+class CompanyBankAccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompanyBankAccount
+        fields = [
+            'id',
+            'name',
+            'bank_details',
+            'is_default',
+            'sort_order',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ('id', 'created_at', 'updated_at')
 
 
 class CompanyProfileSerializer(serializers.ModelSerializer):

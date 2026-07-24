@@ -26,6 +26,7 @@ import {
   formatCartonBoxSummary,
 } from '../components/trims/trimConstants';
 import CartonBoxDefaultsFields from '../components/trims/CartonBoxDefaultsFields';
+import SupplierAutocomplete from '../components/suppliers/SupplierAutocomplete';
 
 const emptyProperty = () => ({ name: '', unit: '' });
 const emptyForm = () => ({
@@ -402,23 +403,11 @@ export default function TrimsLibraryPage() {
             </Grid>
 
             <Grid item xs={12}>
-              <Autocomplete
-                options={suppliers}
-                getOptionLabel={(o) => o.name || ''}
-                value={suppliers.find((s) => s.id === form.supplier) || null}
-                onChange={(_, v) => setForm((f) => ({ ...f, supplier: v?.id || null }))}
-                renderOption={(props, o) => (
-                  <Box component="li" {...props}>
-                    <Box>
-                      <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{o.name}</Typography>
-                      <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>{o.country}{o.gst ? ` · ${o.gst}` : ''}</Typography>
-                    </Box>
-                  </Box>
-                )}
-                renderInput={(params) => (
-                  <TextField {...params} size="small" fullWidth label="Supplier (optional)"
-                    placeholder="Select preferred supplier for this trim" />
-                )}
+              <SupplierAutocomplete
+                suppliers={suppliers}
+                value={form.supplier}
+                onChange={(id) => setForm((f) => ({ ...f, supplier: id }))}
+                onSuppliersChange={setSuppliers}
               />
             </Grid>
 

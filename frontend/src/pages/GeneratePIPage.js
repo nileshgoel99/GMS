@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Button, Typography, TextField, Grid, Paper,
-  IconButton, CircularProgress, Alert,
+  IconButton, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { ArrowBack, Print, Edit, CheckCircle, Autorenew } from '@mui/icons-material';
@@ -12,6 +12,7 @@ import { slate } from '../theme/appTheme';
 import PIDocumentFooter from '../components/orders/PIDocumentFooter';
 import PIPrintSheet from '../components/orders/PIPrintSheet';
 import { bindPiPrintPageFooters, installPiPrintPageFooters } from '../utils/piPrintPageFooters';
+import { companyContactLines } from '../utils/formatCompanyPhone';
 
 // ── Number to words ───────────────────────────────────────────────────────────
 const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
@@ -102,6 +103,12 @@ const PRINT_STYLE = `
   @page {
     size: A4 portrait;
     margin: 12mm 12mm 16mm 12mm;
+    /* Suppress browser default header/footer (date, time, title, URL) where supported */
+    @top-left { content: none; }
+    @top-center { content: none; }
+    @top-right { content: none; }
+    @bottom-left { content: none; }
+    @bottom-center { content: none; }
     @bottom-right {
       content: "Page " counter(page) " / " counter(pages);
       font-family: "Times New Roman", Times, serif;
@@ -193,6 +200,8 @@ export default function GeneratePIPage() {
   const [incoTerms, setIncoTerms]       = useState('');
   const [ourBank, setOurBank]           = useState('');
   const [interBank, setInterBank]       = useState('');
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [selectedBankId, setSelectedBankId] = useState('');
   const [paymentTerms, setPaymentTerms] = useState('');
 
   // Editable grouped items (user can adjust unit price per group)
@@ -218,26 +227,41 @@ export default function GeneratePIPage() {
     (async () => {
       setLoading(true);
       try {
-        const [poRes, coRes, refRes, banksRes] = await Promise.all([
+        const [poRes, coRes, refRes, banksRes, accountsRes] = await Promise.all([
           ordersAPI.getBuyerPO(id),
           companyAPI.getProfile(),
           ordersAPI.getNextPiRef(),
           companyAPI.getCurrencyBanks(),
+          companyAPI.getBankAccounts(),
         ]);
         const poData = poRes.data;
         const coData = coRes.data;
         const banks = banksRes.data.results || banksRes.data;
+        const accounts = accountsRes.data.results || accountsRes.data || [];
         const currency = (poData.currency || 'USD').toUpperCase();
         const matchedBank = banks.find((b) => b.currency.toUpperCase() === currency);
 
         setPo(poData);
         setCompany(coData);
+        setBankAccounts(accounts);
         setPaymentTerms(poData.payment_terms || '');
         setPort(poData.port_of_discharge || localStorage.getItem('pi_port') || '');
         setPortLoading(poData.port_of_loading || localStorage.getItem('pi_port_loading') || '');
         setIncoTerms(poData.inco_terms || poData.delivery_terms || localStorage.getItem('pi_inco_terms') || '');
-        // Our bank: from company profile; intermediary: from per-currency bank
-        setOurBank(coData.our_bank_details || localStorage.getItem('pi_our_bank') || '');
+
+        const storedBankId = localStorage.getItem('pi_our_bank_id');
+        const preferred =
+          accounts.find((a) => String(a.id) === String(storedBankId))
+          || accounts.find((a) => a.is_default)
+          || accounts[0]
+          || null;
+        if (preferred) {
+          setSelectedBankId(String(preferred.id));
+          setOurBank(preferred.bank_details || '');
+        } else {
+          setSelectedBankId('');
+          setOurBank(coData.our_bank_details || localStorage.getItem('pi_our_bank') || '');
+        }
         setInterBank(matchedBank?.intermediary_bank_details || localStorage.getItem('pi_inter_bank') || '');
         // Use existing pi_ref if already generated, otherwise use next available
         setPiRef(poData.pi_ref || refRes.data.pi_ref || '');
@@ -250,6 +274,16 @@ export default function GeneratePIPage() {
       }
     })();
   }, [id, navigate]);
+
+  const handleSelectBankAccount = (bankId) => {
+    setSelectedBankId(bankId);
+    if (!bankId) return;
+    const account = bankAccounts.find((a) => String(a.id) === String(bankId));
+    if (account) {
+      setOurBank(account.bank_details || '');
+      localStorage.setItem('pi_our_bank_id', String(account.id));
+    }
+  };
 
   const updateLine = (i, patch) =>
     setPiLines((ls) => ls.map((l, idx) => idx === i ? {
@@ -283,6 +317,7 @@ export default function GeneratePIPage() {
       localStorage.setItem('pi_inco_terms', incoTerms);
       localStorage.setItem('pi_our_bank', ourBank);
       localStorage.setItem('pi_inter_bank', interBank);
+      if (selectedBankId) localStorage.setItem('pi_our_bank_id', String(selectedBankId));
 
       const disc = (line) => line.discount ? (1 - line.discount / 100) : 1;
 
@@ -343,6 +378,7 @@ export default function GeneratePIPage() {
   ].filter(Boolean).join(', ');
 
   // ── PI Document (shared between screen preview and print) ───────────────────
+  const contact = companyContactLines(company);
   const PIDocument = () => (
     <PIPrintSheet
       companyName={company?.legal_name || 'J B INTERNATIONAL'}
@@ -381,10 +417,24 @@ export default function GeneratePIPage() {
           <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', mt: 0.75, whiteSpace: 'pre-line', color: '#222', lineHeight: 1.4 }}>
             {companyAddress}
           </Typography>
-          {company?.phone && (
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#222', mt: 0.35 }}>
-              TEL: {company.phone}{company?.fax ? `  FAX: ${company.fax}` : ''}
-            </Typography>
+          {(contact.phone || contact.email || company?.fax) && (
+            <Box sx={{ mt: 0.35 }}>
+              {contact.phone && (
+                <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#222' }}>
+                  {contact.telLine}{company?.fax ? `  FAX: ${company.fax}` : ''}
+                </Typography>
+              )}
+              {!contact.phone && company?.fax && (
+                <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#222' }}>
+                  FAX: {company.fax}
+                </Typography>
+              )}
+              {contact.email && (
+                <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#222' }}>
+                  {contact.emailLine}
+                </Typography>
+              )}
+            </Box>
           )}
         </Box>
         {company?.logo && (
@@ -755,9 +805,32 @@ export default function GeneratePIPage() {
                 <TextField size="small" fullWidth label="Payment Terms"
                   value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}
                   placeholder="e.g. BOL 60 DAYS" />
+                <FormControl size="small" fullWidth>
+                  <InputLabel id="pi-our-bank-select-label">Our Bank Account</InputLabel>
+                  <Select
+                    labelId="pi-our-bank-select-label"
+                    label="Our Bank Account"
+                    value={selectedBankId}
+                    onChange={(e) => handleSelectBankAccount(e.target.value)}
+                    displayEmpty
+                  >
+                    {bankAccounts.length === 0 && (
+                      <MenuItem value="">
+                        <em>No accounts — add in Company profile</em>
+                      </MenuItem>
+                    )}
+                    {bankAccounts.map((a) => (
+                      <MenuItem key={a.id} value={String(a.id)}>
+                        {a.name}{a.is_default ? ' (default)' : ''}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
                 <TextField size="small" fullWidth multiline minRows={3} label="Our Bank Details"
                   value={ourBank} onChange={(e) => setOurBank(e.target.value)}
-                  placeholder="Bank name, A/C No, SWIFT code…" />
+                  placeholder="Bank name, A/C No, SWIFT code…"
+                  helperText={bankAccounts.length ? 'Filled from the selected account — edit if needed for this PI only' : undefined}
+                />
                 <TextField size="small" fullWidth multiline minRows={2} label="Intermediary Bank"
                   value={interBank} onChange={(e) => setInterBank(e.target.value)}
                   placeholder="Correspondent bank details…" />

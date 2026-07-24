@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Button, Typography, IconButton, CircularProgress, Chip, TextField, Grid, Paper, Divider } from '@mui/material';
+import { Box, Button, Typography, IconButton, CircularProgress, Chip, TextField, Grid, Paper, Divider, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { ArrowBack, Print, Edit, Save, Close, Assignment, Autorenew } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -9,6 +9,7 @@ import { formatDateDMY } from '../utils/formatDate';
 import PIDocumentFooter from '../components/orders/PIDocumentFooter';
 import PIPrintSheet from '../components/orders/PIPrintSheet';
 import { bindPiPrintPageFooters, installPiPrintPageFooters } from '../utils/piPrintPageFooters';
+import { companyContactLines } from '../utils/formatCompanyPhone';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
@@ -79,6 +80,12 @@ const PRINT_STYLE = `
   @page {
     size: A4 portrait;
     margin: 12mm 12mm 16mm 12mm;
+    /* Suppress browser default header/footer (date, time, title, URL) where supported */
+    @top-left { content: none; }
+    @top-center { content: none; }
+    @top-right { content: none; }
+    @bottom-left { content: none; }
+    @bottom-center { content: none; }
     @bottom-right {
       content: "Page " counter(page) " / " counter(pages);
       font-family: "Times New Roman", Times, serif;
@@ -163,6 +170,7 @@ function PIDocument({ pi, company }) {
   const totalAmt = computePiTotal(pi);
   const currency = getPiCurrency(pi);
   const footer = getPiFooter(pi, company);
+  const contact = companyContactLines(company);
 
   return (
     <PIPrintSheet
@@ -200,10 +208,24 @@ function PIDocument({ pi, company }) {
           <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', mt: 0.75, whiteSpace: 'pre-line', color: '#222', lineHeight: 1.4 }}>
             {companyAddress}
           </Typography>
-          {company.phone && (
-            <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#222', mt: 0.35 }}>
-              TEL: {company.phone}{company.fax ? `  FAX: ${company.fax}` : ''}
-            </Typography>
+          {(contact.phone || contact.email || company.fax) && (
+            <Box sx={{ mt: 0.35 }}>
+              {contact.phone && (
+                <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#222' }}>
+                  {contact.telLine}{company.fax ? `  FAX: ${company.fax}` : ''}
+                </Typography>
+              )}
+              {!contact.phone && company.fax && (
+                <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#222' }}>
+                  FAX: {company.fax}
+                </Typography>
+              )}
+              {contact.email && (
+                <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', color: '#222' }}>
+                  {contact.emailLine}
+                </Typography>
+              )}
+            </Box>
           )}
         </Box>
         {company.logo_url && (
@@ -407,6 +429,8 @@ export default function PIViewPage() {
 
   const [pi, setPi]               = useState(null);
   const [company, setCompany]     = useState(null);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [selectedBankId, setSelectedBankId] = useState('');
   const [loading, setLoading]     = useState(true);
   const [editingDetails, setEditingDetails] = useState(false);
   const [detailDraft, setDetailDraft]       = useState({});
@@ -431,13 +455,22 @@ export default function PIViewPage() {
     (async () => {
       setLoading(true);
       try {
-        const [piRes, coRes] = await Promise.all([
+        const [piRes, coRes, accountsRes] = await Promise.all([
           ordersAPI.getPI(id),
           companyAPI.getProfile(),
+          companyAPI.getBankAccounts(),
         ]);
         const piData = piRes.data;
+        const accounts = accountsRes.data.results || accountsRes.data || [];
         setPi(piData);
         setCompany(coRes.data);
+        setBankAccounts(accounts);
+        const ourBankText = (piData.our_bank_details || coRes.data.our_bank_details || '').trim();
+        const matchedAccount =
+          accounts.find((a) => (a.bank_details || '').trim() === ourBankText)
+          || accounts.find((a) => a.is_default)
+          || null;
+        setSelectedBankId(matchedAccount ? String(matchedAccount.id) : '');
         // Pre-populate the edit draft
         setDetailDraft({
           date_of_dispatch_display:  piData.date_of_dispatch_display || '',
@@ -445,7 +478,7 @@ export default function PIViewPage() {
           inco_terms:                piData.inco_terms || '',
           port_of_loading:           piData.port_of_loading || '',
           port_of_discharge:         piData.port_of_discharge || '',
-          our_bank_details:          piData.our_bank_details || coRes.data.our_bank_details || '',
+          our_bank_details:          ourBankText,
           intermediary_bank_details: piData.intermediary_bank_details || '',
         });
       } catch (e) {
@@ -456,6 +489,15 @@ export default function PIViewPage() {
       }
     })();
   }, [id, navigate]);
+
+  const handleSelectBankAccount = (bankId) => {
+    setSelectedBankId(bankId);
+    if (!bankId) return;
+    const account = bankAccounts.find((a) => String(a.id) === String(bankId));
+    if (account) {
+      setDetailDraft((d) => ({ ...d, our_bank_details: account.bank_details || '' }));
+    }
+  };
 
   const handlePrint = useCallback(() => {
     installPiPrintPageFooters('pi-view-print-root', {
@@ -607,10 +649,33 @@ export default function PIViewPage() {
                 onChange={(e) => setDetailDraft((d) => ({ ...d, port_of_discharge: e.target.value }))} />
             </Grid>
             <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel id="pi-view-bank-select-label">Our Bank Account</InputLabel>
+                <Select
+                  labelId="pi-view-bank-select-label"
+                  label="Our Bank Account"
+                  value={selectedBankId}
+                  onChange={(e) => handleSelectBankAccount(e.target.value)}
+                >
+                  {bankAccounts.length === 0 && (
+                    <MenuItem value="">
+                      <em>No accounts — add in Company profile</em>
+                    </MenuItem>
+                  )}
+                  {bankAccounts.map((a) => (
+                    <MenuItem key={a.id} value={String(a.id)}>
+                      {a.name}{a.is_default ? ' (default)' : ''}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <TextField fullWidth size="small" multiline minRows={3} label="Our Bank"
+                sx={{ mt: 2 }}
                 placeholder="Bank name, account details…"
                 value={detailDraft.our_bank_details}
-                onChange={(e) => setDetailDraft((d) => ({ ...d, our_bank_details: e.target.value }))} />
+                onChange={(e) => setDetailDraft((d) => ({ ...d, our_bank_details: e.target.value }))}
+                helperText={bankAccounts.length ? 'Select an account above, or edit the text for this PI' : undefined}
+              />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField fullWidth size="small" multiline minRows={3} label="Intermediary Bank"

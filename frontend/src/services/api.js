@@ -81,6 +81,10 @@ export const companyAPI = {
   createCurrencyBank: (data) => api.post('/company/currency-banks/', data),
   updateCurrencyBank: (id, data) => api.put(`/company/currency-banks/${id}/`, data),
   deleteCurrencyBank: (id) => api.delete(`/company/currency-banks/${id}/`),
+  getBankAccounts: () => api.get('/company/bank-accounts/'),
+  createBankAccount: (data) => api.post('/company/bank-accounts/', data),
+  updateBankAccount: (id, data) => api.put(`/company/bank-accounts/${id}/`, data),
+  deleteBankAccount: (id) => api.delete(`/company/bank-accounts/${id}/`),
 };
 
 export const customersAPI = {

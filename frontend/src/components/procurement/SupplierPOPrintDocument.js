@@ -296,7 +296,12 @@ const getItemParts = (row, trimsMap) => {
     .replace(/\n/g, ' · ')
     .replace(/_pi_fabric_key:[^·]+( · )?/g, '')
     .trim();
-  return { name, props };
+  const supplierName = (trim?.supplier_name || '').trim();
+  const supplierCountry = (trim?.supplier_country || '').trim();
+  const supplier = supplierName
+    ? (supplierCountry ? `${supplierName} · ${supplierCountry}` : supplierName)
+    : '';
+  return { name, props, supplier };
 };
 
 function PoHeader({ po, company, companyName, addrLine, contactLine }) {
@@ -441,7 +446,7 @@ function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = fals
           ) : (
             items.map((row, i) => {
               const globalIndex = startIndex + i;
-              const { name, props } = getItemParts(row, trimsMap);
+              const { name, props, supplier } = getItemParts(row, trimsMap);
               return (
                 <tr key={row.id ?? globalIndex}>
                   <td style={{ ...tdStyle('center', i % 2 === 1), fontWeight: 600 }}>{row.serial_no || globalIndex + 1}</td>
@@ -450,6 +455,11 @@ function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = fals
                     {props ? (
                       <div style={{ fontSize: '6.8pt', color: BRAND.textMuted, marginTop: 2, lineHeight: 1.3 }}>
                         {props}
+                      </div>
+                    ) : null}
+                    {supplier ? (
+                      <div style={{ fontSize: '6.8pt', color: BRAND.navy, marginTop: 2, lineHeight: 1.3, fontWeight: 600 }}>
+                        Supplier: {supplier}
                       </div>
                     ) : null}
                   </td>

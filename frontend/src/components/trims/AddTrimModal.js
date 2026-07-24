@@ -8,6 +8,7 @@ import { Add, Delete, Close, Save, LibraryBooks } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { ordersAPI, suppliersAPI } from '../../services/api';
 import { slate } from '../../theme/appTheme';
+import SupplierAutocomplete from '../suppliers/SupplierAutocomplete';
 import {
   TRIM_PROPERTY_NAME_SUGGESTIONS,
   TRIM_CATEGORY_SUGGESTIONS,
@@ -162,22 +163,12 @@ export default function AddTrimModal({
           </Grid>
 
           <Grid item xs={12}>
-            <Autocomplete
-              options={suppliers}
-              getOptionLabel={(o) => o.name || ''}
-              value={suppliers.find((s) => s.id === form.supplier) || null}
-              onChange={(_, v) => setForm((f) => ({ ...f, supplier: v?.id || null }))}
-              renderOption={(props, o) => (
-                <Box component="li" {...props}>
-                  <Box>
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{o.name}</Typography>
-                    <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>{o.country}</Typography>
-                  </Box>
-                </Box>
-              )}
-              renderInput={(params) => (
-                <TextField {...params} size="small" fullWidth label="Supplier (optional)" />
-              )}
+            <SupplierAutocomplete
+              suppliers={suppliers}
+              value={form.supplier}
+              onChange={(id) => setForm((f) => ({ ...f, supplier: id }))}
+              onSuppliersChange={setSuppliers}
+              disabled={saving}
             />
           </Grid>
 

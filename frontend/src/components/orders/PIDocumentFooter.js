@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
+import { companyContactLines } from '../../utils/formatCompanyPhone';
 
 /**
  * Closing footer for Proforma Invoice documents (screen + print content end).
@@ -7,9 +8,10 @@ import { Box, Typography } from '@mui/material';
 export default function PIDocumentFooter({ company, refLabel }) {
   if (!company) return null;
 
+  const { phone, email } = companyContactLines(company);
   const contact = [
-    company.phone && `Tel: ${company.phone}`,
-    company.email,
+    phone && `Tel: ${phone}`,
+    email && `Email: ${email}`,
     company.website,
   ].filter(Boolean).join('  ·  ');
 

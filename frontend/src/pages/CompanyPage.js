@@ -12,8 +12,10 @@ import {
   IconButton,
   Tooltip,
   Chip,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
-import { Save, CloudUpload, Add, Delete, Edit, Check, Close } from '@mui/icons-material';
+import { Save, CloudUpload, Add, Delete, Edit, Check, Close, AccountBalance } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { slate } from '../theme/appTheme';
 import PageHeader from '../components/PageHeader';
@@ -42,12 +44,24 @@ const emptyForm = {
   ship_to: '',
 };
 
+const emptyOurBankDraft = () => ({
+  name: '',
+  bank_details: '',
+  is_default: false,
+  sort_order: 0,
+});
+
 const CompanyPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [logoUrl, setLogoUrl] = useState(null);
   const [logoFile, setLogoFile] = useState(null);
+
+  // Our bank accounts (selectable on PI)
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [ourBankEditing, setOurBankEditing] = useState(null); // id or 'new'
+  const [ourBankDraft, setOurBankDraft] = useState(emptyOurBankDraft());
 
   // Currency banks
   const [currencyBanks, setCurrencyBanks] = useState([]);
@@ -70,9 +84,10 @@ const CompanyPage = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data }, { data: banks }] = await Promise.all([
+      const [{ data }, { data: banks }, { data: accounts }] = await Promise.all([
         companyAPI.getProfile(),
         companyAPI.getCurrencyBanks(),
+        companyAPI.getBankAccounts(),
       ]);
       setForm({
         legal_name: data.legal_name || '',
@@ -99,6 +114,7 @@ const CompanyPage = () => {
       setLogoUrl(data.logo_url || null);
       setLogoFile(null);
       setCurrencyBanks(banks.results || banks);
+      setBankAccounts(accounts.results || accounts);
     } catch (e) {
       console.error(e);
       alert('Could not load company profile.');
@@ -138,6 +154,52 @@ const CompanyPage = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── Our bank account CRUD ─────────────────────────────────────────────────
+  const startAddOurBank = () => {
+    setOurBankDraft({ ...emptyOurBankDraft(), is_default: bankAccounts.length === 0 });
+    setOurBankEditing('new');
+  };
+  const startEditOurBank = (b) => {
+    setOurBankDraft({
+      name: b.name || '',
+      bank_details: b.bank_details || '',
+      is_default: Boolean(b.is_default),
+      sort_order: b.sort_order || 0,
+    });
+    setOurBankEditing(b.id);
+  };
+  const cancelOurBank = () => setOurBankEditing(null);
+
+  const saveOurBank = async () => {
+    if (!ourBankDraft.name.trim()) return alert('Account name is required.');
+    if (!ourBankDraft.bank_details.trim()) return alert('Bank details are required.');
+    try {
+      const payload = {
+        name: ourBankDraft.name.trim(),
+        bank_details: ourBankDraft.bank_details.trim(),
+        is_default: Boolean(ourBankDraft.is_default),
+        sort_order: Number(ourBankDraft.sort_order) || 0,
+      };
+      if (ourBankEditing === 'new') {
+        await companyAPI.createBankAccount(payload);
+      } else {
+        await companyAPI.updateBankAccount(ourBankEditing, payload);
+      }
+      const { data } = await companyAPI.getBankAccounts();
+      setBankAccounts(data.results || data);
+      setOurBankEditing(null);
+    } catch (e) {
+      const msg = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+      alert(`Save failed: ${msg}`);
+    }
+  };
+
+  const deleteOurBank = async (id) => {
+    if (!window.confirm('Delete this bank account?')) return;
+    await companyAPI.deleteBankAccount(id);
+    setBankAccounts((prev) => prev.filter((b) => b.id !== id));
   };
 
   // ── Currency bank CRUD ────────────────────────────────────────────────────
@@ -387,22 +449,119 @@ const CompanyPage = () => {
 
       {/* ── Bank Details ─────────────────────────────────────────────────────── */}
       <Paper sx={{ p: { xs: 3, md: 4 }, mt: 4, borderRadius: 3, border: `1px solid ${slate[200]}` }}>
-        <Typography variant="subtitle1" fontWeight={800} gutterBottom>Our Bank Details</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Primary company bank — printed on all PIs regardless of currency.
-        </Typography>
-        <TextField
-          fullWidth multiline minRows={3}
-          label="Our Bank (primary)"
-          value={form.our_bank_details}
-          onChange={(e) => setForm({ ...form, our_bank_details: e.target.value })}
-          placeholder="e.g. Punjab National Bank, Birhana Road, Kanpur  A/C No 188200UD00000066  SWIFT: PUNBINBBCKH"
-          helperText="This is your company's own bank account details"
-        />
-        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-          <Button variant="contained" startIcon={<Save />} onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save bank details'}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 2, flexWrap: 'wrap' }}>
+          <Box>
+            <Typography variant="subtitle1" fontWeight={800} gutterBottom sx={{ mb: 0.5 }}>
+              Our Bank Accounts
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Add multiple company bank accounts. When generating or printing a PI, pick which account to show as OUR BANK.
+            </Typography>
+          </Box>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<Add />}
+            onClick={startAddOurBank}
+            sx={{ fontWeight: 700, textTransform: 'none', whiteSpace: 'nowrap' }}
+          >
+            Add Bank Account
           </Button>
+        </Box>
+
+        {ourBankEditing && (
+          <Box sx={{ p: 3, mb: 3, bgcolor: alpha(slate[900], 0.03), borderRadius: 2, border: `1px solid ${slate[200]}` }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', mb: 2, color: slate[700] }}>
+              {ourBankEditing === 'new' ? 'New bank account' : 'Edit bank account'}
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={5}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="Account name"
+                  value={ourBankDraft.name}
+                  onChange={(e) => setOurBankDraft({ ...ourBankDraft, name: e.target.value })}
+                  placeholder="e.g. PNB Kanpur / HDFC Current"
+                />
+              </Grid>
+              <Grid item xs={12} sm={4} sx={{ display: 'flex', alignItems: 'center' }}>
+                <FormControlLabel
+                  control={(
+                    <Checkbox
+                      checked={Boolean(ourBankDraft.is_default)}
+                      onChange={(e) => setOurBankDraft({ ...ourBankDraft, is_default: e.target.checked })}
+                      size="small"
+                    />
+                  )}
+                  label="Default for new PIs"
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  multiline
+                  minRows={3}
+                  label="Bank details"
+                  value={ourBankDraft.bank_details}
+                  onChange={(e) => setOurBankDraft({ ...ourBankDraft, bank_details: e.target.value })}
+                  placeholder="Bank name, branch, A/C No, IFSC / SWIFT…"
+                />
+              </Grid>
+              <Grid item xs={12} sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                <Button size="small" onClick={cancelOurBank} startIcon={<Close />} sx={{ textTransform: 'none', fontWeight: 700 }}>
+                  Cancel
+                </Button>
+                <Button size="small" variant="contained" onClick={saveOurBank} startIcon={<Check />} sx={{ textTransform: 'none', fontWeight: 700 }}>
+                  Save account
+                </Button>
+              </Grid>
+            </Grid>
+          </Box>
+        )}
+
+        {bankAccounts.length === 0 && !ourBankEditing && (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+            No bank accounts yet. Click &quot;Add Bank Account&quot; to add your first one.
+          </Typography>
+        )}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {bankAccounts.map((b) => (
+            <Box
+              key={b.id}
+              sx={{
+                display: 'flex',
+                gap: 2,
+                alignItems: 'flex-start',
+                p: 2,
+                borderRadius: 2,
+                border: `1px solid ${slate[200]}`,
+                bgcolor: '#fff',
+              }}
+            >
+              <AccountBalance sx={{ color: slate[500], mt: 0.25, flexShrink: 0 }} fontSize="small" />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
+                  <Typography sx={{ fontWeight: 800, fontSize: '0.9rem', color: slate[900] }}>{b.name}</Typography>
+                  {b.is_default && (
+                    <Chip label="Default" size="small" sx={{ fontWeight: 700, height: 22, bgcolor: slate[900], color: '#fff' }} />
+                  )}
+                </Box>
+                <Typography sx={{ fontSize: '0.82rem', color: slate[700], whiteSpace: 'pre-line', lineHeight: 1.5 }}>
+                  {b.bank_details}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                <Tooltip title="Edit">
+                  <IconButton size="small" onClick={() => startEditOurBank(b)}><Edit fontSize="small" /></IconButton>
+                </Tooltip>
+                <Tooltip title="Delete">
+                  <IconButton size="small" color="error" onClick={() => deleteOurBank(b.id)}><Delete fontSize="small" /></IconButton>
+                </Tooltip>
+              </Box>
+            </Box>
+          ))}
         </Box>
 
         <Divider sx={{ my: 4 }} />
@@ -411,7 +570,7 @@ const CompanyPage = () => {
           <Box>
             <Typography variant="subtitle1" fontWeight={800}>Intermediary Banks by Currency</Typography>
             <Typography variant="body2" color="text.secondary">
-              Each currency can have a different correspondent / intermediary bank — auto-filled on PI based on buyer's currency.
+              Each currency can have a different correspondent / intermediary bank — auto-filled on PI based on buyer&apos;s currency.
             </Typography>
           </Box>
           <Button variant="outlined" size="small" startIcon={<Add />} onClick={startAddBank} sx={{ fontWeight: 700, textTransform: 'none', whiteSpace: 'nowrap' }}>
@@ -453,7 +612,7 @@ const CompanyPage = () => {
         {/* Currency bank list */}
         {currencyBanks.length === 0 && !bankEditing && (
           <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
-            No currency banks added yet. Click "Add Currency" to set up your first one.
+            No currency banks added yet. Click &quot;Add Currency&quot; to set up your first one.
           </Typography>
         )}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
