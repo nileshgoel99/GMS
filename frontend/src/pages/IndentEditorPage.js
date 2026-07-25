@@ -350,11 +350,13 @@ const trimPartTotal = (row, part, piLines, colorQty, totalQty) =>
 
 // ── BOM table column helpers ───────────────────────────────────────────────────
 const BOM_ROW_H = 46;
-const BOM_ROW_TOTAL = BOM_ROW_H + 18;
-const BOM_CELL_PAD_Y = (BOM_ROW_TOTAL - BOM_ROW_H) / 2;
+/** Fabric composition / color — tall enough for ~2 wrapped lines. */
+const BOM_MULTILINE_H = 56;
+const BOM_ROW_TOTAL = BOM_MULTILINE_H + 18;
+const BOM_CELL_PAD_Y = (BOM_ROW_TOTAL - BOM_MULTILINE_H) / 2;
 const FABRIC_COLS = [
-  { label: 'Fabric composition *', width: '22%', align: 'left' },
-  { label: 'Color', width: '11%', align: 'left' },
+  { label: 'Fabric composition *', width: '24%', align: 'left' },
+  { label: 'Color', width: '12%', align: 'left' },
   { label: 'GSM', width: '8%', align: 'left' },
   { label: 'Roll W (CMS)', width: '9%', align: 'left' },
   { label: 'Cons./pc', width: '9%', align: 'left' },
@@ -434,8 +436,65 @@ const autocompleteSelectListboxProps = {
 const AutocompleteTopPopper = AutocompleteSelectPopper;
 const autocompleteTopListboxProps = autocompleteSelectListboxProps;
 
+/** Tall wrapping field for fabric composition / color — full value visible, no ellipsis. */
+const bomMultilineFieldSx = (align = 'left') => ({
+  width: '100%',
+  m: 0,
+  '& .MuiFormControl-root': { m: 0, width: '100%' },
+  '& .MuiInputBase-root': {
+    fontSize: '0.8125rem',
+    fontWeight: 600,
+    minHeight: BOM_MULTILINE_H,
+    height: 'auto !important',
+    display: 'flex',
+    alignItems: 'flex-start',
+    boxSizing: 'border-box',
+    py: '6px !important',
+  },
+  '& .MuiInputBase-input, & textarea.MuiInputBase-input, & .MuiAutocomplete-input': {
+    py: '0 !important',
+    px: '10px !important',
+    height: 'auto !important',
+    minHeight: '2.5em !important',
+    lineHeight: '1.3 !important',
+    boxSizing: 'border-box',
+    textAlign: align,
+    whiteSpace: 'pre-wrap !important',
+    wordBreak: 'break-word',
+    overflowWrap: 'anywhere',
+    overflow: 'visible !important',
+    textOverflow: 'clip !important',
+    resize: 'none',
+  },
+  '& .MuiOutlinedInput-input': {
+    py: '0 !important',
+    px: '10px !important',
+    height: 'auto !important',
+    lineHeight: '1.3 !important',
+  },
+  '& .MuiAutocomplete-inputRoot': {
+    height: 'auto !important',
+    minHeight: `${BOM_MULTILINE_H}px !important`,
+    py: '6px !important',
+    flexWrap: 'nowrap',
+    alignItems: 'flex-start !important',
+    overflow: 'visible !important',
+  },
+  '& .MuiAutocomplete-endAdornment': {
+    top: 8,
+    transform: 'none',
+  },
+});
+
 /** Select-style color field: pick from list or type a custom colour. */
-const ColorFreeSelect = ({ value, options = [], onChange, fieldSx, placeholder = 'Select or type color' }) => (
+const ColorFreeSelect = ({
+  value,
+  options = [],
+  onChange,
+  fieldSx,
+  placeholder = 'Select or type color',
+  multiline = false,
+}) => (
   <Autocomplete
     freeSolo
     options={options}
@@ -460,11 +519,25 @@ const ColorFreeSelect = ({ value, options = [], onChange, fieldSx, placeholder =
       '& .MuiAutocomplete-clearIndicator': { color: slate[400] },
       '& .MuiAutocomplete-inputRoot': {
         overflow: 'visible !important',
+        ...(multiline ? {
+          height: 'auto !important',
+          minHeight: `${BOM_MULTILINE_H}px !important`,
+          alignItems: 'flex-start !important',
+          py: '6px !important',
+        } : {}),
       },
-      '& .MuiAutocomplete-input': {
+      '& .MuiAutocomplete-input': multiline ? {
         textOverflow: 'clip !important',
-        overflowX: 'auto !important',
-        overflowY: 'hidden !important',
+        overflow: 'visible !important',
+        whiteSpace: 'pre-wrap !important',
+        wordBreak: 'break-word',
+        overflowWrap: 'anywhere',
+        height: 'auto !important',
+        minHeight: '2.6em !important',
+        lineHeight: '1.3 !important',
+      } : {
+        textOverflow: 'clip !important',
+        overflow: 'visible !important',
         whiteSpace: 'nowrap !important',
         minWidth: '4ch !important',
       },
@@ -489,6 +562,9 @@ const ColorFreeSelect = ({ value, options = [], onChange, fieldSx, placeholder =
         {...params}
         size="small"
         fullWidth
+        multiline={multiline}
+        minRows={multiline ? 2 : undefined}
+        maxRows={multiline ? 4 : undefined}
         placeholder={placeholder}
         inputProps={{
           ...params.inputProps,
@@ -496,10 +572,13 @@ const ColorFreeSelect = ({ value, options = [], onChange, fieldSx, placeholder =
         }}
         sx={{
           ...fieldSx,
-          '& .MuiAutocomplete-input, & input': {
+          ...(multiline ? bomMultilineFieldSx('left') : {}),
+          '& .MuiAutocomplete-input, & input, & textarea': {
             textOverflow: 'clip !important',
             overflow: 'visible !important',
-            whiteSpace: 'nowrap !important',
+            whiteSpace: multiline ? 'pre-wrap !important' : 'nowrap !important',
+            wordBreak: multiline ? 'break-word' : undefined,
+            textAlign: 'left',
           },
         }}
       />
@@ -529,6 +608,8 @@ const bomFieldSx = (align = 'left') => ({
     lineHeight: `${BOM_ROW_H}px !important`,
     boxSizing: 'border-box',
     textAlign: align,
+    textOverflow: 'clip !important',
+    overflow: 'visible !important',
   },
   '& .MuiOutlinedInput-input': {
     py: '0 !important',
@@ -546,6 +627,8 @@ const bomFieldSx = (align = 'left') => ({
     display: 'flex',
     alignItems: 'center',
     boxSizing: 'border-box',
+    textOverflow: 'clip !important',
+    overflow: 'visible !important',
   },
   '& .MuiSelect-icon': {
     top: '50%',
@@ -563,10 +646,13 @@ const bomFieldSx = (align = 'left') => ({
     py: '0 !important',
     flexWrap: 'nowrap',
     alignItems: 'center !important',
+    overflow: 'visible !important',
   },
   '& .MuiAutocomplete-input': {
     py: '0 !important',
     px: '0 !important',
+    textOverflow: 'clip !important',
+    overflow: 'visible !important',
   },
 });
 
@@ -593,16 +679,18 @@ const bomTableBaseSx = (slateColor) => ({
   tableLayout: 'fixed',
   borderCollapse: 'collapse',
   '& .MuiTableBody-root .MuiTableRow-root': {
-    height: BOM_ROW_TOTAL,
+    height: 'auto',
+    minHeight: BOM_ROW_TOTAL,
   },
   '& .MuiTableCell-root': {
     px: '8px !important',
     py: `${BOM_CELL_PAD_Y}px !important`,
-    height: BOM_ROW_TOTAL,
+    height: 'auto',
+    minHeight: BOM_ROW_TOTAL,
     verticalAlign: 'middle !important',
     borderBottom: `1px solid ${slateColor[200]}`,
     borderRight: `1px solid ${slateColor[100]}`,
-    overflow: 'hidden',
+    overflow: 'visible',
     '&:last-child': { borderRight: 'none' },
   },
   '& .MuiTableCell-sizeSmall': {
@@ -626,7 +714,7 @@ const bomCellInner = (align = 'left') => ({
   display: 'flex',
   alignItems: 'center',
   justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
-  minHeight: BOM_ROW_H,
+  minHeight: BOM_MULTILINE_H,
   width: '100%',
 });
 
@@ -709,6 +797,7 @@ const trimPropFieldSx = (align = 'left') => ({
     bgcolor: '#fff',
     border: `1px solid ${alpha('#6366f1', 0.18)}`,
     borderRadius: '6px',
+    overflow: 'visible',
   },
   '& .MuiOutlinedInput-notchedOutline': {
     border: 'none',
@@ -721,6 +810,8 @@ const trimPropFieldSx = (align = 'left') => ({
     boxSizing: 'border-box',
     textAlign: align,
     color: slate[900],
+    textOverflow: 'clip !important',
+    overflow: 'visible !important',
   },
   '& .MuiOutlinedInput-input': {
     py: '0 !important',
@@ -733,11 +824,13 @@ const trimPropFieldSx = (align = 'left') => ({
     minHeight: `${TRIM_PROP_FIELD_H}px !important`,
     py: '0 !important',
     flexWrap: 'nowrap',
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   '& .MuiAutocomplete-input': {
     minWidth: '0 !important',
     width: '100% !important',
+    textOverflow: 'clip !important',
+    overflow: 'visible !important',
   },
   '& .MuiAutocomplete-endAdornment': {
     right: 4,
@@ -2137,26 +2230,47 @@ export default function IndentEditorPage() {
                   {fabricLines.map((row, i) => (
                     <TableRow key={i} hover>
                       <TableCell sx={bodyCell('left')}>
-                        <Box sx={bomCellInner('left')}>
+                        <Box sx={{ ...bomCellInner('left'), alignItems: 'flex-start' }}>
                           <Autocomplete
                             freeSolo
                             options={fabricCompositionOptions}
                             value={row.material}
                             onChange={(_, v) => setFabricField(i, 'material', v || '')}
                             onInputChange={(_, v) => setFabricField(i, 'material', v)}
-                            sx={{ m: 0, width: '100%' }}
+                            title={row.material || undefined}
+                            sx={{
+                              m: 0,
+                              width: '100%',
+                              '& .MuiAutocomplete-inputRoot': {
+                                height: 'auto !important',
+                                minHeight: `${BOM_MULTILINE_H}px !important`,
+                                alignItems: 'flex-start !important',
+                                py: '6px !important',
+                                overflow: 'visible !important',
+                              },
+                            }}
                             renderInput={(params) => (
                               <TextField
                                 {...params}
                                 size="small"
                                 fullWidth
+                                multiline
+                                minRows={2}
+                                maxRows={4}
                                 placeholder="Select from PI or type new fabric"
-                                sx={bomFieldSx('left')}
+                                inputProps={{
+                                  ...params.inputProps,
+                                  title: row.material || 'Select from PI or type new fabric',
+                                }}
+                                sx={bomMultilineFieldSx('left')}
                               />
                             )}
                             renderOption={(props, option) => (
                               <Box component="li" {...props} key={option}>
-                                <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, lineHeight: 1.35 }}>
+                                <Typography sx={{
+                                  fontSize: '0.78rem', fontWeight: 600, lineHeight: 1.35,
+                                  whiteSpace: 'normal', wordBreak: 'break-word',
+                                }}>
                                   {option}
                                 </Typography>
                               </Box>
@@ -2165,13 +2279,14 @@ export default function IndentEditorPage() {
                         </Box>
                       </TableCell>
                       <TableCell sx={bodyCell('left')}>
-                        <Box sx={bomCellInner('left')}>
+                        <Box sx={{ ...bomCellInner('left'), alignItems: 'flex-start' }}>
                           <ColorFreeSelect
                             value={row.color || ''}
                             options={Object.keys(colorQty)}
                             onChange={(v) => setFabricField(i, 'color', v)}
-                            fieldSx={bomFieldSx('left')}
+                            fieldSx={bomMultilineFieldSx('left')}
                             placeholder="Select or type color"
+                            multiline
                           />
                         </Box>
                       </TableCell>
@@ -2404,9 +2519,10 @@ export default function IndentEditorPage() {
                                         color: slate[600],
                                         mb: 0.35,
                                         lineHeight: 1.2,
-                                        whiteSpace: isColorProp ? 'normal' : 'nowrap',
-                                        overflow: isColorProp ? 'visible' : 'hidden',
-                                        textOverflow: isColorProp ? 'clip' : 'ellipsis',
+                                        whiteSpace: 'normal',
+                                        overflow: 'visible',
+                                        textOverflow: 'clip',
+                                        wordBreak: 'break-word',
                                       }}
                                       title={formatTrimPropertyLabel(prop)}
                                       >
@@ -2417,23 +2533,9 @@ export default function IndentEditorPage() {
                                           value={propValue}
                                           options={piColorOptions}
                                           onChange={(v) => setTrimPropertyValue(i, prop.name, v)}
-                                          fieldSx={{
-                                            ...trimPropFieldSx('left'),
-                                            '& .MuiAutocomplete-inputRoot': {
-                                              height: `${TRIM_PROP_FIELD_H}px !important`,
-                                              minHeight: `${TRIM_PROP_FIELD_H}px !important`,
-                                              py: '0 !important',
-                                              flexWrap: 'nowrap',
-                                              overflow: 'visible !important',
-                                            },
-                                            '& .MuiAutocomplete-input, & input': {
-                                              textOverflow: 'clip !important',
-                                              overflow: 'visible !important',
-                                              whiteSpace: 'nowrap !important',
-                                              minWidth: '8ch !important',
-                                            },
-                                          }}
+                                          fieldSx={bomMultilineFieldSx('left')}
                                           placeholder="Select or type color"
+                                          multiline
                                         />
                                       ) : isGarmentSizeProp ? (
                                         <Autocomplete
@@ -2463,8 +2565,11 @@ export default function IndentEditorPage() {
                                         placeholder={isNumericProp ? '0' : 'Enter value'}
                                         value={propValue}
                                         onChange={(e) => setTrimPropertyValue(i, prop.name, e.target.value)}
-                                        inputProps={isNumericProp ? { min: 0, step: /^gsm$/i.test(String(prop.name).trim()) ? '0.01' : '1' } : undefined}
-                                        sx={trimPropFieldSx(isNumericProp ? 'right' : 'left')}
+                                        inputProps={{
+                                          ...(isNumericProp ? { min: 0, step: /^gsm$/i.test(String(prop.name).trim()) ? '0.01' : '1' } : {}),
+                                          style: { textAlign: 'left' },
+                                        }}
+                                        sx={trimPropFieldSx('left')}
                                       />
                                       )}
                                     </Box>

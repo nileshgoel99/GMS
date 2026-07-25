@@ -579,6 +579,7 @@ class IndentListSerializer(serializers.ModelSerializer):
     pi_number = serializers.CharField(source='pi.pi_number', read_only=True)
     pi_ref = serializers.SerializerMethodField()
     item_name = serializers.SerializerMethodField()
+    item_names = serializers.SerializerMethodField()
     total_qty = serializers.SerializerMethodField()
     fabric_count = serializers.SerializerMethodField()
     trim_count = serializers.SerializerMethodField()
@@ -587,7 +588,7 @@ class IndentListSerializer(serializers.ModelSerializer):
         model = Indent
         fields = [
             'id', 'indent_number', 'pi', 'pi_number', 'pi_ref',
-            'item_name', 'total_qty', 'status', 'indent_date',
+            'item_name', 'item_names', 'total_qty', 'status', 'indent_date',
             'fabric_count', 'trim_count', 'created_by_name', 'created_at',
         ]
 
@@ -603,11 +604,11 @@ class IndentListSerializer(serializers.ModelSerializer):
             qs = qs.filter(id__in=ids)
         return qs
 
+    def get_item_names(self, obj):
+        return list(self._selected_pi_lines(obj).values_list('item_name', flat=True).distinct())
+
     def get_item_name(self, obj):
-        names = list(self._selected_pi_lines(obj).values_list('item_name', flat=True).distinct())
-        if not names:
-            return ''
-        return ', '.join(names[:2]) + (f' +{len(names) - 2} more' if len(names) > 2 else '')
+        return ', '.join(self.get_item_names(obj))
 
     def get_total_qty(self, obj):
         return self._selected_pi_lines(obj).aggregate(s=Sum('quantity_pcs'))['s'] or 0

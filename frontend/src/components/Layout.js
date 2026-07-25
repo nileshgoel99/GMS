@@ -26,7 +26,6 @@ import {
   Dashboard as DashboardIcon,
   Assignment as AssignmentIcon,
   ShoppingCart as ShoppingCartIcon,
-  Factory as ManufacturingIcon,
   ListAlt as ListAltIcon,
   Public as PublicIcon,
   Logout as LogoutIcon,
@@ -44,7 +43,6 @@ import {
   ManageAccounts as ManageAccountsIcon,
   MenuBook as MenuBookIcon,
   Storefront as StorefrontIcon,
-  PrecisionManufacturing as PrecisionManufacturingIcon,
   Warehouse as WarehouseIcon,
   ConfirmationNumber as ConfirmationNumberIcon,
   BugReport as BugReportIcon,
@@ -65,7 +63,6 @@ const defaultExpandedState = {
   planning: false,
   supply: false,
   stock: false,
-  floor: false,
   organization: false,
   support: true,
 };
@@ -118,13 +115,6 @@ const navGroups = [
     icon: <WarehouseIcon sx={{ fontSize: 16 }} />,
     accent: '#10b981',
     items: [{ text: 'Inventory', icon: <InventoryIcon />, path: '/inventory', module: 'inventory' }],
-  },
-  {
-    id: 'floor',
-    label: 'Production',
-    icon: <PrecisionManufacturingIcon sx={{ fontSize: 16 }} />,
-    accent: '#ec4899',
-    items: [{ text: 'Cutting, sewing & finishing', icon: <ManufacturingIcon />, path: '/production', module: 'production' }],
   },
   {
     id: 'organization',

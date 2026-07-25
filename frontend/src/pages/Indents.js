@@ -52,7 +52,7 @@ export default function Indents() {
     <Box
       sx={{
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
         width: '100%',
         height: '100%',
@@ -83,9 +83,15 @@ export default function Indents() {
     '& .MuiDataGrid-cell': {
       ...(dataGridSx['& .MuiDataGrid-cell'] || {}),
       display: 'flex',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       borderBottom: `1px solid ${slate[100]}`,
       outline: 'none',
+      py: '8px !important',
+      whiteSpace: 'normal !important',
+    },
+    '& .MuiDataGrid-cellContent': {
+      whiteSpace: 'normal',
+      lineHeight: 1.35,
     },
     '& .MuiDataGrid-columnHeader, & .MuiDataGrid-cell': {
       minWidth: '0 !important',
@@ -114,30 +120,52 @@ export default function Indents() {
       ),
     },
     {
-      field: 'item_name', headerName: 'Item', flex: 1.6, minWidth: 120,
+      field: 'item_name', headerName: 'Item', flex: 1.6, minWidth: 140,
+      renderCell: (p) => {
+        const names = Array.isArray(p.row.item_names) && p.row.item_names.length
+          ? p.row.item_names
+          : String(p.value || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+        return cell('left',
+          <Box sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            gap: 0.35,
+            py: 0.5,
+            width: '100%',
+            minWidth: 0,
+          }}>
+            {names.length ? names.map((name, i) => (
+              <Typography
+                key={`${name}-${i}`}
+                sx={{
+                  fontSize: '0.82rem',
+                  lineHeight: 1.3,
+                  fontWeight: 600,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {name}
+              </Typography>
+            )) : (
+              <Typography sx={{ fontSize: '0.82rem', color: 'text.disabled' }}>—</Typography>
+            )}
+          </Box>
+        );
+      },
+    },
+    {
+      field: 'total_qty', headerName: 'Qty', width: 84, type: 'number', align: 'left', headerAlign: 'left',
+      renderCell: (p) => cell('left', <Typography sx={{ fontWeight: 700 }}>{p.value?.toLocaleString()}</Typography>),
+    },
+    {
+      field: 'status', headerName: 'Status', width: 100, align: 'left', headerAlign: 'left',
       renderCell: (p) => cell('left',
-        <Typography
-          sx={{
-            fontSize: '0.82rem',
-            lineHeight: 1.35,
-            overflow: 'hidden',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            wordBreak: 'break-word',
-          }}
-        >
-          {p.value}
-        </Typography>
-      ),
-    },
-    {
-      field: 'total_qty', headerName: 'Qty', width: 84, type: 'number', align: 'right', headerAlign: 'right',
-      renderCell: (p) => cell('right', <Typography sx={{ fontWeight: 700 }}>{p.value?.toLocaleString()}</Typography>),
-    },
-    {
-      field: 'status', headerName: 'Status', width: 100, align: 'center', headerAlign: 'center',
-      renderCell: (p) => cell('center',
         <Chip label={p.value} size="small" color={STATUS_COLOR[p.value] || 'default'}
           sx={{ fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em' }} />
       ),
@@ -190,7 +218,7 @@ export default function Indents() {
           rows={rows}
           columns={columns}
           loading={loading}
-          rowHeight={64}
+          getRowHeight={() => 'auto'}
           columnHeaderHeight={48}
           sx={indentsGridSx}
           disableRowSelectionOnClick
