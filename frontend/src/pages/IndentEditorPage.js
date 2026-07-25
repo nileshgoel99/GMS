@@ -968,7 +968,7 @@ const cellSx = { border: '1px solid #000', p: '4px 6px', fontSize: '8.5pt', font
 const thSx   = { ...cellSx, fontWeight: 700, bgcolor: '#e8e8e8', textAlign: 'center' };
 
 // ── Printed Indent Document ───────────────────────────────────────────────────
-function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedLines, suppliers = [] }) {
+function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedLines, suppliers = [], trimsList = [] }) {
   const piLines = selectedLines || pi?.lines || [];
   const colorQty = buildColorQty(piLines);
   const colors = Object.keys(colorQty);
