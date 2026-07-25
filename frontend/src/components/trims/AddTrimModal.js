@@ -14,22 +14,16 @@ import {
   TRIM_CATEGORY_SUGGESTIONS,
   TRIM_UNIT_OPTIONS,
   isNumericTrimProperty,
-  isCartonBoxCategory,
   normalizeTrimPropertyName,
-  applyCartonBoxCategoryToForm,
-  defaultValuesFromCartonBox,
-  cartonBoxFromDefaultValues,
-  emptyCartonDefaults,
 } from './trimConstants';
-import CartonBoxDefaultsFields from './CartonBoxDefaultsFields';
 
 export { TRIM_CATEGORY_SUGGESTIONS, TRIM_UNIT_OPTIONS } from './trimConstants';
 
 const emptyProperty = () => ({ name: '', unit: '' });
 const filterPropertyOptions = createFilterOptions({ stringify: (o) => (typeof o === 'string' ? o : o.inputValue || o.title || '') });
+const filterCategoryOptions = createFilterOptions({ stringify: (o) => (typeof o === 'string' ? o : o.inputValue || o.title || '') });
 export const emptyTrimForm = () => ({
   name: '', category: '', default_unit: 'PCS', notes: '', properties: [],
-  cartonDefaults: emptyCartonDefaults(),
 });
 
 const noEllipsisFieldSx = {
@@ -63,9 +57,6 @@ export default function AddTrimModal({
           default_unit: editing.default_unit || 'PCS',
           notes: editing.notes || '',
           properties: (editing.properties || []).map((p) => ({ name: p.name || '', unit: p.unit || '' })),
-          cartonDefaults: isCartonBoxCategory(editing.category)
-            ? cartonBoxFromDefaultValues(editing.default_property_values || {})
-            : emptyCartonDefaults(),
         });
       } else {
         setForm({
@@ -106,7 +97,7 @@ export default function AddTrimModal({
   };
 
   const handleCategoryChange = (category) => {
-    setForm((f) => applyCartonBoxCategoryToForm({ ...f, category }));
+    setForm((f) => ({ ...f, category: String(category || '').trim() }));
   };
 
   const handleSave = async () => {
@@ -117,9 +108,6 @@ export default function AddTrimModal({
     const properties = form.properties
       .filter((p) => p.name.trim())
       .map((p) => ({ name: p.name.trim(), unit: (p.unit || '').trim() }));
-    const default_property_values = isCartonBoxCategory(form.category)
-      ? defaultValuesFromCartonBox(form.cartonDefaults)
-      : {};
 
     const payload = {
       name: form.name,
@@ -127,7 +115,7 @@ export default function AddTrimModal({
       default_unit: form.default_unit,
       notes: form.notes,
       properties,
-      default_property_values,
+      default_property_values: {},
     };
 
     setSaving(true);
@@ -177,11 +165,60 @@ export default function AddTrimModal({
           <Grid item xs={12} sm={6}>
             <Autocomplete
               freeSolo
+              selectOnFocus
+              clearOnBlur
+              handleHomeEndKeys
               options={TRIM_CATEGORY_SUGGESTIONS}
+              filterOptions={(options, params) => {
+                const filtered = filterCategoryOptions(options, params);
+                const typed = String(params.inputValue || '').trim();
+                if (
+                  typed
+                  && !options.some((o) => String(o).toLowerCase() === typed.toLowerCase())
+                ) {
+                  filtered.push({
+                    inputValue: typed,
+                    title: `Create category “${typed}”`,
+                  });
+                }
+                return filtered;
+              }}
+              getOptionLabel={(o) => {
+                if (typeof o === 'string') return o;
+                if (o?.inputValue) return o.inputValue;
+                return o?.title || '';
+              }}
               value={form.category}
-              onInputChange={(_, v) => handleCategoryChange(v)}
+              onChange={(_, v) => {
+                const next = typeof v === 'string' ? v : (v?.inputValue || '');
+                handleCategoryChange(next);
+              }}
+              onInputChange={(_, v, reason) => {
+                if (reason === 'input' || reason === 'clear') handleCategoryChange(v);
+              }}
+              renderOption={(props, option) => {
+                const { key, ...rest } = props;
+                if (option?.inputValue) {
+                  return (
+                    <Box component="li" key={key} {...rest} sx={{ fontWeight: 700, color: 'primary.main' }}>
+                      {option.title}
+                    </Box>
+                  );
+                }
+                return (
+                  <Box component="li" key={key} {...rest}>{option}</Box>
+                );
+              }}
               renderInput={(params) => (
-                <TextField {...params} size="small" fullWidth label="Category" sx={noEllipsisFieldSx} />
+                <TextField
+                  {...params}
+                  size="small"
+                  fullWidth
+                  label="Category"
+                  placeholder="Tape, Button, or create new…"
+                  helperText="Pick a suggestion or type a new category name"
+                  sx={noEllipsisFieldSx}
+                />
               )}
             />
           </Grid>
@@ -318,15 +355,6 @@ export default function AddTrimModal({
               </Table>
             )}
           </Grid>
-
-          {isCartonBoxCategory(form.category) && (
-            <Grid item xs={12}>
-              <CartonBoxDefaultsFields
-                values={form.cartonDefaults}
-                onChange={(cartonDefaults) => setForm((f) => ({ ...f, cartonDefaults }))}
-              />
-            </Grid>
-          )}
 
           <Grid item xs={12}>
             <TextField fullWidth size="small" multiline minRows={2} label="Notes"

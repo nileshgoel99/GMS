@@ -62,66 +62,8 @@ const PRINT_STYLE = `
 // ── Unit helpers ──────────────────────────────────────────────────────────────
 const UNITS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GROSS', 'GMS', 'CMS'];
 
-const CARTON_DIM_UNITS = [
-  { value: 'CMS', label: 'CMS (cm)' },
-  { value: 'INCH', label: 'Inches' },
-];
-
-const cartonDimUnitLabel = (unit) => (unit === 'INCH' ? 'Inches' : 'CMS');
-
-const hasCartonBoxContent = (row) =>
-  Boolean(String(row?.pcs_per_carton ?? '').trim() || String(row?.carton_ply ?? '').trim() || String(row?.carton_dimensions ?? '').trim());
-
-const normalizeCartonBoxesFromApi = (data, trimsList = []) => {
-  const resolveTrimName = (trimId) => {
-    if (!trimId) return '';
-    const trim = trimsList.find((t) => t.id === trimId);
-    return trim?.name || '';
-  };
-  if (Array.isArray(data?.carton_boxes) && data.carton_boxes.length) {
-    return data.carton_boxes.map((row) => ({
-      ...emptyCartonBox(),
-      ...row,
-      trim: row.trim_id || row.trim || null,
-      trim_name: row.trim_name || resolveTrimName(row.trim_id || row.trim),
-      pcs_per_carton: row.pcs_per_carton != null && row.pcs_per_carton !== '' ? String(row.pcs_per_carton) : '',
-    }));
-  }
-  if (data?.pcs_per_carton || data?.carton_ply || data?.carton_dimensions) {
-    return [{
-      trim: null,
-      trim_name: '',
-      pcs_per_carton: data.pcs_per_carton != null ? String(data.pcs_per_carton) : '',
-      carton_ply: data.carton_ply || '',
-      carton_dimensions: data.carton_dimensions || '',
-      carton_dimensions_unit: data.carton_dimensions_unit || 'CMS',
-    }];
-  }
-  return [emptyCartonBox()];
-};
-
-const serializeCartonBox = (row) => ({
-  pcs_per_carton: parseInt(row.pcs_per_carton, 10) || 0,
-  carton_ply: row.carton_ply || '',
-  carton_dimensions: row.carton_dimensions || '',
-  carton_dimensions_unit: row.carton_dimensions_unit || 'CMS',
-});
-
-const formatCartonBoxLine = (box) => {
-  const parts = [];
-  if (box.pcs_per_carton) parts.push(`${box.pcs_per_carton} pcs/box`);
-  if (box.carton_ply) parts.push(box.carton_ply);
-  if (box.carton_dimensions) {
-    parts.push(`${box.carton_dimensions} (L*W*H ${cartonDimUnitLabel(box.carton_dimensions_unit || 'CMS')})`);
-  }
-  return parts.join('  ');
-};
-
 // ── Empty row factories ───────────────────────────────────────────────────────
 const emptyFabric = () => ({ material: '', color: '', gsm: '', roll_width: '', consumption_per_pc: '', unit: 'MTRS', total_consumption: '', remarks: '' });
-const emptyCartonBox = () => ({
-  trim: null, trim_name: '', pcs_per_carton: '', carton_ply: '', carton_dimensions: '', carton_dimensions_unit: 'CMS',
-});
 const emptyTrimPart = (label = '') => ({ label, consumption_per_pc: '', unit: 'MTRS', total_consumption: '', total_unit: '' });
 const emptyTrim = () => ({
   trim: null, trim_name: '', category: '', color_variant: '', size_variant: '',
@@ -413,24 +355,24 @@ const BOM_CELL_PAD_Y = (BOM_ROW_TOTAL - BOM_ROW_H) / 2;
 const FABRIC_COLS = [
   { label: 'Fabric composition *', width: '22%', align: 'left' },
   { label: 'Color', width: '11%', align: 'left' },
-  { label: 'GSM', width: '8%', align: 'right' },
-  { label: 'Roll W (CMS)', width: '9%', align: 'right' },
-  { label: 'Cons./pc', width: '9%', align: 'right' },
-  { label: 'Unit', width: '8%', align: 'center' },
-  { label: 'Total', width: '10%', align: 'right' },
-  { label: 'In Stock', width: '13%', align: 'center' },
-  { label: '', width: '10%', align: 'center' },
+  { label: 'GSM', width: '8%', align: 'left' },
+  { label: 'Roll W (CMS)', width: '9%', align: 'left' },
+  { label: 'Cons./pc', width: '9%', align: 'left' },
+  { label: 'Unit', width: '8%', align: 'left' },
+  { label: 'Total', width: '10%', align: 'left' },
+  { label: 'In Stock', width: '13%', align: 'left' },
+  { label: '', width: '10%', align: 'left' },
 ];
 
 const TRIM_COLS = [
   { label: 'Trim & Properties', width: '30%', align: 'left' },
   { label: 'Supplier', width: '20%', align: 'left' },
-  { label: 'Cons./pc', width: '8%', align: 'right' },
-  { label: 'Unit', width: '7%', align: 'center' },
-  { label: 'Total', width: '9%', align: 'right' },
-  { label: 'Tot. Unit', width: '7%', align: 'center' },
-  { label: 'In Stock', width: '11%', align: 'center' },
-  { label: '', width: '8%', align: 'center' },
+  { label: 'Cons./pc', width: '8%', align: 'left' },
+  { label: 'Unit', width: '7%', align: 'left' },
+  { label: 'Total', width: '9%', align: 'left' },
+  { label: 'Tot. Unit', width: '7%', align: 'left' },
+  { label: 'In Stock', width: '11%', align: 'left' },
+  { label: '', width: '8%', align: 'left' },
 ];
 
 /** Popper portaled above cards — prefers below the field, flips if needed. */
@@ -629,13 +571,13 @@ const bomFieldSx = (align = 'left') => ({
 });
 
 /** Cons./pc fields — bolder text so the key BOM input stands out (no tint, stays obviously editable). */
-const bomConsFieldSx = (align = 'right') => ({
+const bomConsFieldSx = (align = 'left') => ({
   ...bomFieldSx(align),
   '& input': { fontWeight: 700, fontSize: '0.9rem', color: slate[900] },
 });
 
 /** Total fields — strongest emphasis in the row (computed BOM output). */
-const bomTotalFieldSx = (align = 'right') => ({
+const bomTotalFieldSx = (align = 'left') => ({
   ...bomFieldSx(align),
   '& .MuiInputBase-root': {
     ...bomFieldSx(align)['& .MuiInputBase-root'],
@@ -820,44 +762,6 @@ const trimPartColHeadSx = {
   textTransform: 'uppercase',
   letterSpacing: '0.04em',
   lineHeight: 1.2,
-};
-
-/** Kraft / corrugated carton texture for the Carton Box fields block. */
-const cartonBoxSectionSx = {
-  mt: 2.5,
-  pt: 2,
-  pb: 2,
-  px: { xs: 1.5, sm: 2 },
-  borderRadius: 1.5,
-  border: `1px solid ${alpha('#b45309', 0.22)}`,
-  borderTop: `1px solid ${slate[200]}`,
-  bgcolor: '#fffbf5',
-  backgroundImage: `
-    repeating-linear-gradient(
-      0deg,
-      ${alpha('#b45309', 0.055)} 0px,
-      ${alpha('#b45309', 0.055)} 1px,
-      transparent 1px,
-      transparent 20px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      ${alpha('#b45309', 0.04)} 0px,
-      ${alpha('#b45309', 0.04)} 1px,
-      transparent 1px,
-      transparent 20px
-    ),
-    repeating-linear-gradient(
-      -11deg,
-      ${alpha('#92400e', 0.025)} 0px,
-      ${alpha('#92400e', 0.025)} 1px,
-      transparent 1px,
-      transparent 8px
-    ),
-    radial-gradient(circle at 1px 1px, ${alpha('#b45309', 0.035)} 1px, transparent 0)
-  `,
-  backgroundSize: 'auto, auto, auto, 18px 18px',
-  boxShadow: `inset 0 1px 0 ${alpha('#fff', 0.85)}`,
 };
 
 const trimBomTableSx = (slateColor) => ({
@@ -1059,13 +963,13 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
             <Box component="tr" key={`f${i}`}>
               <Box component="td" sx={{ ...cellSx, fontWeight: 600 }}>{row.material}</Box>
               <Box component="td" sx={cellSx}>{row.color}</Box>
-              <Box component="td" sx={{ ...cellSx, textAlign: 'right' }}>{row.gsm ? `${row.gsm} GSM` : '—'}</Box>
+              <Box component="td" sx={cellSx}>{row.gsm ? `${row.gsm} GSM` : '—'}</Box>
               <Box component="td" sx={cellSx}>{row.roll_width ? `${row.roll_width} CMS` : '—'}</Box>
-              <Box component="td" sx={{ ...cellSx, textAlign: 'right' }}>{row.consumption_per_pc}</Box>
-              <Box component="td" sx={{ ...cellSx, textAlign: 'center' }}>{row.unit}</Box>
-              <Box component="td" sx={{ ...cellSx, textAlign: 'right', fontWeight: 700 }}>{row.total_consumption}</Box>
-              <Box component="td" sx={{ ...cellSx, textAlign: 'center', fontSize: '7.5pt', color: '#666' }}>—</Box>
-              <Box component="td" sx={{ ...cellSx, textAlign: 'center', fontSize: '7.5pt' }}>{isInStockRemark(row.remarks) ? 'In stock' : '—'}</Box>
+              <Box component="td" sx={cellSx}>{row.consumption_per_pc}</Box>
+              <Box component="td" sx={cellSx}>{row.unit}</Box>
+              <Box component="td" sx={{ ...cellSx, fontWeight: 700 }}>{row.total_consumption}</Box>
+              <Box component="td" sx={{ ...cellSx, fontSize: '7.5pt', color: '#666' }}>—</Box>
+              <Box component="td" sx={{ ...cellSx, fontSize: '7.5pt' }}>{isInStockRemark(row.remarks) ? 'In stock' : '—'}</Box>
             </Box>
           ))}
           {trimLines.filter((r) => r.trim_name).map((row, i) => {
@@ -1078,25 +982,25 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
               <Box component="tr" key={`t${i}`}>
                 <Box component="td" sx={{ ...cellSx, textTransform: 'uppercase' }}>{row.trim_name}</Box>
                 <Box component="td" sx={cellSx}>{formatTrimVariantDisplay(row, trimSchema) || '—'}</Box>
-                <Box component="td" sx={{ ...cellSx, textAlign: 'center' }}>—</Box>
-                <Box component="td" sx={{ ...cellSx, textAlign: 'center' }}>—</Box>
-                <Box component="td" sx={{ ...cellSx, textAlign: 'right', whiteSpace: 'pre-line' }}>
+                <Box component="td" sx={cellSx}>—</Box>
+                <Box component="td" sx={cellSx}>—</Box>
+                <Box component="td" sx={{ ...cellSx, whiteSpace: 'pre-line' }}>
                   {parts
                     ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${p.consumption_per_pc}`).join('\n')
                     : row.consumption_per_pc}
                 </Box>
-                <Box component="td" sx={{ ...cellSx, textAlign: 'center', whiteSpace: 'pre-line' }}>
+                <Box component="td" sx={{ ...cellSx, whiteSpace: 'pre-line' }}>
                   {parts ? parts.map((p) => p.unit).join('\n') : row.unit}
                 </Box>
-                <Box component="td" sx={{ ...cellSx, textAlign: 'right', fontWeight: 700, whiteSpace: 'pre-line' }}>
+                <Box component="td" sx={{ ...cellSx, fontWeight: 700, whiteSpace: 'pre-line' }}>
                   {parts
                     ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${p.total_consumption}`).join('\n')
                     : row.total_consumption}
                 </Box>
-                <Box component="td" sx={{ ...cellSx, textAlign: 'left', fontSize: '7.5pt', fontWeight: supplierLabel ? 600 : 400 }}>
+                <Box component="td" sx={{ ...cellSx, fontSize: '7.5pt', fontWeight: supplierLabel ? 600 : 400 }}>
                   {supplierLabel || '—'}
                 </Box>
-                <Box component="td" sx={{ ...cellSx, textAlign: 'center', fontSize: '7.5pt' }}>{isInStockRemark(row.remarks) ? 'In stock' : '—'}</Box>
+                <Box component="td" sx={{ ...cellSx, fontSize: '7.5pt' }}>{isInStockRemark(row.remarks) ? 'In stock' : '—'}</Box>
               </Box>
             );
           })}
@@ -1136,21 +1040,6 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
           </Box>
         </>
       )}
-
-      {/* Carton info */}
-      {((indent?.carton_boxes || []).length
-        ? indent.carton_boxes.filter(hasCartonBoxContent)
-        : (indent?.pcs_per_carton || indent?.carton_ply || indent?.carton_dimensions)
-          ? normalizeCartonBoxesFromApi(indent).filter(hasCartonBoxContent)
-          : []
-      ).map((box, i) => (
-        <Box key={i} sx={{ mb: i === 0 ? 1.5 : 0.75 }}>
-          <Typography sx={{ fontFamily: 'inherit', fontSize: '8.5pt', fontWeight: 600 }}>
-            Carton Size{indent?.carton_boxes?.length > 1 ? ` ${i + 1}` : ''}:&nbsp;&nbsp;
-            {formatCartonBoxLine(box)}
-          </Typography>
-        </Box>
-      ))}
 
       {/* Sign-off */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3, borderTop: '1px solid #999', pt: 1.5 }}>
@@ -1238,7 +1127,6 @@ export default function IndentEditorPage() {
   const [indentNumber, setIndentNumber] = useState('');
   const [indentDate,   setIndentDate]  = useState(new Date().toISOString().split('T')[0]);
   const [status,       setStatus]      = useState('DRAFT');
-  const [cartonBoxes,  setCartonBoxes] = useState([emptyCartonBox()]);
   const [preparedBy,   setPreparedBy]  = useState('');
   const [receivedBy,   setReceivedBy]  = useState('');
   const [approvedBy,   setApprovedBy]  = useState('');
@@ -1260,7 +1148,6 @@ export default function IndentEditorPage() {
   const resetBomFormState = () => {
     setFabricLines([emptyFabric()]);
     setTrimLines([emptyTrim()]);
-    setCartonBoxes([emptyCartonBox()]);
     setPreparedBy('');
     setReceivedBy('');
     setApprovedBy('');
@@ -1524,7 +1411,6 @@ export default function IndentEditorPage() {
             if (!merged.some((m) => m.id === t.id)) merged.push(t);
           });
           setTrimsList(merged);
-          setCartonBoxes(normalizeCartonBoxesFromApi(data, merged));
         }
       } catch (e) {
         console.error(e);
@@ -1553,13 +1439,6 @@ export default function IndentEditorPage() {
         }
       } catch (_) { /* no template */ }
     }
-  };
-
-  const addCartonBox = () => setCartonBoxes((prev) => [...prev, emptyCartonBox()]);
-  const insertCartonBoxAfter = (i) => setCartonBoxes((prev) => [...prev.slice(0, i + 1), emptyCartonBox(), ...prev.slice(i + 1)]);
-  const removeCartonBox = (i) => setCartonBoxes((prev) => (prev.length <= 1 ? [emptyCartonBox()] : prev.filter((_, idx) => idx !== i)));
-  const setCartonBoxField = (i, field, value) => {
-    setCartonBoxes((prev) => prev.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
   };
 
   const loadItemTemplate = async () => {
@@ -1782,19 +1661,18 @@ export default function IndentEditorPage() {
 
     setSaving(true);
     try {
-      const savedCartonBoxes = cartonBoxes.filter(hasCartonBoxContent).map(serializeCartonBox);
-      const firstCarton = savedCartonBoxes[0] || serializeCartonBox(emptyCartonBox());
+      // Carton Box is a normal trim with user-defined properties — clear legacy indent carton fields.
       const payload = {
         pi: pi.id,
         selected_pi_line_ids: selectedLineIds,
         indent_number: indentNumber,
         indent_date: indentDate,
         status: nextStatus || status,
-        pcs_per_carton: firstCarton.pcs_per_carton,
-        carton_ply: firstCarton.carton_ply,
-        carton_dimensions: firstCarton.carton_dimensions,
-        carton_dimensions_unit: firstCarton.carton_dimensions_unit,
-        carton_boxes: savedCartonBoxes,
+        pcs_per_carton: 0,
+        carton_ply: '',
+        carton_dimensions: '',
+        carton_dimensions_unit: 'CMS',
+        carton_boxes: [],
         prepared_by: preparedBy,
         received_by: receivedBy,
         approved_by: approvedBy,
@@ -2297,45 +2175,45 @@ export default function IndentEditorPage() {
                           />
                         </Box>
                       </TableCell>
-                      <TableCell sx={bodyCell('right')}>
-                        <Box sx={bomCellInner('right')}>
+                      <TableCell sx={bodyCell('left')}>
+                        <Box sx={bomCellInner('left')}>
                           <TextField size="small" fullWidth type="number" value={row.gsm || ''}
                             onChange={(e) => setFabricField(i, 'gsm', e.target.value)}
                             placeholder="245"
-                            inputProps={{ step: '0.01', min: '0', style: { textAlign: 'right' } }}
-                            sx={bomFieldSx('right')} />
+                            inputProps={{ step: '0.01', min: '0', style: { textAlign: 'left' } }}
+                            sx={bomFieldSx('left')} />
                         </Box>
                       </TableCell>
-                      <TableCell sx={bodyCell('right')}>
-                        <Box sx={bomCellInner('right')}>
+                      <TableCell sx={bodyCell('left')}>
+                        <Box sx={bomCellInner('left')}>
                           <TextField size="small" fullWidth type="number" value={row.roll_width || ''}
                             onChange={(e) => setFabricField(i, 'roll_width', e.target.value)}
                             placeholder="150"
-                            inputProps={{ step: '1', min: '0', style: { textAlign: 'right' } }}
-                            sx={bomFieldSx('right')} />
+                            inputProps={{ step: '1', min: '0', style: { textAlign: 'left' } }}
+                            sx={bomFieldSx('left')} />
                         </Box>
                       </TableCell>
-                      <TableCell sx={bodyCell('right')}>
-                        <Box sx={bomCellInner('right')}>
+                      <TableCell sx={bodyCell('left')}>
+                        <Box sx={bomCellInner('left')}>
                           <TextField size="small" fullWidth type="number" value={row.consumption_per_pc}
                             onChange={(e) => setFabricField(i, 'consumption_per_pc', e.target.value)}
-                            inputProps={{ step: '0.0001', min: '0' }} sx={bomConsFieldSx('right')} />
+                            inputProps={{ step: '0.0001', min: '0' }} sx={bomConsFieldSx('left')} />
                         </Box>
                       </TableCell>
-                      <TableCell sx={bodyCell('center')}>
-                        <Box sx={bomCellInner('center')}>
+                      <TableCell sx={bodyCell('left')}>
+                        <Box sx={bomCellInner('left')}>
                           <TextField size="small" fullWidth select value={row.unit}
-                            onChange={(e) => setFabricField(i, 'unit', e.target.value)} sx={bomFieldSx('center')}>
+                            onChange={(e) => setFabricField(i, 'unit', e.target.value)} sx={bomFieldSx('left')}>
                             {UNITS.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
                           </TextField>
                         </Box>
                       </TableCell>
-                      <TableCell sx={bodyCell('right')}>
-                        <Box sx={bomCellInner('right')}>
+                      <TableCell sx={bodyCell('left')}>
+                        <Box sx={bomCellInner('left')}>
                           <TextField size="small" fullWidth value={row.total_consumption}
                             onChange={(e) => setFabricField(i, 'total_consumption', e.target.value)}
                             placeholder={totalQty ? 'Auto' : '—'}
-                            sx={bomTotalFieldSx('right')} />
+                            sx={bomTotalFieldSx('left')} />
                         </Box>
                       </TableCell>
                       <TableCell sx={bodyCell('center')}>
@@ -2726,8 +2604,8 @@ export default function IndentEditorPage() {
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, width: '100%', py: 0.75 }}>
                               <Box sx={{ display: 'flex', gap: 0.75, px: 0.25 }}>
                                 <Typography sx={{ ...trimPartColHeadSx, width: 88 }}>Part</Typography>
-                                <Typography sx={{ ...trimPartColHeadSx, flex: 1.4, textAlign: 'right' }}>Cons./pc</Typography>
-                                <Typography sx={{ ...trimPartColHeadSx, width: 80, textAlign: 'center' }}>Unit</Typography>
+                                <Typography sx={{ ...trimPartColHeadSx, flex: 1.4, textAlign: 'left' }}>Cons./pc</Typography>
+                                <Typography sx={{ ...trimPartColHeadSx, width: 80, textAlign: 'left' }}>Unit</Typography>
                                 <Box sx={{ width: 28, flexShrink: 0 }} />
                               </Box>
                               {row.parts.map((part, pIdx) => (
@@ -2738,10 +2616,10 @@ export default function IndentEditorPage() {
                                     sx={{ ...bomFieldSx('left'), width: 88, flexShrink: 0 }} />
                                   <TextField size="small" type="number" value={part.consumption_per_pc}
                                     onChange={(e) => setTrimPartField(i, pIdx, 'consumption_per_pc', e.target.value)}
-                                    inputProps={{ step: '0.0001', min: '0' }} sx={{ ...bomConsFieldSx('right'), flex: 1.4 }} />
+                                    inputProps={{ step: '0.0001', min: '0' }} sx={{ ...bomConsFieldSx('left'), flex: 1.4 }} />
                                   <TextField size="small" select value={part.unit}
                                     onChange={(e) => setTrimPartField(i, pIdx, 'unit', e.target.value)}
-                                    sx={{ ...bomFieldSx('center'), width: 80, flexShrink: 0 }}>
+                                    sx={{ ...bomFieldSx('left'), width: 80, flexShrink: 0 }}>
                                     {UNITS.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
                                   </TextField>
                                   <IconButton size="small" color="error" onClick={() => removeTrimPart(i, pIdx)} sx={{ width: 28, flexShrink: 0 }}>
@@ -2759,32 +2637,32 @@ export default function IndentEditorPage() {
                           </TableCell>
                         ) : (
                           <>
-                            <TableCell sx={bodyCell('right')}>
-                              <Box sx={bomCellInner('right')}>
+                            <TableCell sx={bodyCell('left')}>
+                              <Box sx={bomCellInner('left')}>
                                 <TextField size="small" fullWidth type="number" value={row.consumption_per_pc}
                                   onChange={(e) => setTrimField(i, 'consumption_per_pc', e.target.value)}
-                                  inputProps={{ step: '0.0001', min: '0' }} sx={bomConsFieldSx('right')} />
+                                  inputProps={{ step: '0.0001', min: '0' }} sx={bomConsFieldSx('left')} />
                               </Box>
                             </TableCell>
-                            <TableCell sx={bodyCell('center')}>
-                              <Box sx={bomCellInner('center')}>
+                            <TableCell sx={bodyCell('left')}>
+                              <Box sx={bomCellInner('left')}>
                                 <TextField size="small" fullWidth select value={row.unit}
-                                  onChange={(e) => setTrimField(i, 'unit', e.target.value)} sx={bomFieldSx('center')}>
+                                  onChange={(e) => setTrimField(i, 'unit', e.target.value)} sx={bomFieldSx('left')}>
                                   {UNITS.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
                                 </TextField>
                               </Box>
                             </TableCell>
-                            <TableCell sx={bodyCell('right')}>
-                              <Box sx={bomCellInner('right')}>
+                            <TableCell sx={bodyCell('left')}>
+                              <Box sx={bomCellInner('left')}>
                                 <TextField size="small" fullWidth value={row.total_consumption}
                                   onChange={(e) => setTrimField(i, 'total_consumption', e.target.value)}
-                                  sx={bomTotalFieldSx('right')} />
+                                  sx={bomTotalFieldSx('left')} />
                               </Box>
                             </TableCell>
-                            <TableCell sx={bodyCell('center')}>
-                              <Box sx={bomCellInner('center')}>
+                            <TableCell sx={bodyCell('left')}>
+                              <Box sx={bomCellInner('left')}>
                                 <TextField size="small" fullWidth select value={row.total_unit || row.unit}
-                                  onChange={(e) => setTrimField(i, 'total_unit', e.target.value)} sx={bomFieldSx('center')}>
+                                  onChange={(e) => setTrimField(i, 'total_unit', e.target.value)} sx={bomFieldSx('left')}>
                                   {UNITS.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
                                 </TextField>
                               </Box>
@@ -2842,74 +2720,6 @@ export default function IndentEditorPage() {
                   })}
                 </TableBody>
               </Table>
-            </Box>
-
-            {/* Carton Box */}
-            <Box sx={cartonBoxSectionSx}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', color: '#92400e', letterSpacing: '0.02em', flex: 1 }}>
-                  Carton Box
-                </Typography>
-                <Button size="small" startIcon={<Add />} onClick={addCartonBox}
-                  sx={{ fontWeight: 700, textTransform: 'none', color: '#92400e' }}>
-                  Add Carton
-                </Button>
-              </Box>
-              {cartonBoxes.map((box, i) => (
-                <Box
-                  key={i}
-                  sx={{
-                    mb: i < cartonBoxes.length - 1 ? 2 : 0,
-                    pb: i < cartonBoxes.length - 1 ? 2 : 0,
-                    borderBottom: i < cartonBoxes.length - 1 ? `1px dashed ${alpha('#b45309', 0.25)}` : 'none',
-                  }}
-                >
-                  {cartonBoxes.length > 1 && (
-                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#92400e', mb: 1 }}>
-                      Carton {i + 1}
-                    </Typography>
-                  )}
-                  <Grid container spacing={2} alignItems="flex-start">
-                    <Grid item xs={12} sm={4} md={3}>
-                      <TextField size="small" fullWidth label="Pcs/Box" type="number" value={box.pcs_per_carton}
-                        onChange={(e) => setCartonBoxField(i, 'pcs_per_carton', e.target.value)} sx={sxInput} />
-                    </Grid>
-                    <Grid item xs={12} sm={4} md={3}>
-                      <TextField size="small" fullWidth label="PLY" value={box.carton_ply}
-                        onChange={(e) => setCartonBoxField(i, 'carton_ply', e.target.value)} placeholder="5 PLY" sx={sxInput} />
-                    </Grid>
-                    <Grid item xs={12} sm={4} md={2}>
-                      <TextField size="small" fullWidth select label="Dim. unit" value={box.carton_dimensions_unit}
-                        onChange={(e) => setCartonBoxField(i, 'carton_dimensions_unit', e.target.value)} sx={sxInput}>
-                        {CARTON_DIM_UNITS.map((u) => (
-                          <MenuItem key={u.value} value={u.value}>{u.label}</MenuItem>
-                        ))}
-                      </TextField>
-                    </Grid>
-                    <Grid item xs={12} sm={8} md={3}>
-                      <TextField size="small" fullWidth
-                        label={`Dimensions (L × W × H, ${cartonDimUnitLabel(box.carton_dimensions_unit)})`}
-                        value={box.carton_dimensions}
-                        onChange={(e) => setCartonBoxField(i, 'carton_dimensions', e.target.value)}
-                        sx={sxInput} />
-                    </Grid>
-                    <Grid item xs={12} sm={4} md={1}>
-                      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: { xs: 'flex-start', md: 'flex-end' }, pt: { md: 0.5 } }}>
-                        <Tooltip title="Insert carton below">
-                          <IconButton size="small" color="primary" onClick={() => insertCartonBoxAfter(i)}>
-                            <Add fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Remove carton">
-                          <IconButton size="small" color="error" onClick={() => removeCartonBox(i)}>
-                            <Delete fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </Box>
-              ))}
             </Box>
           </Paper>
 
@@ -2986,11 +2796,6 @@ export default function IndentEditorPage() {
           indent={{
             indent_number: indentNumber,
             indent_date: indentDate,
-            carton_boxes: cartonBoxes.filter(hasCartonBoxContent).map(serializeCartonBox),
-            pcs_per_carton: cartonBoxes[0]?.pcs_per_carton || '',
-            carton_ply: cartonBoxes[0]?.carton_ply || '',
-            carton_dimensions: cartonBoxes[0]?.carton_dimensions || '',
-            carton_dimensions_unit: cartonBoxes[0]?.carton_dimensions_unit || 'CMS',
             prepared_by: preparedBy,
             received_by: receivedBy,
             approved_by: approvedBy,
