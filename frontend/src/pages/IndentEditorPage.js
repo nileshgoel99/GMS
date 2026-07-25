@@ -31,6 +31,9 @@ import {
   formatTrimVariantDisplay,
   isGarmentSizeTrimProperty,
   isNumericTrimProperty,
+  normalizeTrimPropertyName,
+  TRIM_PROPERTY_NAME_SUGGESTIONS,
+  TRIM_UNIT_OPTIONS,
 } from '../components/trims/trimConstants';
 
 // ── Print styles ─────────────────────────────────────────────────────────────
@@ -1249,6 +1252,10 @@ export default function IndentEditorPage() {
   const [trimModalInitialName, setTrimModalInitialName] = useState('');
   const [sizeBreakdownOpen, setSizeBreakdownOpen] = useState(true);
   const [saveNotice, setSaveNotice] = useState('');
+  const [addPropRow, setAddPropRow] = useState(null);
+  const [newPropName, setNewPropName] = useState('');
+  const [newPropUnit, setNewPropUnit] = useState('');
+  const [addingProp, setAddingProp] = useState(false);
 
   const resetBomFormState = () => {
     setFabricLines([emptyFabric()]);
@@ -1309,7 +1316,79 @@ export default function IndentEditorPage() {
 
   const getTrimMaster = (row) => (row.trim ? trimsList.find((t) => t.id === row.trim) : null);
 
-  const getTrimSchema = (row) => getTrimMaster(row)?.properties || [];
+  /** Master properties + any keys already on the row (supports custom types added on indent). */
+  const getTrimSchema = (row) => {
+    const byName = new Map();
+    (getTrimMaster(row)?.properties || []).forEach((p) => {
+      if (p?.name) byName.set(String(p.name).trim().toLowerCase(), { name: p.name, unit: p.unit || '' });
+    });
+    (row.extra_properties || []).forEach((p) => {
+      if (p?.name) byName.set(String(p.name).trim().toLowerCase(), { name: p.name, unit: p.unit || '' });
+    });
+    Object.keys(row.property_values || {}).forEach((name) => {
+      const key = String(name || '').trim().toLowerCase();
+      if (key && !byName.has(key)) byName.set(key, { name, unit: '' });
+    });
+    return [...byName.values()];
+  };
+
+  const openAddProperty = (rowIndex) => {
+    setAddPropRow(rowIndex);
+    setNewPropName('');
+    setNewPropUnit('');
+  };
+
+  const cancelAddProperty = () => {
+    setAddPropRow(null);
+    setNewPropName('');
+    setNewPropUnit('');
+  };
+
+  const commitAddProperty = async (rowIndex) => {
+    const name = normalizeTrimPropertyName(newPropName);
+    if (!name) {
+      alert('Enter a property type name (e.g. Width, Pantone).');
+      return;
+    }
+    const unit = isNumericTrimProperty(name) ? '' : String(newPropUnit || '').trim();
+    const row = trimLines[rowIndex];
+    if (!row) return;
+    const schema = getTrimSchema(row);
+    if (schema.some((p) => String(p.name).toLowerCase() === name.toLowerCase())) {
+      alert(`Property “${name}” already exists on this trim.`);
+      return;
+    }
+
+    setAddingProp(true);
+    try {
+      const master = getTrimMaster(row);
+      if (master && canManageTrimsLibrary) {
+        const nextProps = [...(master.properties || []), { name, unit }];
+        const res = await ordersAPI.updateTrim(master.id, { properties: nextProps });
+        setTrimsList((prev) => prev.map((t) => (t.id === master.id ? res.data : t)));
+      }
+      setTrimLines((prev) => {
+        const next = [...prev];
+        const cur = next[rowIndex];
+        const extra = [...(cur.extra_properties || [])];
+        if (!master || !canManageTrimsLibrary) {
+          extra.push({ name, unit });
+        }
+        next[rowIndex] = {
+          ...cur,
+          extra_properties: extra,
+          property_values: { ...(cur.property_values || {}), [name]: '' },
+        };
+        return next;
+      });
+      cancelAddProperty();
+    } catch (e) {
+      const msg = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+      alert(`Could not add property: ${msg}`);
+    } finally {
+      setAddingProp(false);
+    }
+  };
 
   const withStockRemark = (row) => applyInventoryStockRemark(row, inventoryItems, trimsList);
 
@@ -2406,7 +2485,18 @@ export default function IndentEditorPage() {
                               position: 'relative',
                               zIndex: 1,
                             }}>
-                              <Typography sx={trimFieldLabelSx}>Properties</Typography>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+                                <Typography sx={{ ...trimFieldLabelSx, mb: 0, flex: 1 }}>Properties</Typography>
+                                {addPropRow !== i && (
+                                  <Button
+                                    size="small"
+                                    onClick={() => openAddProperty(i)}
+                                    sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'none', p: 0, minWidth: 0 }}
+                                  >
+                                    + Add property type
+                                  </Button>
+                                )}
+                              </Box>
                               {schema.length > 0 ? (
                                 <Box sx={{
                                   display: 'grid',
@@ -2503,10 +2593,82 @@ export default function IndentEditorPage() {
                                     );
                                   })}
                                 </Box>
-                              ) : (
+                              ) : addPropRow !== i ? (
                                 <Typography sx={{ fontSize: '0.72rem', color: 'text.disabled', fontStyle: 'italic' }}>
-                                  No properties defined for this trim — applies to the full order qty.
+                                  No properties yet — add Width, Color, or any custom type.
                                 </Typography>
+                              ) : null}
+
+                              {addPropRow === i && (
+                                <Box sx={{
+                                  mt: 1,
+                                  p: 1,
+                                  borderRadius: 1,
+                                  border: `1px solid ${slate[200]}`,
+                                  bgcolor: alpha('#fff', 0.9),
+                                  display: 'flex',
+                                  flexWrap: 'wrap',
+                                  gap: 1,
+                                  alignItems: 'flex-end',
+                                }}>
+                                  <Box sx={{ flex: '1 1 140px', minWidth: 120 }}>
+                                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, color: slate[600], mb: 0.35 }}>
+                                      Property type
+                                    </Typography>
+                                    <Autocomplete
+                                      freeSolo
+                                      size="small"
+                                      options={TRIM_PROPERTY_NAME_SUGGESTIONS.filter(
+                                        (n) => !schema.some((p) => String(p.name).toLowerCase() === n.toLowerCase()),
+                                      )}
+                                      value={newPropName}
+                                      onChange={(_, v) => setNewPropName(typeof v === 'string' ? v : v || '')}
+                                      onInputChange={(_, v) => setNewPropName(v)}
+                                      renderInput={(params) => (
+                                        <TextField {...params} size="small" placeholder="Width, Pantone…" sx={trimPropFieldSx('left')} />
+                                      )}
+                                    />
+                                  </Box>
+                                  <Box sx={{ width: 110 }}>
+                                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, color: slate[600], mb: 0.35 }}>
+                                      Unit
+                                    </Typography>
+                                    <Autocomplete
+                                      freeSolo
+                                      size="small"
+                                      disabled={isNumericTrimProperty(newPropName)}
+                                      options={TRIM_UNIT_OPTIONS}
+                                      value={isNumericTrimProperty(newPropName) ? '' : newPropUnit}
+                                      onChange={(_, v) => setNewPropUnit(typeof v === 'string' ? v : v || '')}
+                                      onInputChange={(_, v) => setNewPropUnit(v)}
+                                      renderInput={(params) => (
+                                        <TextField
+                                          {...params}
+                                          size="small"
+                                          placeholder={isNumericTrimProperty(newPropName) ? '—' : 'MM, CMS…'}
+                                          sx={trimPropFieldSx('left')}
+                                        />
+                                      )}
+                                    />
+                                  </Box>
+                                  <Button
+                                    size="small"
+                                    variant="contained"
+                                    disabled={addingProp || !newPropName.trim()}
+                                    onClick={() => commitAddProperty(i)}
+                                    sx={{ fontWeight: 700, textTransform: 'none', height: TRIM_PROP_FIELD_H }}
+                                  >
+                                    {addingProp ? 'Adding…' : 'Add'}
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    disabled={addingProp}
+                                    onClick={cancelAddProperty}
+                                    sx={{ fontWeight: 700, textTransform: 'none', height: TRIM_PROP_FIELD_H }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </Box>
                               )}
                             </Box>
                           </Box>

@@ -56,6 +56,7 @@ export default function Indents() {
         justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
         width: '100%',
         height: '100%',
+        minWidth: 0,
         px: 0.5,
       }}
     >
@@ -66,7 +67,14 @@ export default function Indents() {
   const indentsGridSx = {
     ...dataGridSx,
     width: '100%',
+    maxWidth: '100%',
     bgcolor: '#fff',
+    border: 'none',
+    '& .MuiDataGrid-main': { overflow: 'hidden' },
+    '& .MuiDataGrid-virtualScroller': {
+      overflowX: 'hidden !important',
+      overflowY: 'auto !important',
+    },
     '& .MuiDataGrid-columnHeaders': {
       ...(dataGridSx['& .MuiDataGrid-columnHeaders'] || {}),
       bgcolor: slate[50],
@@ -77,59 +85,73 @@ export default function Indents() {
       display: 'flex',
       alignItems: 'center',
       borderBottom: `1px solid ${slate[100]}`,
+      outline: 'none',
+    },
+    '& .MuiDataGrid-columnHeader, & .MuiDataGrid-cell': {
+      minWidth: '0 !important',
     },
   };
 
   const columns = [
     {
-      field: 'indent_number', headerName: 'Indent No', flex: 1, minWidth: 140,
+      field: 'indent_number', headerName: 'Indent No', flex: 1.1, minWidth: 100,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', fontFamily: 'monospace', color: 'primary.main' }}>
+        <Typography noWrap sx={{ fontWeight: 700, fontSize: '0.85rem', fontFamily: 'monospace', color: 'primary.main' }}>
           {p.value}
         </Typography>
       ),
     },
     {
-      field: 'pi_number', headerName: 'PI Ref', flex: 1, minWidth: 140,
-      renderCell: (p) => cell('left', <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{p.value}</Typography>),
-    },
-    {
-      field: 'pi_ref', headerName: 'Buyer PO', flex: 1, minWidth: 130,
-      renderCell: (p) => cell('left', <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{p.value || '—'}</Typography>),
-    },
-    {
-      field: 'item_name', headerName: 'Item', flex: 2, minWidth: 200,
+      field: 'pi_number', headerName: 'PI Ref', flex: 1, minWidth: 90,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.82rem', whiteSpace: 'normal', lineHeight: 1.35 }}>{p.value}</Typography>
+        <Typography noWrap sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{p.value}</Typography>
       ),
     },
     {
-      field: 'total_qty', headerName: 'Total Qty', width: 100, type: 'number', align: 'right', headerAlign: 'right',
+      field: 'pi_ref', headerName: 'Buyer PO', flex: 0.9, minWidth: 80,
+      renderCell: (p) => cell('left',
+        <Typography noWrap sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{p.value || '—'}</Typography>
+      ),
+    },
+    {
+      field: 'item_name', headerName: 'Item', flex: 1.6, minWidth: 120,
+      renderCell: (p) => cell('left',
+        <Typography
+          sx={{
+            fontSize: '0.82rem',
+            lineHeight: 1.35,
+            overflow: 'hidden',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            wordBreak: 'break-word',
+          }}
+        >
+          {p.value}
+        </Typography>
+      ),
+    },
+    {
+      field: 'total_qty', headerName: 'Qty', width: 84, type: 'number', align: 'right', headerAlign: 'right',
       renderCell: (p) => cell('right', <Typography sx={{ fontWeight: 700 }}>{p.value?.toLocaleString()}</Typography>),
     },
     {
-      field: 'fabric_count', headerName: 'Fabrics', width: 80, align: 'center', headerAlign: 'center',
-      renderCell: (p) => cell('center', <Chip label={p.value} size="small" color="info" variant="outlined" sx={{ fontWeight: 700, fontSize: '0.7rem' }} />),
-    },
-    {
-      field: 'trim_count', headerName: 'Trims', width: 80, align: 'center', headerAlign: 'center',
-      renderCell: (p) => cell('center', <Chip label={p.value} size="small" color="secondary" variant="outlined" sx={{ fontWeight: 700, fontSize: '0.7rem' }} />),
-    },
-    {
-      field: 'status', headerName: 'Status', width: 110, align: 'center', headerAlign: 'center',
+      field: 'status', headerName: 'Status', width: 100, align: 'center', headerAlign: 'center',
       renderCell: (p) => cell('center',
         <Chip label={p.value} size="small" color={STATUS_COLOR[p.value] || 'default'}
           sx={{ fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em' }} />
       ),
     },
     {
-      field: 'indent_date', headerName: 'Date', width: 110,
-      renderCell: (p) => cell('left', <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{formatDateDisplay(p.value)}</Typography>),
+      field: 'indent_date', headerName: 'Date', width: 96,
+      renderCell: (p) => cell('left',
+        <Typography noWrap sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{formatDateDisplay(p.value)}</Typography>
+      ),
     },
     {
-      field: 'actions', headerName: '', width: 110, sortable: false, align: 'center', headerAlign: 'center',
+      field: 'actions', headerName: '', width: 108, sortable: false, align: 'center', headerAlign: 'center',
       renderCell: (p) => cell('center',
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', gap: 0.25 }}>
           <Tooltip title="View Indent">
             <IconButton size="small" onClick={() => setViewId(p.row.id)}>
               <Visibility fontSize="small" />
@@ -151,19 +173,19 @@ export default function Indents() {
   ];
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 } }}>
+    <Box sx={{ width: '100%', maxWidth: '100%', minWidth: 0, overflowX: 'hidden' }}>
       <PageHeader
         title="Indents"
         subtitle="Material & trim indents raised against Proforma Invoices"
         actions={
           <Button startIcon={<Add />} variant="contained" onClick={() => navigate('/indents/new')}
-            sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
+            sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, whiteSpace: 'nowrap' }}>
             Create Indent
           </Button>
         }
       />
 
-      <DataGridShell>
+      <DataGridShell sx={{ width: '100%', maxWidth: '100%', minWidth: 0, overflow: 'hidden' }}>
         <DataGrid
           rows={rows}
           columns={columns}
@@ -172,6 +194,7 @@ export default function Indents() {
           columnHeaderHeight={48}
           sx={indentsGridSx}
           disableRowSelectionOnClick
+          disableColumnMenu
           pageSizeOptions={[25, 50]}
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
         />

@@ -3,6 +3,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Box, Button, TextField, IconButton, Typography, Grid, MenuItem,
   Table, TableHead, TableBody, TableRow, TableCell, Autocomplete, CircularProgress, Divider,
+  createFilterOptions,
 } from '@mui/material';
 import { Add, Delete, Close, Save, LibraryBooks } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
@@ -25,6 +26,7 @@ import CartonBoxDefaultsFields from './CartonBoxDefaultsFields';
 export { TRIM_CATEGORY_SUGGESTIONS, TRIM_UNIT_OPTIONS } from './trimConstants';
 
 const emptyProperty = () => ({ name: '', unit: '' });
+const filterPropertyOptions = createFilterOptions({ stringify: (o) => (typeof o === 'string' ? o : o.inputValue || o.title || '') });
 export const emptyTrimForm = () => ({
   name: '', category: '', default_unit: 'PCS', notes: '', properties: [],
   cartonDefaults: emptyCartonDefaults(),
@@ -199,36 +201,90 @@ export default function AddTrimModal({
               </Button>
             </Box>
             <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 1.5 }}>
-              Property name + unit (e.g. Width → CMS, Size → button dia., Garment Size → PI size, Number / Washes → no unit)
+              Pick a suggested type or type any custom name (e.g. Width → MM/CMS, Pantone, Finish).
+              Click Add Property for each extra type this trim needs.
             </Typography>
             {form.properties.length === 0 ? (
               <Box sx={{ p: 2, bgcolor: alpha(slate[200], 0.3), borderRadius: 1.5, textAlign: 'center' }}>
-                <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>No properties — optional</Typography>
+                <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                  No properties yet — click Add Property to define Width, Color, or any custom type
+                </Typography>
               </Box>
             ) : (
               <Table size="small" sx={{ border: `1px solid ${slate[200]}`, borderRadius: 1, tableLayout: 'fixed', width: '100%' }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: alpha(slate[900], 0.04) }}>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', width: '55%' }}>Property Name</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', width: '55%' }}>Property type</TableCell>
                     <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', width: '35%' }}>Unit</TableCell>
                     <TableCell width={48} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {form.properties.map((prop, idx) => (
+                  {form.properties.map((prop, idx) => {
+                    const usedNames = new Set(
+                      form.properties
+                        .map((p, i) => (i === idx ? '' : String(p.name || '').trim().toLowerCase()))
+                        .filter(Boolean),
+                    );
+                    const nameOptions = TRIM_PROPERTY_NAME_SUGGESTIONS.filter(
+                      (n) => !usedNames.has(n.toLowerCase()),
+                    );
+                    return (
                     <TableRow key={idx}>
                       <TableCell sx={{ py: 0.75 }}>
                         <Autocomplete
                           freeSolo
-                          options={TRIM_PROPERTY_NAME_SUGGESTIONS}
+                          selectOnFocus
+                          clearOnBlur
+                          handleHomeEndKeys
+                          options={nameOptions}
+                          filterOptions={(options, params) => {
+                            const filtered = filterPropertyOptions(options, params);
+                            const typed = normalizeTrimPropertyName(params.inputValue || '');
+                            if (
+                              typed
+                              && !options.some((o) => String(o).toLowerCase() === typed.toLowerCase())
+                              && !usedNames.has(typed.toLowerCase())
+                            ) {
+                              filtered.push({
+                                inputValue: typed,
+                                title: `Add custom type “${typed}”`,
+                              });
+                            }
+                            return filtered;
+                          }}
+                          getOptionLabel={(o) => {
+                            if (typeof o === 'string') return o;
+                            if (o?.inputValue) return o.inputValue;
+                            return o?.title || '';
+                          }}
                           value={prop.name}
-                          onInputChange={(_, v) => updateProperty(idx, 'name', v)}
+                          onChange={(_, v) => {
+                            const next = typeof v === 'string' ? v : (v?.inputValue || v?.title || '');
+                            updateProperty(idx, 'name', next);
+                          }}
+                          onInputChange={(_, v, reason) => {
+                            if (reason === 'input' || reason === 'clear') updateProperty(idx, 'name', v);
+                          }}
+                          renderOption={(props, option) => {
+                            const { key, ...rest } = props;
+                            if (option?.inputValue) {
+                              return (
+                                <Box component="li" key={key} {...rest} sx={{ fontWeight: 700, color: 'primary.main' }}>
+                                  {option.title}
+                                </Box>
+                              );
+                            }
+                            return (
+                              <Box component="li" key={key} {...rest}>{option}</Box>
+                            );
+                          }}
                           renderInput={(params) => (
                             <TextField
                               {...params}
                               size="small"
                               fullWidth
-                              placeholder="Width, Color, Microns, GSM…"
+                              placeholder="Width, Color, or type a new type…"
                               sx={noEllipsisFieldSx}
                             />
                           )}
@@ -245,7 +301,7 @@ export default function AddTrimModal({
                             value={prop.unit}
                             onInputChange={(_, v) => updateProperty(idx, 'unit', v)}
                             renderInput={(params) => (
-                              <TextField {...params} size="small" fullWidth placeholder="CMS, PCS…" sx={noEllipsisFieldSx} />
+                              <TextField {...params} size="small" fullWidth placeholder="MM, CMS, PCS…" sx={noEllipsisFieldSx} />
                             )}
                           />
                         )}
@@ -256,7 +312,8 @@ export default function AddTrimModal({
                         </IconButton>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

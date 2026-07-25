@@ -16,8 +16,10 @@ export const CARTON_BOX_PROPERTY_PRESETS = [
 ];
 
 export const TRIM_PROPERTY_NAME_SUGGESTIONS = [
-  'Width', 'Color', 'Grade', 'Quality', 'Size', 'Garment Size', 'Length', 'Microns', 'GSM',
-  'Number', 'Washes', 'Pcs/Box', 'PLY', 'Dimensions', 'Dim. Unit',
+  'Width', 'Color', 'Grade', 'Quality', 'Size', 'Garment Size', 'Length', 'Height', 'Thickness',
+  'Microns', 'GSM', 'Diameter', 'Number', 'Washes', 'Finish', 'Material', 'Chain Material',
+  'Zipper Type', 'Puller Type', 'Teeth', 'Shade', 'Pantone', 'Logo', 'Composition',
+  'Pcs/Box', 'PLY', 'Dimensions', 'Dim. Unit',
 ];
 
 export const TRIM_CATEGORY_SUGGESTIONS = [
