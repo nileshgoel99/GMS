@@ -26,7 +26,12 @@ import {
 } from '../utils/matchInventoryStock';
 import AddTrimModal from '../components/trims/AddTrimModal';
 import SupplierAutocomplete from '../components/suppliers/SupplierAutocomplete';
-import { formatTrimPropertyLabel, isGarmentSizeTrimProperty, isNumericTrimProperty } from '../components/trims/trimConstants';
+import {
+  formatTrimPropertyLabel,
+  formatTrimVariantDisplay,
+  isGarmentSizeTrimProperty,
+  isNumericTrimProperty,
+} from '../components/trims/trimConstants';
 
 // ── Print styles ─────────────────────────────────────────────────────────────
 const PRINT_STYLE = `
@@ -205,16 +210,6 @@ const InStockToggle = ({ checked, onToggle, stockQty, stockUnit }) => {
       ) : null}
     </Box>
   );
-};
-
-const formatTrimVariant = (row) => {
-  const pv = row.property_values || {};
-  const fromProps = Object.entries(pv)
-    .filter(([, v]) => v != null && String(v).trim())
-    .map(([k, v]) => `${k}: ${v}`)
-    .join(' · ');
-  if (fromProps) return fromProps;
-  return [row.color_variant, row.size_variant].filter(Boolean).join(' / ');
 };
 
 /** Trim-name Autocomplete filter — appends a "Create '<typed name>'" option when there's no match. */
@@ -1073,10 +1068,13 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
           {trimLines.filter((r) => r.trim_name).map((row, i) => {
             const parts = row.parts?.length ? row.parts : null;
             const supplierLabel = supplierLabelForTrim(row);
+            const trimSchema = row.trim
+              ? trimsList.find((t) => t.id === row.trim)
+              : trimsList.find((t) => String(t.name || '').toLowerCase() === String(row.trim_name || '').toLowerCase());
             return (
               <Box component="tr" key={`t${i}`}>
                 <Box component="td" sx={{ ...cellSx, textTransform: 'uppercase' }}>{row.trim_name}</Box>
-                <Box component="td" sx={cellSx}>{formatTrimVariant(row)}</Box>
+                <Box component="td" sx={cellSx}>{formatTrimVariantDisplay(row, trimSchema) || '—'}</Box>
                 <Box component="td" sx={{ ...cellSx, textAlign: 'center' }}>—</Box>
                 <Box component="td" sx={{ ...cellSx, textAlign: 'center' }}>—</Box>
                 <Box component="td" sx={{ ...cellSx, textAlign: 'right', whiteSpace: 'pre-line' }}>
@@ -2839,6 +2837,7 @@ export default function IndentEditorPage() {
           trimLines={trimLines}
           company={company}
           suppliers={suppliers}
+          trimsList={trimsList}
         />
       </Box>
     </Box>

@@ -112,6 +112,35 @@ export const formatTrimPropertyLabel = (prop) => {
   return prop?.unit ? `${prop.name} (${prop.unit})` : prop.name;
 };
 
+/** Resolve unit for a property name from trim master schema (case-insensitive). */
+export const findTrimPropertyUnit = (propName, properties = []) => {
+  const key = String(propName || '').trim().toLowerCase();
+  if (!key) return '';
+  const hit = (properties || []).find((p) => String(p?.name || '').trim().toLowerCase() === key);
+  return String(hit?.unit || '').trim();
+};
+
+/**
+ * COLOR / VARIANT text for indent print & view — includes property units (e.g. Width: 5 MM).
+ * trimSchema = TrimMaster row (or { properties }) when available.
+ */
+export const formatTrimVariantDisplay = (row, trimSchema = null) => {
+  const pv = row?.property_values || {};
+  const properties = trimSchema?.properties || [];
+  const entries = Object.entries(pv).filter(([, v]) => v != null && String(v).trim() !== '');
+  if (entries.length) {
+    return entries.map(([name, raw]) => {
+      const value = String(raw).trim();
+      const unit = findTrimPropertyUnit(name, properties);
+      if (unit && !new RegExp(`(^|\\s)${unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`, 'i').test(value)) {
+        return `${name}: ${value} ${unit}`;
+      }
+      return `${name}: ${value}`;
+    }).join(' · ');
+  }
+  return [row?.color_variant, row?.size_variant].filter(Boolean).join(' / ');
+};
+
 export const normalizeTrimPropertyName = (name) => {
   const trimmed = String(name || '').trim();
   if (/^(number|no\.?|#)$/i.test(trimmed)) return 'Number';

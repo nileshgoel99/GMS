@@ -9,18 +9,9 @@ import { alpha } from '@mui/material/styles';
 import { ordersAPI } from '../../services/api';
 import { slate } from '../../theme/appTheme';
 import { formatDateDisplay } from '../../utils/formatDate';
+import { formatTrimVariantDisplay } from '../trims/trimConstants';
 
 const STATUS_COLOR = { DRAFT: 'default', CONFIRMED: 'success' };
-
-const formatTrimVariant = (row) => {
-  const pv = row.property_values || {};
-  const fromProps = Object.entries(pv)
-    .filter(([, v]) => v != null && String(v).trim())
-    .map(([k, v]) => `${k}: ${v}`)
-    .join(' · ');
-  if (fromProps) return fromProps;
-  return [row.color_variant, row.size_variant].filter(Boolean).join(' / ') || '—';
-};
 
 const buildColorQty = (piLines) => {
   const map = {};
@@ -365,7 +356,15 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                               <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>{row.category}</Typography>
                             )}
                           </TableCell>
-                          <TableCell sx={viewCellSx('left')}>{formatTrimVariant(row)}</TableCell>
+                          <TableCell sx={viewCellSx('left')}>
+                            {formatTrimVariantDisplay(
+                              row,
+                              (row.trim && trimsMap[row.trim])
+                                || Object.values(trimsMap).find(
+                                  (t) => String(t.name || '').toLowerCase() === String(row.trim_name || '').toLowerCase(),
+                                ),
+                            ) || '—'}
+                          </TableCell>
                           <TableCell sx={viewCellSx('left')}>{supplierForTrim(row)}</TableCell>
                           {row.parts?.length ? (
                             <>
