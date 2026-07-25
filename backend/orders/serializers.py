@@ -595,12 +595,22 @@ class IndentListSerializer(serializers.ModelSerializer):
         po = obj.pi.buyer_pos.order_by('id').first()
         return po.po_number if po else None
 
+    def _selected_pi_lines(self, obj):
+        """PI lines linked to this indent (selected_pi_line_ids), or all PI lines if none set."""
+        qs = obj.pi.lines.all()
+        ids = obj.selected_pi_line_ids or []
+        if ids:
+            qs = qs.filter(id__in=ids)
+        return qs
+
     def get_item_name(self, obj):
-        names = list(obj.pi.lines.values_list('item_name', flat=True).distinct())
-        return ', '.join(names[:2]) + (f' +{len(names)-2} more' if len(names) > 2 else '')
+        names = list(self._selected_pi_lines(obj).values_list('item_name', flat=True).distinct())
+        if not names:
+            return ''
+        return ', '.join(names[:2]) + (f' +{len(names) - 2} more' if len(names) > 2 else '')
 
     def get_total_qty(self, obj):
-        return obj.pi.lines.aggregate(s=Sum('quantity_pcs'))['s'] or 0
+        return self._selected_pi_lines(obj).aggregate(s=Sum('quantity_pcs'))['s'] or 0
 
     def get_fabric_count(self, obj):
         return obj.fabric_lines.count()
