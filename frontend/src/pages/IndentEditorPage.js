@@ -1904,7 +1904,7 @@ export default function IndentEditorPage() {
             <TextField size="small" fullWidth label="Indent Number *" value={indentNumber}
               onChange={(e) => setIndentNumber(e.target.value)} sx={sxInput} />
           </Grid>
-          <Grid item xs={6} sm={4} md={2}>
+          <Grid item xs={6} sm={4} md={3}>
             <TextField size="small" fullWidth label="Date" type="date" value={indentDate}
               onChange={(e) => setIndentDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={sxInput} />
           </Grid>

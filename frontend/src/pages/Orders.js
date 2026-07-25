@@ -1,21 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Button,
   Typography,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Grid,
   IconButton,
   Chip,
   Tooltip,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { DataGrid } from '@mui/x-data-grid';
-import { Edit, Delete, Description, ReceiptLong, Visibility, Assignment } from '@mui/icons-material';
+import { Print, Visibility, Delete, Assignment } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
@@ -40,67 +33,10 @@ const STATUS_LABELS = {
   CANCELLED: 'Cancelled',
 };
 
-const EMPTY_PLANNING = {
-  buttons_required: 0,
-  buttons_type: '',
-  buttons_color: '',
-  thread_required: 0,
-  thread_color: '',
-  thread_type: '',
-  zippers_required: 0,
-  zippers_size: '',
-  zippers_color: '',
-  tapes_required: 0,
-  tapes_type: '',
-  tapes_color: '',
-  polybags_required: 0,
-  polybags_size: '',
-  fabric_required: 0,
-  fabric_type: '',
-  fabric_color: '',
-  labels_required: 0,
-  labels_type: '',
-  notes: '',
-};
-
-/** Map API planning sheet payload to dialog form state (API may include id, pi, decimals, nulls). */
-const mapPlanningFromApi = (data) => {
-  if (!data || typeof data !== 'object') {
-    return { ...EMPTY_PLANNING };
-  }
-  const n = (v, fallback = 0) => (v == null || v === '' ? fallback : v);
-  const s = (v) => (v == null ? '' : String(v));
-  return {
-    buttons_required: n(data.buttons_required, 0),
-    buttons_type: s(data.buttons_type),
-    buttons_color: s(data.buttons_color),
-    thread_required: n(data.thread_required, 0),
-    thread_color: s(data.thread_color),
-    thread_type: s(data.thread_type),
-    zippers_required: n(data.zippers_required, 0),
-    zippers_size: s(data.zippers_size),
-    zippers_color: s(data.zippers_color),
-    tapes_required: n(data.tapes_required, 0),
-    tapes_type: s(data.tapes_type),
-    tapes_color: s(data.tapes_color),
-    polybags_required: n(data.polybags_required, 0),
-    polybags_size: s(data.polybags_size),
-    fabric_required: n(data.fabric_required, 0),
-    fabric_type: s(data.fabric_type),
-    fabric_color: s(data.fabric_color),
-    labels_required: n(data.labels_required, 0),
-    labels_type: s(data.labels_type),
-    notes: s(data.notes),
-  };
-};
-
 const Orders = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [openPlanningDialog, setOpenPlanningDialog] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [planningData, setPlanningData] = useState(() => ({ ...EMPTY_PLANNING }));
   const [viewPoId, setViewPoId] = useState(null);
 
   useEffect(() => {
@@ -130,31 +66,6 @@ const Orders = () => {
         console.error('Error deleting order:', error);
         alert('Error deleting order');
       }
-    }
-  };
-
-  const handleOpenPlanning = async (order) => {
-    setSelectedOrder(order);
-    try {
-      const response = await ordersAPI.getPlanningSheet(order.id);
-      setPlanningData(mapPlanningFromApi(response.data));
-    } catch (e) {
-      if (e?.response?.status && e.response.status !== 404) {
-        console.error('Planning sheet load error:', e);
-      }
-      setPlanningData({ ...EMPTY_PLANNING });
-    }
-    setOpenPlanningDialog(true);
-  };
-
-  const handleSavePlanning = async () => {
-    try {
-      await ordersAPI.updatePlanningSheet(selectedOrder.id, planningData);
-      alert('Planning sheet saved successfully');
-      setOpenPlanningDialog(false);
-    } catch (error) {
-      console.error('Error saving planning sheet:', error);
-      alert('Error saving planning sheet');
     }
   };
 
@@ -324,8 +235,8 @@ const Orders = () => {
     {
       field: 'actions',
       headerName: 'Actions',
-      minWidth: 132,
-      flex: 0.55,
+      minWidth: 120,
+      flex: 0.45,
       sortable: false,
       align: 'center',
       headerAlign: 'center',
@@ -334,7 +245,7 @@ const Orders = () => {
           (
             <Tooltip key="view" title="View / Print PI">
               <IconButton size="small" color="primary" sx={actionBtnSx} onClick={() => navigate(`/orders/pi/${params.row.id}/view`)}>
-                <Edit />
+                <Print />
               </IconButton>
             </Tooltip>
           ),
@@ -360,20 +271,6 @@ const Orders = () => {
               </IconButton>
             </Tooltip>
           ) : null,
-          params.row.linked_po_id ? (
-            <Tooltip key="regen-pi" title="Edit / Re-generate PI">
-              <IconButton size="small" sx={{ ...actionBtnSx, color: '#0f766e' }} onClick={() => navigate(`/buyer-pos/${params.row.linked_po_id}/generate-pi`)}>
-                <ReceiptLong />
-              </IconButton>
-            </Tooltip>
-          ) : null,
-          (
-            <Tooltip key="planning" title="Planning sheet">
-              <IconButton size="small" color="primary" sx={actionBtnSx} onClick={() => handleOpenPlanning(params.row)}>
-                <Description />
-              </IconButton>
-            </Tooltip>
-          ),
           (
             <Tooltip key="delete" title="Delete">
               <IconButton size="small" color="error" sx={actionBtnSx} onClick={() => handleDelete(params.row.id)}>
@@ -386,8 +283,8 @@ const Orders = () => {
         return cell('center',
           <Box
             sx={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 32px)',
+              display: 'flex',
+              flexWrap: 'wrap',
               gap: 0.35,
               justifyContent: 'center',
               width: '100%',
@@ -429,148 +326,6 @@ const Orders = () => {
           sx={{ ...piGridSx, width: '100%', border: 'none' }}
         />
       </DataGridShell>
-
-      <Dialog open={openPlanningDialog} onClose={() => setOpenPlanningDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Planning sheet — {selectedOrder?.pi_number}</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
-                Buttons
-              </Typography>
-            </Grid>
-            <Grid item xs={4}>
-              <TextField
-                fullWidth
-                label="Quantity required"
-                type="number"
-                value={planningData.buttons_required}
-                onChange={(e) => setPlanningData({ ...planningData, buttons_required: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={4}>
-              <TextField
-                fullWidth
-                label="Type"
-                value={planningData.buttons_type}
-                onChange={(e) => setPlanningData({ ...planningData, buttons_type: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={4}>
-              <TextField
-                fullWidth
-                label="Color"
-                value={planningData.buttons_color}
-                onChange={(e) => setPlanningData({ ...planningData, buttons_color: e.target.value })}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
-                Thread
-              </Typography>
-            </Grid>
-            <Grid item xs={4}>
-              <TextField
-                fullWidth
-                label="Quantity required"
-                type="number"
-                value={planningData.thread_required}
-                onChange={(e) => setPlanningData({ ...planningData, thread_required: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={4}>
-              <TextField
-                fullWidth
-                label="Type"
-                value={planningData.thread_type}
-                onChange={(e) => setPlanningData({ ...planningData, thread_type: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={4}>
-              <TextField
-                fullWidth
-                label="Color"
-                value={planningData.thread_color}
-                onChange={(e) => setPlanningData({ ...planningData, thread_color: e.target.value })}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
-                Zippers
-              </Typography>
-            </Grid>
-            <Grid item xs={4}>
-              <TextField
-                fullWidth
-                label="Quantity required"
-                type="number"
-                value={planningData.zippers_required}
-                onChange={(e) => setPlanningData({ ...planningData, zippers_required: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={4}>
-              <TextField
-                fullWidth
-                label="Size"
-                value={planningData.zippers_size}
-                onChange={(e) => setPlanningData({ ...planningData, zippers_size: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={4}>
-              <TextField
-                fullWidth
-                label="Color"
-                value={planningData.zippers_color}
-                onChange={(e) => setPlanningData({ ...planningData, zippers_color: e.target.value })}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
-                Polybags
-              </Typography>
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                fullWidth
-                label="Quantity required"
-                type="number"
-                value={planningData.polybags_required}
-                onChange={(e) => setPlanningData({ ...planningData, polybags_required: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                fullWidth
-                label="Size"
-                value={planningData.polybags_size}
-                onChange={(e) => setPlanningData({ ...planningData, polybags_size: e.target.value })}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Notes"
-                multiline
-                rows={3}
-                value={planningData.notes}
-                onChange={(e) => setPlanningData({ ...planningData, notes: e.target.value })}
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenPlanningDialog(false)} color="inherit">
-            Cancel
-          </Button>
-          <Button onClick={handleSavePlanning} variant="contained">
-            Save planning sheet
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Buyer PO detail modal (view-only) */}
       {viewPoId != null && (

@@ -228,7 +228,7 @@ export default function Indents() {
     {
       field: 'indent_date',
       headerName: 'Date',
-      width: 88,
+      width: 120,
       renderCell: (p) => cell('left',
         <Typography sx={{ ...cellTextSx, color: 'text.secondary' }}>{formatDateDisplay(p.value)}</Typography>
       ),
