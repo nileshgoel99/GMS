@@ -96,6 +96,8 @@ export default function SupplierAutocomplete({
       options={sortedSuppliers}
       value={selected}
       inputValue={inputValue}
+      disableClearable={!!compact}
+      forcePopupIcon={!compact}
       onInputChange={(_, v, reason) => {
         if (reason === 'reset' && selected) {
           setInputValue(selected.name || '');
@@ -221,18 +223,30 @@ export default function SupplierAutocomplete({
             maxRows={compact ? 3 : undefined}
             InputProps={{
               ...params.InputProps,
-              endAdornment: (
-                <>
-                  {creating ? <CircularProgress color="inherit" size={16} /> : null}
-                  {params.InputProps.endAdornment}
-                </>
-              ),
+              endAdornment: compact
+                ? (creating ? <CircularProgress color="inherit" size={16} sx={{ mr: 1 }} /> : null)
+                : (
+                  <>
+                    {creating ? <CircularProgress color="inherit" size={16} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
             }}
             inputProps={{
               ...params.inputProps,
               title: selected?.name || inputValue || '',
             }}
-            sx={textFieldSx}
+            sx={[
+              compact && {
+                '& .MuiInputBase-root': { pr: '10px !important' },
+                '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': {
+                  WebkitAppearance: 'none',
+                  margin: 0,
+                },
+                '& input[type=number]': { MozAppearance: 'textfield' },
+              },
+              textFieldSx,
+            ]}
             {...restTextFieldProps}
           />
         );

@@ -375,12 +375,8 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                               <TableCell sx={{ ...viewCellSx('center'), fontWeight: 600, whiteSpace: 'pre-line' }}>
                                 {row.parts.map((p) => val(p.unit)).join('\n')}
                               </TableCell>
-                              <TableCell sx={{ ...viewCellSx('right'), fontWeight: 700, whiteSpace: 'pre-line' }}>
-                                {row.parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${val(p.total_consumption)}`).join('\n')}
-                              </TableCell>
-                              <TableCell sx={{ ...viewCellSx('center'), fontWeight: 600, whiteSpace: 'pre-line' }}>
-                                {row.parts.map((p) => val(p.total_unit || p.unit)).join('\n')}
-                              </TableCell>
+                              <TableCell sx={viewCellSx('right')}>—</TableCell>
+                              <TableCell sx={viewCellSx('center')}>—</TableCell>
                             </>
                           ) : (
                             <>

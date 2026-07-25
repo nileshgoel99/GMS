@@ -122,6 +122,34 @@ const emptyTrim = () => ({
   parts: [],
 });
 
+/** Normalize Hook/Loop (multi-part) payload from API so edit always restores rows. */
+const normalizeTrimParts = (raw) => {
+  let parts = raw;
+  if (typeof parts === 'string') {
+    try { parts = JSON.parse(parts); } catch { return []; }
+  }
+  if (!Array.isArray(parts) || !parts.length) return [];
+  return parts.map((p, idx) => ({
+    label: p?.label != null && String(p.label).trim() ? String(p.label) : (idx === 0 ? 'Hook' : idx === 1 ? 'Loop' : `Part ${idx + 1}`),
+    consumption_per_pc: p?.consumption_per_pc != null && p.consumption_per_pc !== '' ? String(p.consumption_per_pc) : '',
+    unit: p?.unit || 'MTRS',
+    total_consumption: p?.total_consumption != null && p.total_consumption !== '' ? String(p.total_consumption) : '',
+    total_unit: p?.total_unit || p?.unit || 'MTRS',
+  }));
+};
+
+const mapApiTrimLine = (r) => ({
+  ...emptyTrim(),
+  ...r,
+  property_values: r.property_values || {},
+  parts: normalizeTrimParts(r.parts),
+  supplier: r.supplier ?? null,
+  supplier_name: r.supplier_name || '',
+  supplier_country: r.supplier_country || '',
+  consumption_per_pc: r.consumption_per_pc != null && r.consumption_per_pc !== '' ? String(r.consumption_per_pc) : '',
+  total_consumption: r.total_consumption != null && r.total_consumption !== '' ? String(r.total_consumption) : '',
+});
+
 const asInventoryList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 
 const fmtStockQty = (v) => {
@@ -700,8 +728,7 @@ const supplierFieldSx = {
     minHeight: SUPPLIER_FIELD_MIN_H,
     height: 'auto !important',
     py: '8px !important',
-    pl: '10px !important',
-    pr: '36px !important',
+    px: '10px !important',
   },
   '& .MuiAutocomplete-inputRoot': {
     height: 'auto !important',
@@ -725,11 +752,7 @@ const supplierFieldSx = {
     resize: 'none',
     boxSizing: 'border-box',
   },
-  '& .MuiAutocomplete-endAdornment': {
-    top: '50%',
-    transform: 'translateY(-50%)',
-    right: 4,
-  },
+  '& .MuiAutocomplete-endAdornment': { display: 'none' },
 };
 
 const trimPropFieldSx = (align = 'left') => ({
@@ -1408,7 +1431,7 @@ export default function IndentEditorPage() {
               ? data.fabric_lines.map((r) => enrichFabricRowGsm({ ...emptyFabric(), ...r }))
               : [emptyFabric()],
           );
-          setTrimLines(data.trim_lines?.length ? data.trim_lines.map((r) => ({ ...emptyTrim(), ...r, property_values: r.property_values || {}, parts: r.parts || [] })) : [emptyTrim()]);
+          setTrimLines(data.trim_lines?.length ? data.trim_lines.map(mapApiTrimLine) : [emptyTrim()]);
           setSelectedLineIds(data.selected_pi_line_ids?.length ? data.selected_pi_line_ids : []);
 
           const piData = piFromIndentData(data);
@@ -1446,7 +1469,7 @@ export default function IndentEditorPage() {
             setFabricLines(tmpl.fabric_lines.map((r) => enrichFabricRowGsm({ ...emptyFabric(), ...r })));
           }
           if (tmpl.trim_lines?.length) {
-            setTrimLines(tmpl.trim_lines.map((r) => ({ ...emptyTrim(), ...r, property_values: r.property_values || {}, parts: r.parts || [] })));
+            setTrimLines(tmpl.trim_lines.map(mapApiTrimLine));
           }
           setAutoFilled(true);
           break;
@@ -1721,6 +1744,9 @@ export default function IndentEditorPage() {
         res = await ordersAPI.updateIndent(id, payload);
         setIndent(res.data);
         setStatus(res.data.status);
+        if (res.data.trim_lines?.length) {
+          setTrimLines(res.data.trim_lines.map(mapApiTrimLine));
+        }
         if (res.data.linked_trims?.length) {
           setTrimsList((prev) => {
             const merged = [...prev];
@@ -2539,11 +2565,9 @@ export default function IndentEditorPage() {
                           <TableCell colSpan={4} sx={{ ...bodyCell('left'), verticalAlign: 'top' }}>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, width: '100%', py: 0.75 }}>
                               <Box sx={{ display: 'flex', gap: 0.75, px: 0.25 }}>
-                                <Typography sx={{ ...trimPartColHeadSx, width: 72 }}>Part</Typography>
-                                <Typography sx={{ ...trimPartColHeadSx, flex: 1.3, textAlign: 'right' }}>Cons./pc</Typography>
-                                <Typography sx={{ ...trimPartColHeadSx, width: 70, textAlign: 'center' }}>Unit</Typography>
-                                <Typography sx={{ ...trimPartColHeadSx, flex: 1.5, textAlign: 'right' }}>Total</Typography>
-                                <Typography sx={{ ...trimPartColHeadSx, width: 70, textAlign: 'center' }}>Tot. Unit</Typography>
+                                <Typography sx={{ ...trimPartColHeadSx, width: 88 }}>Part</Typography>
+                                <Typography sx={{ ...trimPartColHeadSx, flex: 1.4, textAlign: 'right' }}>Cons./pc</Typography>
+                                <Typography sx={{ ...trimPartColHeadSx, width: 80, textAlign: 'center' }}>Unit</Typography>
                                 <Box sx={{ width: 28, flexShrink: 0 }} />
                               </Box>
                               {row.parts.map((part, pIdx) => (
@@ -2551,21 +2575,13 @@ export default function IndentEditorPage() {
                                   <TextField size="small" value={part.label}
                                     onChange={(e) => setTrimPartField(i, pIdx, 'label', e.target.value)}
                                     placeholder="Hook"
-                                    sx={{ ...bomFieldSx('left'), width: 72, flexShrink: 0 }} />
+                                    sx={{ ...bomFieldSx('left'), width: 88, flexShrink: 0 }} />
                                   <TextField size="small" type="number" value={part.consumption_per_pc}
                                     onChange={(e) => setTrimPartField(i, pIdx, 'consumption_per_pc', e.target.value)}
-                                    inputProps={{ step: '0.0001', min: '0' }} sx={{ ...bomConsFieldSx('right'), flex: 1.3 }} />
+                                    inputProps={{ step: '0.0001', min: '0' }} sx={{ ...bomConsFieldSx('right'), flex: 1.4 }} />
                                   <TextField size="small" select value={part.unit}
                                     onChange={(e) => setTrimPartField(i, pIdx, 'unit', e.target.value)}
-                                    sx={{ ...bomFieldSx('center'), width: 70, flexShrink: 0 }}>
-                                    {UNITS.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
-                                  </TextField>
-                                  <TextField size="small" value={part.total_consumption}
-                                    onChange={(e) => setTrimPartField(i, pIdx, 'total_consumption', e.target.value)}
-                                    sx={{ ...bomTotalFieldSx('right'), flex: 1.5 }} />
-                                  <TextField size="small" select value={part.total_unit || part.unit}
-                                    onChange={(e) => setTrimPartField(i, pIdx, 'total_unit', e.target.value)}
-                                    sx={{ ...bomFieldSx('center'), width: 70, flexShrink: 0 }}>
+                                    sx={{ ...bomFieldSx('center'), width: 80, flexShrink: 0 }}>
                                     {UNITS.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
                                   </TextField>
                                   <IconButton size="small" color="error" onClick={() => removeTrimPart(i, pIdx)} sx={{ width: 28, flexShrink: 0 }}>
@@ -2573,14 +2589,11 @@ export default function IndentEditorPage() {
                                   </IconButton>
                                 </Box>
                               ))}
-                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.25 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.25 }}>
                                 <Button size="small" onClick={() => addTrimPart(i)}
                                   sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'none', p: 0, minWidth: 0 }}>
                                   + Add part
                                 </Button>
-                                <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: slate[600] }}>
-                                  Total: {row.total_consumption || '0'} {row.total_unit || row.unit}
-                                </Typography>
                               </Box>
                             </Box>
                           </TableCell>

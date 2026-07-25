@@ -17,6 +17,7 @@ import {
   normalizeTrimPropertyName,
   applyCartonBoxCategoryToForm,
   defaultValuesFromCartonBox,
+  cartonBoxFromDefaultValues,
   emptyCartonDefaults,
 } from './trimConstants';
 import CartonBoxDefaultsFields from './CartonBoxDefaultsFields';
@@ -29,24 +30,52 @@ export const emptyTrimForm = () => ({
   cartonDefaults: emptyCartonDefaults(),
 });
 
+const noEllipsisFieldSx = {
+  '& .MuiInputBase-input, & input': {
+    textOverflow: 'clip',
+    overflow: 'visible',
+    whiteSpace: 'normal',
+  },
+};
+
 export default function AddTrimModal({
-  open, onClose, onSaved, initialName = '', initialCategory = '', initialUnit = '',
+  open,
+  onClose,
+  onSaved,
+  editing = null,
+  initialName = '',
+  initialCategory = '',
+  initialUnit = '',
 }) {
   const [form, setForm] = useState(emptyTrimForm());
   const [saving, setSaving] = useState(false);
   const wasOpen = useRef(false);
+  const isEdit = Boolean(editing?.id);
 
   useEffect(() => {
     if (open && !wasOpen.current) {
-      setForm({
-        ...emptyTrimForm(),
-        name: (initialName || '').toUpperCase(),
-        category: initialCategory || '',
-        default_unit: initialUnit || 'PCS',
-      });
+      if (editing) {
+        setForm({
+          name: (editing.name || '').toUpperCase(),
+          category: editing.category || '',
+          default_unit: editing.default_unit || 'PCS',
+          notes: editing.notes || '',
+          properties: (editing.properties || []).map((p) => ({ name: p.name || '', unit: p.unit || '' })),
+          cartonDefaults: isCartonBoxCategory(editing.category)
+            ? cartonBoxFromDefaultValues(editing.default_property_values || {})
+            : emptyCartonDefaults(),
+        });
+      } else {
+        setForm({
+          ...emptyTrimForm(),
+          name: (initialName || '').toUpperCase(),
+          category: initialCategory || '',
+          default_unit: initialUnit || 'PCS',
+        });
+      }
     }
     wasOpen.current = open;
-  }, [open, initialName, initialCategory, initialUnit]);
+  }, [open, editing, initialName, initialCategory, initialUnit]);
 
   const handleClose = () => {
     if (!saving) {
@@ -90,16 +119,20 @@ export default function AddTrimModal({
       ? defaultValuesFromCartonBox(form.cartonDefaults)
       : {};
 
+    const payload = {
+      name: form.name,
+      category: form.category,
+      default_unit: form.default_unit,
+      notes: form.notes,
+      properties,
+      default_property_values,
+    };
+
     setSaving(true);
     try {
-      const res = await ordersAPI.createTrim({
-        name: form.name,
-        category: form.category,
-        default_unit: form.default_unit,
-        notes: form.notes,
-        properties,
-        default_property_values,
-      });
+      const res = isEdit
+        ? await ordersAPI.updateTrim(editing.id, payload)
+        : await ordersAPI.createTrim(payload);
       onSaved?.(res.data);
       setForm(emptyTrimForm());
       onClose();
@@ -112,10 +145,19 @@ export default function AddTrimModal({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      maxWidth="md"
+      fullWidth
+      scroll="paper"
+      PaperProps={{ sx: { borderRadius: 2, maxHeight: '92vh' } }}
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
         <LibraryBooks sx={{ color: 'primary.main' }} />
-        <Typography sx={{ fontWeight: 800, flex: 1 }}>Add New Trim to Library</Typography>
+        <Typography sx={{ fontWeight: 800, flex: 1 }}>
+          {isEdit ? 'Edit Trim' : 'Add New Trim to Library'}
+        </Typography>
         <IconButton size="small" onClick={handleClose} disabled={saving}><Close /></IconButton>
       </DialogTitle>
       <Divider />
@@ -127,6 +169,7 @@ export default function AddTrimModal({
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value.toUpperCase() }))}
               placeholder="e.g. 5 CM WIDE REFLECTIVE TAPE D6101"
+              sx={noEllipsisFieldSx}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -135,7 +178,9 @@ export default function AddTrimModal({
               options={TRIM_CATEGORY_SUGGESTIONS}
               value={form.category}
               onInputChange={(_, v) => handleCategoryChange(v)}
-              renderInput={(params) => <TextField {...params} size="small" fullWidth label="Category" />}
+              renderInput={(params) => (
+                <TextField {...params} size="small" fullWidth label="Category" sx={noEllipsisFieldSx} />
+              )}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -161,12 +206,12 @@ export default function AddTrimModal({
                 <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>No properties — optional</Typography>
               </Box>
             ) : (
-              <Table size="small" sx={{ border: `1px solid ${slate[200]}`, borderRadius: 1 }}>
+              <Table size="small" sx={{ border: `1px solid ${slate[200]}`, borderRadius: 1, tableLayout: 'fixed', width: '100%' }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: alpha(slate[900], 0.04) }}>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Property Name</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Unit</TableCell>
-                    <TableCell width={40} />
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', width: '55%' }}>Property Name</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', width: '35%' }}>Unit</TableCell>
+                    <TableCell width={48} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -179,7 +224,13 @@ export default function AddTrimModal({
                           value={prop.name}
                           onInputChange={(_, v) => updateProperty(idx, 'name', v)}
                           renderInput={(params) => (
-                            <TextField {...params} size="small" fullWidth placeholder="Width, Color, Microns, GSM…" />
+                            <TextField
+                              {...params}
+                              size="small"
+                              fullWidth
+                              placeholder="Width, Color, Microns, GSM…"
+                              sx={noEllipsisFieldSx}
+                            />
                           )}
                         />
                       </TableCell>
@@ -193,7 +244,9 @@ export default function AddTrimModal({
                             options={TRIM_UNIT_OPTIONS}
                             value={prop.unit}
                             onInputChange={(_, v) => updateProperty(idx, 'unit', v)}
-                            renderInput={(params) => <TextField {...params} size="small" placeholder="CMS, PCS…" />}
+                            renderInput={(params) => (
+                              <TextField {...params} size="small" fullWidth placeholder="CMS, PCS…" sx={noEllipsisFieldSx} />
+                            )}
                           />
                         )}
                       </TableCell>
@@ -230,7 +283,7 @@ export default function AddTrimModal({
         <Button variant="contained" onClick={handleSave} disabled={saving}
           startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <Save />}
           sx={{ fontWeight: 800, textTransform: 'none', px: 3 }}>
-          {saving ? 'Saving…' : 'Save & Use Trim'}
+          {saving ? 'Saving…' : isEdit ? 'Save Trim' : 'Save & Use Trim'}
         </Button>
       </DialogActions>
     </Dialog>

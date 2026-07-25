@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Box, Button, Typography, TextField, IconButton, Chip, Drawer,
-  Grid, MenuItem, Tooltip, Divider, CircularProgress, Autocomplete,
-  Table, TableHead, TableBody, TableRow, TableCell,
+  Box, Button, Typography, TextField, IconButton, Chip, Tooltip,
 } from '@mui/material';
-import { Add, Edit, Delete, Close, Save, LibraryBooks } from '@mui/icons-material';
+import { Add, Edit, Delete, LibraryBooks } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { DataGrid } from '@mui/x-data-grid';
 import PageHeader from '../components/PageHeader';
@@ -12,37 +10,20 @@ import DataGridShell from '../components/DataGridShell';
 import { dataGridSx, slate } from '../theme/appTheme';
 import { ordersAPI } from '../services/api';
 import {
-  TRIM_PROPERTY_NAME_SUGGESTIONS,
-  TRIM_CATEGORY_SUGGESTIONS,
-  TRIM_UNIT_OPTIONS as UNIT_OPTIONS,
-  isNumericTrimProperty,
   isCartonBoxCategory,
-  normalizeTrimPropertyName,
   formatTrimPropertyLabel,
-  applyCartonBoxCategoryToForm,
-  defaultValuesFromCartonBox,
-  cartonBoxFromDefaultValues,
-  emptyCartonDefaults,
   formatCartonBoxSummary,
 } from '../components/trims/trimConstants';
-import CartonBoxDefaultsFields from '../components/trims/CartonBoxDefaultsFields';
-
-const emptyProperty = () => ({ name: '', unit: '' });
-const emptyForm = () => ({
-  name: '', category: '', default_unit: 'PCS', notes: '', properties: [],
-  cartonDefaults: emptyCartonDefaults(),
-});
+import AddTrimModal from '../components/trims/AddTrimModal';
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 
 export default function TrimsLibraryPage() {
-  const [rows, setRows]         = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [drawerOpen, setDrawer] = useState(false);
-  const [editing, setEditing]   = useState(null);
-  const [form, setForm]         = useState(emptyForm());
-  const [saving, setSaving]     = useState(false);
-  const [search, setSearch]     = useState('');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const initialLoadDone = useRef(false);
 
@@ -67,79 +48,9 @@ export default function TrimsLibraryPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const openNew = () => { setEditing(null); setForm(emptyForm()); setDrawer(true); };
-
-  const openEdit = (row) => {
-    setEditing(row);
-    setForm({
-      name: row.name,
-      category: row.category || '',
-      default_unit: row.default_unit || 'PCS',
-      notes: row.notes || '',
-      properties: (row.properties || []).map((p) => ({ name: p.name || '', unit: p.unit || '' })),
-      cartonDefaults: isCartonBoxCategory(row.category)
-        ? cartonBoxFromDefaultValues(row.default_property_values || {})
-        : emptyCartonDefaults(),
-    });
-    setDrawer(true);
-  };
-
-  const addProperty = () => setForm((f) => ({ ...f, properties: [...f.properties, emptyProperty()] }));
-
-  const updateProperty = (idx, field, value) => {
-    setForm((f) => {
-      const props = [...f.properties];
-      const next = { ...props[idx], [field]: value };
-      if (field === 'name') {
-        next.name = normalizeTrimPropertyName(value);
-        if (isNumericTrimProperty(next.name)) next.unit = '';
-      }
-      props[idx] = next;
-      return { ...f, properties: props };
-    });
-  };
-
-  const removeProperty = (idx) => {
-    setForm((f) => ({ ...f, properties: f.properties.filter((_, i) => i !== idx) }));
-  };
-
-  const handleCategoryChange = (category) => {
-    setForm((f) => applyCartonBoxCategoryToForm({ ...f, category }));
-  };
-
-  const handleSave = async () => {
-    if (!form.name.trim()) { alert('Trim name is required.'); return; }
-    const properties = form.properties
-      .filter((p) => p.name.trim())
-      .map((p) => ({ name: p.name.trim(), unit: (p.unit || '').trim() }));
-    const default_property_values = isCartonBoxCategory(form.category)
-      ? defaultValuesFromCartonBox(form.cartonDefaults)
-      : {};
-
-    setSaving(true);
-    try {
-      const payload = {
-        name: form.name,
-        category: form.category,
-        default_unit: form.default_unit,
-        notes: form.notes,
-        properties,
-        default_property_values,
-      };
-      if (editing) {
-        await ordersAPI.updateTrim(editing.id, payload);
-      } else {
-        await ordersAPI.createTrim(payload);
-      }
-      setDrawer(false);
-      load();
-    } catch (e) {
-      const msg = e.response?.data ? JSON.stringify(e.response.data) : e.message;
-      alert('Save failed: ' + msg);
-    } finally {
-      setSaving(false);
-    }
-  };
+  const openNew = () => { setEditing(null); setModalOpen(true); };
+  const openEdit = (row) => { setEditing(row); setModalOpen(true); };
+  const closeModal = () => { setModalOpen(false); setEditing(null); };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this trim? This won\'t affect existing indents.')) return;
@@ -257,7 +168,6 @@ export default function TrimsLibraryPage() {
   return (
     <Box
       sx={{
-        // Fill viewport under app toolbar + layout padding so only the grid scrolls
         height: {
           xs: 'calc(100dvh - 68px - 32px)',
           sm: 'calc(100dvh - 76px - 48px)',
@@ -315,167 +225,12 @@ export default function TrimsLibraryPage() {
         />
       </DataGridShell>
 
-      <Drawer
-        anchor="right"
-        open={drawerOpen}
-        onClose={() => setDrawer(false)}
-        ModalProps={{ keepMounted: false }}
-        PaperProps={{
-          sx: {
-            width: { xs: '100vw', sm: 480 },
-            maxWidth: '100%',
-            height: '100%',
-            maxHeight: '100dvh',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          },
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', px: 3, pt: 3, pb: 2, flexShrink: 0 }}>
-          <Typography sx={{ fontWeight: 800, fontSize: '1.1rem', flex: 1 }}>
-            {editing ? 'Edit Trim' : 'Add New Trim'}
-          </Typography>
-          <IconButton onClick={() => setDrawer(false)}><Close /></IconButton>
-        </Box>
-        <Divider sx={{ flexShrink: 0 }} />
-        <Box
-          sx={{
-            flex: 1,
-            minHeight: 0,
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            overscrollBehavior: 'contain',
-            WebkitOverflowScrolling: 'touch',
-            px: 3,
-            py: 3,
-          }}
-        >
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth size="small" label="Trim Name *"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value.toUpperCase() }))}
-                placeholder="e.g. 5 CM WIDE REFLECTIVE TAPE D6101"
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Autocomplete
-                freeSolo
-                options={TRIM_CATEGORY_SUGGESTIONS}
-                value={form.category}
-                onInputChange={(_, v) => handleCategoryChange(v)}
-                renderInput={(params) => <TextField {...params} size="small" fullWidth label="Category" />}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth size="small" select label="Default Consumption Unit"
-                value={form.default_unit}
-                onChange={(e) => setForm((f) => ({ ...f, default_unit: e.target.value }))}>
-                {UNIT_OPTIONS.filter(Boolean).map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
-              </TextField>
-            </Grid>
-
-            {/* Properties builder */}
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-                <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', flex: 1 }}>Properties</Typography>
-                <Button size="small" startIcon={<Add />} onClick={addProperty} sx={{ textTransform: 'none', fontWeight: 700 }}>
-                  Add Property
-                </Button>
-              </Box>
-              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 1.5 }}>
-                Define property names and units (e.g. Width → CMS, Size → button dia., Garment Size → PI size, Number / Washes → no unit)
-              </Typography>
-              {form.properties.length === 0 ? (
-                <Box sx={{ p: 2, bgcolor: alpha(slate[200], 0.3), borderRadius: 1.5, textAlign: 'center' }}>
-                  <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>No properties yet — click Add Property</Typography>
-                </Box>
-              ) : (
-                <Table size="small" sx={{ border: `1px solid ${slate[200]}`, borderRadius: 1 }}>
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: alpha(slate[900], 0.04) }}>
-                      <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Property Name</TableCell>
-                      <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Unit</TableCell>
-                      <TableCell width={40} />
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {form.properties.map((prop, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell sx={{ py: 0.75 }}>
-                          <Autocomplete
-                            freeSolo
-                            options={TRIM_PROPERTY_NAME_SUGGESTIONS}
-                            value={prop.name}
-                            onInputChange={(_, v) => updateProperty(idx, 'name', v)}
-                            renderInput={(params) => (
-                              <TextField {...params} size="small" fullWidth placeholder="Width, Color, Microns, GSM…" />
-                            )}
-                          />
-                        </TableCell>
-                        <TableCell sx={{ py: 0.75 }}>
-                          {isNumericTrimProperty(prop.name) ? (
-                            <TextField size="small" fullWidth disabled value="—"
-                              helperText="Numeric only" FormHelperTextProps={{ sx: { mx: 0, fontSize: '0.65rem' } }} />
-                          ) : (
-                            <Autocomplete
-                              freeSolo
-                              options={UNIT_OPTIONS}
-                              value={prop.unit}
-                              onInputChange={(_, v) => updateProperty(idx, 'unit', v)}
-                              renderInput={(params) => <TextField {...params} size="small" placeholder="e.g. CMS, PCS" />}
-                            />
-                          )}
-                        </TableCell>
-                        <TableCell sx={{ py: 0.75 }}>
-                          <IconButton size="small" color="error" onClick={() => removeProperty(idx)}>
-                            <Delete fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </Grid>
-
-            {isCartonBoxCategory(form.category) && (
-              <Grid item xs={12}>
-                <CartonBoxDefaultsFields values={form.cartonDefaults} onChange={(cartonDefaults) => setForm((f) => ({ ...f, cartonDefaults }))} />
-              </Grid>
-            )}
-
-            <Grid item xs={12}>
-              <TextField fullWidth size="small" multiline minRows={2} label="Notes"
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
-            </Grid>
-          </Grid>
-        </Box>
-
-        <Box
-          sx={{
-            flexShrink: 0,
-            px: 3,
-            py: 2,
-            borderTop: `1px solid ${slate[200]}`,
-            display: 'flex',
-            gap: 1.5,
-            bgcolor: 'background.paper',
-          }}
-        >
-          <Button fullWidth variant="outlined" onClick={() => setDrawer(false)} sx={{ textTransform: 'none', fontWeight: 700 }}>
-            Cancel
-          </Button>
-          <Button fullWidth variant="contained" onClick={handleSave} disabled={saving}
-            startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <Save />}
-            sx={{ textTransform: 'none', fontWeight: 800 }}>
-            {saving ? 'Saving…' : 'Save Trim'}
-          </Button>
-        </Box>
-      </Drawer>
+      <AddTrimModal
+        open={modalOpen}
+        editing={editing}
+        onClose={closeModal}
+        onSaved={() => load()}
+      />
     </Box>
   );
 }

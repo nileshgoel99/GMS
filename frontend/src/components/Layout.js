@@ -55,8 +55,9 @@ import { layoutDrawerWidth, navChrome, slate } from '../theme/appTheme';
 import { hasModuleAccess, dashboardTitleForUser } from '../config/permissions';
 import ReportTicketModal from './ReportTicketModal';
 
-const DRAWER_COLLAPSED_WIDTH = 88;
+const DRAWER_COLLAPSED_WIDTH = 72;
 const NAV_EXPANDED_KEY = 'gms.nav.expandedGroups';
+const NAV_COLLAPSED_KEY = 'gms.nav.collapsed';
 
 const defaultExpandedState = {
   overview: true,
@@ -191,11 +192,19 @@ const loadExpandedGroups = () => {
   }
 };
 
+const loadNavCollapsed = () => {
+  try {
+    return localStorage.getItem(NAV_COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
 const Layout = ({ children }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(loadNavCollapsed);
   const [expandedGroups, setExpandedGroups] = useState(loadExpandedGroups);
   const [reportOpen, setReportOpen] = useState(false);
   const navigate = useNavigate();
@@ -236,6 +245,18 @@ const Layout = ({ children }) => {
   useEffect(() => {
     localStorage.setItem(NAV_EXPANDED_KEY, JSON.stringify(expandedGroups));
   }, [expandedGroups]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_COLLAPSED_KEY, collapsed ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }, [collapsed]);
+
+  const toggleNavCollapsed = useCallback(() => {
+    setCollapsed((c) => !c);
+  }, []);
 
   const toggleGroup = useCallback((groupId) => {
     setExpandedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
@@ -422,12 +443,14 @@ const Layout = ({ children }) => {
       />
       <Toolbar
         sx={{
-          minHeight: { xs: 68, sm: 76 },
-          px: compactNav ? 1.5 : 2.75,
+          minHeight: { xs: 68, sm: compactNav ? 96 : 76 },
+          px: compactNav ? 1 : 2.75,
           display: 'flex',
+          flexDirection: compactNav ? 'column' : 'row',
           alignItems: 'center',
           justifyContent: compactNav ? 'center' : 'space-between',
-          gap: 1,
+          gap: compactNav ? 0.75 : 1,
+          py: compactNav ? 1.25 : 0,
           position: 'relative',
           zIndex: 1,
         }}
@@ -439,13 +462,14 @@ const Layout = ({ children }) => {
             gap: 1.5,
             minWidth: 0,
             cursor: 'pointer',
+            width: compactNav ? 'auto' : undefined,
           }}
           onClick={() => navigate('/')}
         >
           <Box
             sx={{
-              width: 42,
-              height: 42,
+              width: compactNav ? 36 : 42,
+              height: compactNav ? 36 : 42,
               borderRadius: '12px',
               display: 'grid',
               placeItems: 'center',
@@ -480,21 +504,29 @@ const Layout = ({ children }) => {
             </Box>
           ) : null}
         </Box>
-        <IconButton
-          size="small"
-          onClick={() => setCollapsed((c) => !c)}
-          sx={{
-            display: { xs: 'none', sm: 'inline-flex' },
-            color: '#ffffff',
-            border: `1px solid ${sidebarBorder}`,
-            bgcolor: alpha(theme.palette.primary.main, 0.04),
-            transition: 'background-color 0.2s ease, transform 0.15s ease',
-            '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.08), transform: 'scale(1.04)' },
-          }}
-          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+        <Tooltip
+          title={collapsed ? 'Expand navigation' : 'Minimise navigation'}
+          placement={compactNav ? 'right' : 'bottom'}
+          arrow
         >
-          {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-        </IconButton>
+          <IconButton
+            size="small"
+            onClick={toggleNavCollapsed}
+            sx={{
+              display: { xs: 'none', sm: 'inline-flex' },
+              color: '#ffffff',
+              width: compactNav ? 36 : 32,
+              height: compactNav ? 36 : 32,
+              border: `1px solid ${alpha('#fff', 0.22)}`,
+              bgcolor: alpha('#fff', 0.08),
+              transition: 'background-color 0.2s ease, transform 0.15s ease',
+              '&:hover': { bgcolor: alpha('#fff', 0.16), transform: 'scale(1.04)' },
+            }}
+            aria-label={collapsed ? 'Expand navigation' : 'Minimise navigation'}
+          >
+            {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+          </IconButton>
+        </Tooltip>
       </Toolbar>
 
       <Divider sx={{ borderColor: sidebarBorder, position: 'relative', zIndex: 1 }} />
