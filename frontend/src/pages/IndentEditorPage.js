@@ -497,6 +497,7 @@ const ColorFreeSelect = ({
 }) => (
   <Autocomplete
     freeSolo
+    disableClearable
     options={options}
     value={value || ''}
     onChange={(_, v) => onChange(typeof v === 'string' ? v : v || '')}
@@ -516,7 +517,6 @@ const ColorFreeSelect = ({
       width: '100%',
       minWidth: 0,
       '& .MuiAutocomplete-popupIndicator': { color: slate[500] },
-      '& .MuiAutocomplete-clearIndicator': { color: slate[400] },
       '& .MuiAutocomplete-inputRoot': {
         overflow: 'visible !important',
         ...(multiline ? {

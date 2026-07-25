@@ -14,6 +14,17 @@ const STATUS_COLOR = { DRAFT: 'default', CONFIRMED: 'success' };
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 
+/** Full-value cell text — wraps instead of ellipsis. */
+const cellTextSx = {
+  fontSize: '0.82rem',
+  lineHeight: 1.3,
+  whiteSpace: 'normal',
+  wordBreak: 'break-word',
+  overflowWrap: 'anywhere',
+  overflow: 'visible',
+  textOverflow: 'clip',
+};
+
 export default function Indents() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -57,7 +68,8 @@ export default function Indents() {
         width: '100%',
         height: '100%',
         minWidth: 0,
-        px: 0.5,
+        px: 0.25,
+        overflow: 'visible',
       }}
     >
       {children}
@@ -80,6 +92,12 @@ export default function Indents() {
       bgcolor: slate[50],
       borderBottom: `2px solid ${slate[200]}`,
     },
+    '& .MuiDataGrid-columnHeaderTitle': {
+      whiteSpace: 'normal',
+      lineHeight: 1.2,
+      overflow: 'visible',
+      textOverflow: 'clip',
+    },
     '& .MuiDataGrid-cell': {
       ...(dataGridSx['& .MuiDataGrid-cell'] || {}),
       display: 'flex',
@@ -87,11 +105,18 @@ export default function Indents() {
       borderBottom: `1px solid ${slate[100]}`,
       outline: 'none',
       py: '8px !important',
+      px: '6px !important',
       whiteSpace: 'normal !important',
+      overflow: 'visible !important',
+      textOverflow: 'clip !important',
+      lineHeight: 1.35,
     },
     '& .MuiDataGrid-cellContent': {
       whiteSpace: 'normal',
+      overflow: 'visible',
+      textOverflow: 'clip',
       lineHeight: 1.35,
+      width: '100%',
     },
     '& .MuiDataGrid-columnHeader, & .MuiDataGrid-cell': {
       minWidth: '0 !important',
@@ -100,27 +125,36 @@ export default function Indents() {
 
   const columns = [
     {
-      field: 'indent_number', headerName: 'Indent No', flex: 1.1, minWidth: 100,
+      field: 'indent_number',
+      headerName: 'Indent No',
+      width: 108,
       renderCell: (p) => cell('left',
-        <Typography noWrap sx={{ fontWeight: 700, fontSize: '0.85rem', fontFamily: 'monospace', color: 'primary.main' }}>
+        <Typography sx={{ ...cellTextSx, fontWeight: 700, fontFamily: 'monospace', color: 'primary.main' }}>
           {p.value}
         </Typography>
       ),
     },
     {
-      field: 'pi_number', headerName: 'PI Ref', flex: 1, minWidth: 90,
+      field: 'pi_number',
+      headerName: 'PI Ref',
+      width: 96,
       renderCell: (p) => cell('left',
-        <Typography noWrap sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{p.value}</Typography>
+        <Typography sx={{ ...cellTextSx, fontWeight: 600 }}>{p.value}</Typography>
       ),
     },
     {
-      field: 'pi_ref', headerName: 'Buyer PO', flex: 0.9, minWidth: 80,
+      field: 'pi_ref',
+      headerName: 'Buyer PO',
+      width: 88,
       renderCell: (p) => cell('left',
-        <Typography noWrap sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{p.value || '—'}</Typography>
+        <Typography sx={{ ...cellTextSx, color: 'text.secondary' }}>{p.value || '—'}</Typography>
       ),
     },
     {
-      field: 'item_name', headerName: 'Item', flex: 1.6, minWidth: 140,
+      field: 'item_name',
+      headerName: 'Item',
+      flex: 1,
+      minWidth: 160,
       renderCell: (p) => {
         const names = Array.isArray(p.row.item_names) && p.row.item_names.length
           ? p.row.item_names
@@ -134,52 +168,80 @@ export default function Indents() {
             flexDirection: 'column',
             alignItems: 'flex-start',
             gap: 0.35,
-            py: 0.5,
+            py: 0.25,
             width: '100%',
             minWidth: 0,
           }}>
             {names.length ? names.map((name, i) => (
               <Typography
                 key={`${name}-${i}`}
-                sx={{
-                  fontSize: '0.82rem',
-                  lineHeight: 1.3,
-                  fontWeight: 600,
-                  whiteSpace: 'normal',
-                  wordBreak: 'break-word',
-                  overflowWrap: 'anywhere',
-                }}
+                sx={{ ...cellTextSx, fontWeight: 600 }}
               >
                 {name}
               </Typography>
             )) : (
-              <Typography sx={{ fontSize: '0.82rem', color: 'text.disabled' }}>—</Typography>
+              <Typography sx={{ ...cellTextSx, color: 'text.disabled' }}>—</Typography>
             )}
           </Box>
         );
       },
     },
     {
-      field: 'total_qty', headerName: 'Qty', width: 84, type: 'number', align: 'left', headerAlign: 'left',
-      renderCell: (p) => cell('left', <Typography sx={{ fontWeight: 700 }}>{p.value?.toLocaleString()}</Typography>),
-    },
-    {
-      field: 'status', headerName: 'Status', width: 100, align: 'left', headerAlign: 'left',
+      field: 'total_qty',
+      headerName: 'Qty',
+      width: 64,
+      type: 'number',
+      align: 'left',
+      headerAlign: 'left',
       renderCell: (p) => cell('left',
-        <Chip label={p.value} size="small" color={STATUS_COLOR[p.value] || 'default'}
-          sx={{ fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em' }} />
+        <Typography sx={{ ...cellTextSx, fontWeight: 700 }}>{p.value?.toLocaleString()}</Typography>
       ),
     },
     {
-      field: 'indent_date', headerName: 'Date', width: 96,
+      field: 'status',
+      headerName: 'Status',
+      width: 92,
+      align: 'left',
+      headerAlign: 'left',
       renderCell: (p) => cell('left',
-        <Typography noWrap sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{formatDateDisplay(p.value)}</Typography>
+        <Chip
+          label={p.value}
+          size="small"
+          color={STATUS_COLOR[p.value] || 'default'}
+          sx={{
+            fontWeight: 700,
+            fontSize: '0.65rem',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+            height: 22,
+            maxWidth: '100%',
+            '& .MuiChip-label': {
+              px: 0.75,
+              whiteSpace: 'normal',
+              overflow: 'visible',
+              textOverflow: 'clip',
+            },
+          }}
+        />
       ),
     },
     {
-      field: 'actions', headerName: '', width: 108, sortable: false, align: 'center', headerAlign: 'center',
+      field: 'indent_date',
+      headerName: 'Date',
+      width: 88,
+      renderCell: (p) => cell('left',
+        <Typography sx={{ ...cellTextSx, color: 'text.secondary' }}>{formatDateDisplay(p.value)}</Typography>
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: '',
+      width: 100,
+      sortable: false,
+      align: 'center',
+      headerAlign: 'center',
       renderCell: (p) => cell('center',
-        <Box sx={{ display: 'flex', gap: 0.25 }}>
+        <Box sx={{ display: 'flex', gap: 0.15 }}>
           <Tooltip title="View Indent">
             <IconButton size="small" onClick={() => setViewId(p.row.id)}>
               <Visibility fontSize="small" />
