@@ -129,6 +129,94 @@ def _sync_pi_totals(pi):
     return pi
 
 
+def _pi_line_match_key(item_name, color, item_code):
+    return (
+        (item_name or '').strip().upper(),
+        (color or '').strip().upper(),
+        (item_code or '').strip().upper(),
+    )
+
+
+def update_pi_preserving_lines(pi, header_fields, lines_data):
+    """Update an existing PI in place.
+
+    Matching style lines (item_name + color + item_code) keep their IDs so
+    indents that reference selected_pi_line_ids stay linked. Removed styles
+    are dropped from indent selections.
+    """
+    fields = dict(header_fields or {})
+    cust = fields.get('customer', pi.customer)
+    if cust is not None and not hasattr(cust, 'pk'):
+        cust = Customer.objects.filter(pk=cust).first()
+        if cust is not None:
+            fields['customer'] = cust
+    if cust is not None and hasattr(cust, 'pk'):
+        fields.update(_sync_client_fields_from_customer(cust))
+
+    normalized = _normalize_lines_payload(lines_data or [])
+    fields.update(_rollup_header_from_lines(normalized))
+
+    for attr, value in fields.items():
+        if attr == 'lines':
+            continue
+        setattr(pi, attr, value)
+    pi.save()
+
+    existing = list(pi.lines.all().order_by('line_number'))
+    by_key = {}
+    for line in existing:
+        by_key.setdefault(
+            _pi_line_match_key(line.item_name, line.color, line.item_code),
+            [],
+        ).append(line)
+
+    kept_ids = set()
+    for row in normalized:
+        key = _pi_line_match_key(row['item_name'], row['color'], row['item_code'])
+        bucket = by_key.get(key) or []
+        if bucket:
+            line = bucket.pop(0)
+            line.line_number = row['line_number']
+            line.item_code = row['item_code']
+            line.item_name = row['item_name']
+            line.description = row['description']
+            line.material = row['material']
+            line.color = row['color']
+            line.size_breakdown = row['size_breakdown']
+            line.quantity_pcs = row['quantity_pcs']
+            line.unit_price_usd = row['unit_price_usd']
+            line.line_value_usd = row['line_value_usd']
+            line.save()
+            kept_ids.add(line.id)
+        else:
+            created = ProformaInvoiceLine.objects.create(
+                pi=pi,
+                line_number=row['line_number'],
+                item_code=row['item_code'],
+                item_name=row['item_name'],
+                description=row['description'],
+                material=row['material'],
+                color=row['color'],
+                size_breakdown=row['size_breakdown'],
+                quantity_pcs=row['quantity_pcs'],
+                unit_price_usd=row['unit_price_usd'],
+                line_value_usd=row['line_value_usd'],
+            )
+            kept_ids.add(created.id)
+
+    removed_ids = [line.id for line in existing if line.id not in kept_ids]
+    if removed_ids:
+        ProformaInvoiceLine.objects.filter(id__in=removed_ids).delete()
+        for indent in pi.indents.all():
+            ids = list(indent.selected_pi_line_ids or [])
+            filtered = [i for i in ids if i not in removed_ids]
+            if filtered != ids:
+                indent.selected_pi_line_ids = filtered
+                indent.save(update_fields=['selected_pi_line_ids'])
+
+    return _sync_pi_totals(pi)
+
+
 class BuyerPOSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = BuyerPO

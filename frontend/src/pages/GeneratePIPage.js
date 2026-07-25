@@ -4,7 +4,7 @@ import {
   IconButton, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { ArrowBack, Print, Edit, CheckCircle, Autorenew } from '@mui/icons-material';
+import { ArrowBack, Print, Edit, CheckCircle, Autorenew, Save } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, companyAPI } from '../services/api';
 import { normalizeGarmentSize, sortSizeBreakdownEntries } from '../utils/normalizeGarmentSize';
@@ -298,8 +298,9 @@ export default function GeneratePIPage() {
 
   const isRegenerate = Boolean(po?.pi);
 
-  const handleConfirm = async () => {
-    if (isRegenerate) {
+  const handleConfirm = async (mode = 'create') => {
+    // mode: 'create' | 'update' | 'replace'
+    if (mode === 'replace') {
       const indentNote = po.indent_count
         ? `\n\nWarning: ${po.indent_count} indent(s) linked to the current PI will also be deleted.`
         : '';
@@ -330,7 +331,8 @@ export default function GeneratePIPage() {
         payment_terms:            paymentTerms,
         our_bank_details:         ourBank,
         intermediary_bank_details: interBank,
-        replace_existing:           isRegenerate,
+        update_existing:          mode === 'update',
+        replace_existing:         mode === 'replace',
         date_of_dispatch_display: po.ex_factory_date ? `${ordinalDate(po.ex_factory_date)} (EX-FACTORY DATE)` : '',
         lines: piLines.map((line) => ({
           item_code:      line.item_code,
@@ -729,7 +731,7 @@ export default function GeneratePIPage() {
         </IconButton>
         <Box>
           <Typography sx={{ fontWeight: 900, fontSize: '1rem', color: slate[900] }}>
-            {isRegenerate ? 'Regenerate Proforma Invoice' : 'Generate Proforma Invoice'}
+            {isRegenerate ? 'Update Proforma Invoice' : 'Generate Proforma Invoice'}
           </Typography>
           <Typography sx={{ fontSize: '0.75rem', color: slate[500] }}>PO {po?.po_number} · {po?.buyer_name}</Typography>
         </Box>
@@ -751,15 +753,39 @@ export default function GeneratePIPage() {
           </Button>
         )}
         {editing ? (
-          <Button
-            startIcon={isRegenerate ? <Autorenew /> : <CheckCircle />}
-            variant="contained"
-            onClick={handleConfirm}
-            disabled={confirming}
-            sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 3, ...(isRegenerate && { bgcolor: '#b45309', '&:hover': { bgcolor: '#92400e' } }) }}
-          >
-            {confirming ? (isRegenerate ? 'Replacing PI…' : 'Saving PI…') : (isRegenerate ? 'Replace PI' : 'Confirm & Save PI')}
-          </Button>
+          isRegenerate ? (
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Button
+                startIcon={<Save />}
+                variant="contained"
+                onClick={() => handleConfirm('update')}
+                disabled={confirming}
+                sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 2.5 }}
+              >
+                {confirming ? 'Updating PI…' : 'Update PI'}
+              </Button>
+              <Button
+                startIcon={<Autorenew />}
+                variant="outlined"
+                color="warning"
+                onClick={() => handleConfirm('replace')}
+                disabled={confirming}
+                sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 2.5 }}
+              >
+                Replace PI
+              </Button>
+            </Box>
+          ) : (
+            <Button
+              startIcon={<CheckCircle />}
+              variant="contained"
+              onClick={() => handleConfirm('create')}
+              disabled={confirming}
+              sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 3 }}
+            >
+              {confirming ? 'Saving PI…' : 'Confirm & Save PI'}
+            </Button>
+          )
         ) : (
           <Button startIcon={<Print />} variant="contained" onClick={handlePrint}
             sx={{ fontWeight: 800, textTransform: 'none', borderRadius: 1.5, px: 3 }}>
@@ -769,12 +795,14 @@ export default function GeneratePIPage() {
       </Box>
 
       {isRegenerate && (
-        <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
-          A PI already exists for this PO ({po?.pi_ref || 'linked PI'}). Review the lines below, then click
-          {' '}<strong>Replace PI</strong> to delete the old PI and save a new one from the current PO lines.
-          {po?.indent_count > 0 && (
-            <> {' '}<strong>{po.indent_count} indent(s)</strong> linked to the current PI will also be removed.</>
-          )}
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+          A PI already exists for this PO ({po?.pi_ref || 'linked PI'}).
+          {' '}<strong>Update PI</strong> revises the existing invoice in place
+          {po?.indent_count > 0 ? (
+            <> and keeps your <strong>{po.indent_count} linked indent(s)</strong></>
+          ) : null}.
+          {' '}<strong>Replace PI</strong> deletes the old PI and creates a new one
+          {po?.indent_count > 0 ? ' (linked indents will also be removed)' : ''}.
         </Alert>
       )}
 
@@ -845,12 +873,39 @@ export default function GeneratePIPage() {
               </Box>
               <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 {piLines.map((line, i) => (
-                  <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Box sx={{ flex: 1 }}>
-                      <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: slate[800] }} noWrap>
+                  <Box
+                    key={i}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 1.5,
+                      minWidth: 0,
+                    }}
+                  >
+                    <Box sx={{ flex: '1 1 auto', minWidth: 0, pr: 0.5 }}>
+                      <Typography sx={{
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        color: slate[800],
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'anywhere',
+                        lineHeight: 1.35,
+                      }}>
                         {line.item_name}
                       </Typography>
-                      <Typography sx={{ fontSize: '0.68rem', color: slate[400] }}>
+                      {(line.color || line.item_code) && (
+                        <Typography sx={{
+                          fontSize: '0.68rem',
+                          color: slate[500],
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
+                          mt: 0.15,
+                        }}>
+                          {[line.color, line.item_code].filter(Boolean).join(' · ')}
+                        </Typography>
+                      )}
+                      <Typography sx={{ fontSize: '0.68rem', color: slate[400], mt: 0.15 }}>
                         {line.quantity} pcs · {line.sizes.length} sizes
                       </Typography>
                     </Box>
@@ -860,7 +915,10 @@ export default function GeneratePIPage() {
                       value={line.unit_price}
                       onChange={(e) => updateLine(i, { unit_price: parseFloat(e.target.value) || 0 })}
                       InputProps={{ startAdornment: <Typography sx={{ fontSize: '0.8rem', color: slate[400], mr: 0.5 }}>$</Typography> }}
-                      sx={{ width: 90,
+                      sx={{
+                        width: 96,
+                        flex: '0 0 96px',
+                        flexShrink: 0,
                         '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': { display: 'none' },
                         '& input[type=number]': { MozAppearance: 'textfield' },
                       }}

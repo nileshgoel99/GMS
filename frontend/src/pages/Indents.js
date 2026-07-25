@@ -127,9 +127,17 @@ export default function Indents() {
     {
       field: 'indent_number',
       headerName: 'Indent No',
-      width: 108,
+      width: 148,
       renderCell: (p) => cell('left',
-        <Typography sx={{ ...cellTextSx, fontWeight: 700, fontFamily: 'monospace', color: 'primary.main' }}>
+        <Typography sx={{
+          ...cellTextSx,
+          fontWeight: 700,
+          fontFamily: 'monospace',
+          color: 'primary.main',
+          whiteSpace: 'nowrap',
+          wordBreak: 'normal',
+          overflowWrap: 'normal',
+        }}>
           {p.value}
         </Typography>
       ),
@@ -137,9 +145,17 @@ export default function Indents() {
     {
       field: 'pi_number',
       headerName: 'PI Ref',
-      width: 96,
+      width: 140,
       renderCell: (p) => cell('left',
-        <Typography sx={{ ...cellTextSx, fontWeight: 600 }}>{p.value}</Typography>
+        <Typography sx={{
+          ...cellTextSx,
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+          wordBreak: 'normal',
+          overflowWrap: 'normal',
+        }}>
+          {p.value}
+        </Typography>
       ),
     },
     {

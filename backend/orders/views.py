@@ -26,6 +26,7 @@ from .serializers import (
     SalesEntrySerializer,
     SalesEntryListSerializer,
     _sync_pi_totals,
+    update_pi_preserving_lines,
 )
 
 
@@ -237,28 +238,31 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='create-pi')
     def create_pi(self, request, pk=None):
-        from datetime import date
         po = self.get_object()
         data = request.data
         pi_ref = data.get('pi_ref', '').strip()
         if not pi_ref:
             return Response({'detail': 'pi_ref is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        update_existing = data.get('update_existing') in (True, 'true', 1, '1')
         replace_existing = data.get('replace_existing') in (True, 'true', 1, '1')
         replaced_pi_id = None
         indents_removed = 0
+        updated_existing = False
 
-        if po.pi_id:
-            if not replace_existing:
-                return Response({
-                    'detail': (
-                        'A PI already exists for this buyer PO. '
-                        'Confirm replace to delete the old PI and create a new one.'
-                    ),
-                    'existing_pi_id': po.pi_id,
-                    'existing_pi_ref': po.pi_ref,
-                    'indent_count': po.pi.indents.count(),
-                }, status=status.HTTP_409_CONFLICT)
+        if po.pi_id and not update_existing and not replace_existing:
+            return Response({
+                'detail': (
+                    'A PI already exists for this buyer PO. '
+                    'Use update_existing to revise it in place (keeps linked indents), '
+                    'or replace_existing to delete it and create a new PI.'
+                ),
+                'existing_pi_id': po.pi_id,
+                'existing_pi_ref': po.pi_ref,
+                'indent_count': po.pi.indents.count(),
+            }, status=status.HTTP_409_CONFLICT)
+
+        if po.pi_id and replace_existing and not update_existing:
             try:
                 old_pi = ProformaInvoice.objects.get(pk=po.pi_id)
                 replaced_pi_id = old_pi.id
@@ -266,6 +270,7 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
                 old_pi.delete()
             except ProformaInvoice.DoesNotExist:
                 pass
+
         lines_data = data.get('lines', [])
         pi_date_str = data.get('pi_date') or date.today().isoformat()
         from company.models import CompanyProfile, CompanyCurrencyBank
@@ -282,12 +287,23 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
             dispatch_display = (
                 f"{po.ex_factory_date.strftime('%d %B %Y').upper()} (EX-FACTORY DATE)"
             )
-        payload = {
+        lines_payload = [
+            {
+                'item_code':      l.get('item_code', ''),
+                'item_name':      l.get('item_name', ''),
+                'material':       l.get('fabric', '') or l.get('material', ''),
+                'color':          l.get('color', ''),
+                'size_breakdown': l.get('sizes', l.get('size_breakdown', [])),
+                'quantity_pcs':   l.get('quantity', l.get('quantity_pcs', 0)),
+                'unit_price_usd': l.get('unit_price', l.get('unit_price_usd')),
+                'line_value_usd': l.get('line_amount', l.get('line_value_usd')),
+            }
+            for l in lines_data
+        ]
+        header_fields = {
             'pi_number':                   pi_ref,
             'customer':                    po.customer_id,
             'buyer_po_number':             po.po_number,
-            'client_name':                 po.buyer_name or '',
-            'client_address':              po.buyer_address or '',
             'order_date':                  pi_date_str,
             'delivery_date':               po.ex_factory_date.isoformat() if po.ex_factory_date else None,
             'status':                      'CONFIRMED',
@@ -298,19 +314,30 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
             'our_bank_details':            data.get('our_bank_details') or company.our_bank_details or '',
             'intermediary_bank_details':   inter_bank,
             'date_of_dispatch_display':    dispatch_display,
-            'lines': [
-                {
-                    'item_code':      l.get('item_code', ''),
-                    'item_name':      l.get('item_name', ''),
-                    'material':       l.get('fabric', '') or l.get('material', ''),
-                    'color':          l.get('color', ''),
-                    'size_breakdown': l.get('sizes', l.get('size_breakdown', [])),
-                    'quantity_pcs':   l.get('quantity', l.get('quantity_pcs', 0)),
-                    'unit_price_usd': l.get('unit_price', l.get('unit_price_usd')),
-                    'line_value_usd': l.get('line_amount', l.get('line_value_usd')),
-                }
-                for l in lines_data
-            ],
+        }
+
+        if po.pi_id and update_existing:
+            try:
+                pi = ProformaInvoice.objects.get(pk=po.pi_id)
+            except ProformaInvoice.DoesNotExist:
+                pi = None
+            if pi is not None:
+                pi = update_pi_preserving_lines(pi, header_fields, lines_payload)
+                updated_existing = True
+                po.pi = pi
+                po.pi_ref = pi_ref
+                po.save(update_fields=['pi', 'pi_ref'])
+                return Response({
+                    'id': pi.id,
+                    'pi_number': pi.pi_number,
+                    'updated_existing': True,
+                    'replaced_pi_id': None,
+                    'indents_removed': 0,
+                }, status=status.HTTP_200_OK)
+
+        payload = {
+            **header_fields,
+            'lines': lines_payload,
         }
         serializer = ProformaInvoiceSerializer(data=payload, context={'request': request})
         if not serializer.is_valid():
@@ -322,6 +349,7 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
         return Response({
             'id': pi.id,
             'pi_number': pi.pi_number,
+            'updated_existing': updated_existing,
             'replaced_pi_id': replaced_pi_id,
             'indents_removed': indents_removed,
         }, status=status.HTTP_201_CREATED)

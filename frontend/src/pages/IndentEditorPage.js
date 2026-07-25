@@ -63,13 +63,18 @@ const PRINT_STYLE = `
 const UNITS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GROSS', 'GMS', 'CMS'];
 
 // ── Empty row factories ───────────────────────────────────────────────────────
-const emptyFabric = () => ({ material: '', color: '', gsm: '', roll_width: '', consumption_per_pc: '', unit: 'MTRS', total_consumption: '', remarks: '' });
-const emptyTrimPart = (label = '') => ({ label, consumption_per_pc: '', unit: 'MTRS', total_consumption: '', total_unit: '' });
+const emptyFabric = () => ({
+  material: '', color: '', gsm: '', roll_width: '', consumption_per_pc: '', unit: 'MTRS',
+  total_consumption: '', remarks: '', total_manual: false,
+});
+const emptyTrimPart = (label = '') => ({
+  label, consumption_per_pc: '', unit: 'MTRS', total_consumption: '', total_unit: '', total_manual: false,
+});
 const emptyTrim = () => ({
   trim: null, trim_name: '', category: '', color_variant: '', size_variant: '',
   property_values: {}, consumption_per_pc: '', unit: 'PCS', total_consumption: '', total_unit: '', remarks: '',
   supplier: null, supplier_name: '', supplier_country: '',
-  parts: [],
+  parts: [], total_manual: false,
 });
 
 /** Normalize Hook/Loop (multi-part) payload from API so edit always restores rows. */
@@ -85,6 +90,8 @@ const normalizeTrimParts = (raw) => {
     unit: p?.unit || 'MTRS',
     total_consumption: p?.total_consumption != null && p.total_consumption !== '' ? String(p.total_consumption) : '',
     total_unit: p?.total_unit || p?.unit || 'MTRS',
+    // Persist saved part totals on edit — don't auto-overwrite until Cons./pc changes.
+    total_manual: p?.total_consumption != null && p.total_consumption !== '',
   }));
 };
 
@@ -98,6 +105,8 @@ const mapApiTrimLine = (r) => ({
   supplier_country: r.supplier_country || '',
   consumption_per_pc: r.consumption_per_pc != null && r.consumption_per_pc !== '' ? String(r.consumption_per_pc) : '',
   total_consumption: r.total_consumption != null && r.total_consumption !== '' ? String(r.total_consumption) : '',
+  // Keep API/saved totals when reopening an indent (PI qty effect must not overwrite).
+  total_manual: true,
 });
 
 const asInventoryList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
@@ -1428,30 +1437,27 @@ export default function IndentEditorPage() {
     });
   }, [inventoryItems, trimsList]);
 
-  // Recalculate totals when selected PI lines change
+  // Recalculate totals when selected PI lines / qty change — never overwrite manual/saved totals.
   useEffect(() => {
-    setFabricLines((prev) => prev.map((row) => ({
-      ...row,
-      total_consumption: row.consumption_per_pc
-        ? fabricRowTotal(row, colorQty, totalQty)
-        : row.total_consumption,
-    })));
+    setFabricLines((prev) => prev.map((row) => {
+      if (row.total_manual || !row.consumption_per_pc) return row;
+      const nextTotal = fabricRowTotal(row, colorQty, totalQty);
+      if (String(row.total_consumption) === String(nextTotal)) return row;
+      return { ...row, total_consumption: nextTotal };
+    }));
     setTrimLines((prev) => prev.map((row) => {
+      if (row.total_manual) return row;
       if (hasTrimParts(row)) {
-        const parts = row.parts.map((p) => ({
-          ...p,
-          total_consumption: p.consumption_per_pc
-            ? trimPartTotal(row, p, activeLines, colorQty, totalQty)
-            : p.total_consumption,
-        }));
+        const parts = row.parts.map((p) => {
+          if (p.total_manual || !p.consumption_per_pc) return p;
+          return { ...p, total_consumption: trimPartTotal(row, p, activeLines, colorQty, totalQty) };
+        });
         return { ...row, parts, ...sumTrimParts(parts) };
       }
-      return {
-        ...row,
-        total_consumption: row.consumption_per_pc
-          ? trimRowTotal(row, activeLines, colorQty, totalQty)
-          : row.total_consumption,
-      };
+      if (!row.consumption_per_pc) return row;
+      const nextTotal = trimRowTotal(row, activeLines, colorQty, totalQty);
+      if (String(row.total_consumption) === String(nextTotal)) return row;
+      return { ...row, total_consumption: nextTotal };
     }));
   }, [colorQty, totalQty, activeLines]);
 
@@ -1485,7 +1491,14 @@ export default function IndentEditorPage() {
           setNotes(data.notes || '');
           setFabricLines(
             data.fabric_lines?.length
-              ? data.fabric_lines.map((r) => enrichFabricRowGsm({ ...emptyFabric(), ...r }))
+              ? data.fabric_lines.map((r) => enrichFabricRowGsm({
+                ...emptyFabric(),
+                ...r,
+                total_consumption: r.total_consumption != null && r.total_consumption !== ''
+                  ? String(r.total_consumption)
+                  : '',
+                total_manual: true,
+              }))
               : [emptyFabric()],
           );
           setTrimLines(data.trim_lines?.length ? data.trim_lines.map(mapApiTrimLine) : [emptyTrim()]);
@@ -1575,9 +1588,14 @@ export default function IndentEditorPage() {
         const gsmFromComposition = extractGsmFromFabricComposition(value);
         if (gsmFromComposition) updated.gsm = gsmFromComposition;
       }
-      if (field === 'total_consumption' || field === 'remarks' || field === 'material' || field === 'unit' || field === 'gsm' || field === 'roll_width') {
+      if (field === 'total_consumption') {
+        updated.total_manual = true;
+        next[i] = updated;
+      } else if (field === 'remarks' || field === 'material' || field === 'unit' || field === 'gsm' || field === 'roll_width') {
         next[i] = updated;
       } else {
+        // consumption / color — resume auto total
+        updated.total_manual = false;
         updated.total_consumption = fabricRowTotal(updated, colorQty, totalQty);
         next[i] = updated;
       }
@@ -1595,10 +1613,14 @@ export default function IndentEditorPage() {
       const next = [...prev];
       const nextValue = field === 'size_variant' ? normalizeGarmentSize(value) : value;
       let updated = { ...next[i], [field]: nextValue };
-      if (field === 'consumption_per_pc' || field === 'color_variant' || field === 'size_variant') {
+      if (field === 'total_consumption') {
+        updated.total_manual = true;
+      } else if (field === 'consumption_per_pc' || field === 'color_variant' || field === 'size_variant') {
+        updated.total_manual = false;
         if (hasTrimParts(updated)) {
           const parts = updated.parts.map((p) => ({
             ...p,
+            total_manual: false,
             total_consumption: trimPartTotal(updated, p, activeLines, colorQty, totalQty),
           }));
           updated = { ...updated, parts, ...sumTrimParts(parts) };
@@ -1661,12 +1683,20 @@ export default function IndentEditorPage() {
       const parts = row.parts.map((p, pIdx) => {
         if (pIdx !== partIdx) return p;
         const updatedPart = { ...p, [field]: value };
-        if (field === 'consumption_per_pc') {
+        if (field === 'total_consumption') {
+          updatedPart.total_manual = true;
+        } else if (field === 'consumption_per_pc') {
+          updatedPart.total_manual = false;
           updatedPart.total_consumption = trimPartTotal(row, updatedPart, activeLines, colorQty, totalQty);
         }
         return updatedPart;
       });
-      next[i] = { ...row, parts, ...sumTrimParts(parts) };
+      const summed = { ...row, parts, ...sumTrimParts(parts) };
+      // Row total is derived from parts when Cons./pc or part Total changes.
+      if (field === 'consumption_per_pc' || field === 'total_consumption') {
+        summed.total_manual = true;
+      }
+      next[i] = summed;
       return next;
     });
   };
@@ -1698,14 +1728,20 @@ export default function IndentEditorPage() {
       const next = [...prev];
       const nextValue = isGarmentSizeTrimProperty(propName) ? normalizeGarmentSize(value) : value;
       let row = { ...next[i], property_values: { ...(next[i].property_values || {}), [propName]: nextValue } };
-      if (hasTrimParts(row)) {
-        const parts = row.parts.map((p) => ({
-          ...p,
-          total_consumption: trimPartTotal(row, p, activeLines, colorQty, totalQty),
-        }));
-        row = { ...row, parts, ...sumTrimParts(parts) };
-      } else {
-        row.total_consumption = trimRowTotal(row, activeLines, colorQty, totalQty);
+      // Color / garment size change the qty basis — resume auto total. Other props keep a manual total.
+      const qtyBasisChanged = /^colou?r$/i.test(String(propName).trim()) || isGarmentSizeTrimProperty(propName);
+      if (qtyBasisChanged || !row.total_manual) {
+        row.total_manual = false;
+        if (hasTrimParts(row)) {
+          const parts = row.parts.map((p) => ({
+            ...p,
+            total_manual: false,
+            total_consumption: trimPartTotal(row, p, activeLines, colorQty, totalQty),
+          }));
+          row = { ...row, parts, ...sumTrimParts(parts) };
+        } else {
+          row.total_consumption = trimRowTotal(row, activeLines, colorQty, totalQty);
+        }
       }
       next[i] = withStockRemark(row);
       return next;
