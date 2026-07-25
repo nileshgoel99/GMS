@@ -77,6 +77,15 @@ const emptyTrim = () => ({
   parts: [], total_manual: false,
 });
 
+/** Format BOM qty: 2 decimals, omit decimal when exact (.00 → whole number). */
+const formatBomQty = (value) => {
+  if (value === '' || value == null) return '';
+  const n = typeof value === 'number' ? value : parseFloat(value);
+  if (!Number.isFinite(n)) return '';
+  const fixed = n.toFixed(2);
+  return fixed.endsWith('.00') ? fixed.slice(0, -3) : fixed;
+};
+
 /** Normalize Hook/Loop (multi-part) payload from API so edit always restores rows. */
 const normalizeTrimParts = (raw) => {
   let parts = raw;
@@ -88,7 +97,9 @@ const normalizeTrimParts = (raw) => {
     label: p?.label != null && String(p.label).trim() ? String(p.label) : (idx === 0 ? 'Hook' : idx === 1 ? 'Loop' : `Part ${idx + 1}`),
     consumption_per_pc: p?.consumption_per_pc != null && p.consumption_per_pc !== '' ? String(p.consumption_per_pc) : '',
     unit: p?.unit || 'MTRS',
-    total_consumption: p?.total_consumption != null && p.total_consumption !== '' ? String(p.total_consumption) : '',
+    total_consumption: p?.total_consumption != null && p.total_consumption !== ''
+      ? formatBomQty(p.total_consumption)
+      : '',
     total_unit: p?.total_unit || p?.unit || 'MTRS',
     // Persist saved part totals on edit — don't auto-overwrite until Cons./pc changes.
     total_manual: p?.total_consumption != null && p.total_consumption !== '',
@@ -104,7 +115,9 @@ const mapApiTrimLine = (r) => ({
   supplier_name: r.supplier_name || '',
   supplier_country: r.supplier_country || '',
   consumption_per_pc: r.consumption_per_pc != null && r.consumption_per_pc !== '' ? String(r.consumption_per_pc) : '',
-  total_consumption: r.total_consumption != null && r.total_consumption !== '' ? String(r.total_consumption) : '',
+  total_consumption: r.total_consumption != null && r.total_consumption !== ''
+    ? formatBomQty(r.total_consumption)
+    : '',
   // Keep API/saved totals when reopening an indent (PI qty effect must not overwrite).
   total_manual: true,
 });
@@ -189,7 +202,7 @@ const calcTotal = (consumption, qty) => {
   const c = parseFloat(consumption);
   const q = parseFloat(qty);
   if (isNaN(c) || isNaN(q) || q <= 0) return '0';
-  return (c * q).toFixed(4).replace(/\.?0+$/, '');
+  return formatBomQty(c * q);
 };
 
 const toApiDecimal = (value) => {
@@ -213,8 +226,8 @@ const sumTrimParts = (parts) => {
     totalUnit = totalUnit || p.total_unit || p.unit || '';
   });
   return {
-    consumption_per_pc: consumption ? String(consumption) : '',
-    total_consumption: total ? total.toFixed(4).replace(/\.?0+$/, '') : '',
+    consumption_per_pc: consumption ? formatBomQty(consumption) : '',
+    total_consumption: total ? formatBomQty(total) : '',
     unit,
     total_unit: totalUnit,
   };
@@ -1069,7 +1082,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
               <Box component="td" sx={cellSx}>{row.roll_width ? `${row.roll_width} CMS` : '—'}</Box>
               <Box component="td" sx={cellSx}>{row.consumption_per_pc}</Box>
               <Box component="td" sx={cellSx}>{row.unit}</Box>
-              <Box component="td" sx={{ ...cellSx, fontWeight: 700 }}>{row.total_consumption}</Box>
+              <Box component="td" sx={{ ...cellSx, fontWeight: 700 }}>{formatBomQty(row.total_consumption) || row.total_consumption}</Box>
               <Box component="td" sx={{ ...cellSx, fontSize: '7.5pt', color: '#666' }}>—</Box>
               <Box component="td" sx={{ ...cellSx, fontSize: '7.5pt' }}>{isInStockRemark(row.remarks) ? 'In stock' : '—'}</Box>
             </Box>
@@ -1096,8 +1109,8 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
                 </Box>
                 <Box component="td" sx={{ ...cellSx, fontWeight: 700, whiteSpace: 'pre-line' }}>
                   {parts
-                    ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${p.total_consumption}`).join('\n')
-                    : row.total_consumption}
+                    ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${formatBomQty(p.total_consumption) || p.total_consumption || '—'}`).join('\n')
+                    : (formatBomQty(row.total_consumption) || row.total_consumption)}
                 </Box>
                 <Box component="td" sx={{ ...cellSx, fontSize: '7.5pt', fontWeight: supplierLabel ? 600 : 400 }}>
                   {supplierLabel || '—'}
@@ -1495,7 +1508,7 @@ export default function IndentEditorPage() {
                 ...emptyFabric(),
                 ...r,
                 total_consumption: r.total_consumption != null && r.total_consumption !== ''
-                  ? String(r.total_consumption)
+                  ? formatBomQty(r.total_consumption)
                   : '',
                 total_manual: true,
               }))
@@ -2363,6 +2376,12 @@ export default function IndentEditorPage() {
                         <Box sx={bomCellInner('left')}>
                           <TextField size="small" fullWidth value={row.total_consumption}
                             onChange={(e) => setFabricField(i, 'total_consumption', e.target.value)}
+                            onBlur={() => {
+                              const formatted = formatBomQty(row.total_consumption);
+                              if (formatted !== '' && formatted !== String(row.total_consumption)) {
+                                setFabricField(i, 'total_consumption', formatted);
+                              }
+                            }}
                             placeholder={totalQty ? 'Auto' : '—'}
                             sx={bomTotalFieldSx('left')} />
                         </Box>
@@ -2743,26 +2762,40 @@ export default function IndentEditorPage() {
                         {hasTrimParts(row) ? (
                           <TableCell colSpan={4} sx={{ ...bodyCell('left'), verticalAlign: 'top' }}>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, width: '100%', py: 0.75 }}>
-                              <Box sx={{ display: 'flex', gap: 0.75, px: 0.25 }}>
-                                <Typography sx={{ ...trimPartColHeadSx, width: 88 }}>Part</Typography>
-                                <Typography sx={{ ...trimPartColHeadSx, flex: 1.4, textAlign: 'left' }}>Cons./pc</Typography>
-                                <Typography sx={{ ...trimPartColHeadSx, width: 80, textAlign: 'left' }}>Unit</Typography>
+                              <Box sx={{ display: 'flex', gap: 0.5, px: 0.25 }}>
+                                <Typography sx={{ ...trimPartColHeadSx, width: 72 }}>Part</Typography>
+                                <Typography sx={{ ...trimPartColHeadSx, flex: 1, textAlign: 'left' }}>Cons./pc</Typography>
+                                <Typography sx={{ ...trimPartColHeadSx, width: 72, textAlign: 'left' }}>Unit</Typography>
+                                <Typography sx={{ ...trimPartColHeadSx, flex: 1.1, textAlign: 'left' }}>Total</Typography>
                                 <Box sx={{ width: 28, flexShrink: 0 }} />
                               </Box>
                               {row.parts.map((part, pIdx) => (
-                                <Box key={pIdx} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                <Box key={pIdx} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                   <TextField size="small" value={part.label}
                                     onChange={(e) => setTrimPartField(i, pIdx, 'label', e.target.value)}
                                     placeholder="Hook"
-                                    sx={{ ...bomFieldSx('left'), width: 88, flexShrink: 0 }} />
+                                    sx={{ ...bomFieldSx('left'), width: 72, flexShrink: 0 }} />
                                   <TextField size="small" type="number" value={part.consumption_per_pc}
                                     onChange={(e) => setTrimPartField(i, pIdx, 'consumption_per_pc', e.target.value)}
-                                    inputProps={{ step: '0.0001', min: '0' }} sx={{ ...bomConsFieldSx('left'), flex: 1.4 }} />
+                                    inputProps={{ step: '0.01', min: '0' }} sx={{ ...bomConsFieldSx('left'), flex: 1 }} />
                                   <TextField size="small" select value={part.unit}
                                     onChange={(e) => setTrimPartField(i, pIdx, 'unit', e.target.value)}
-                                    sx={{ ...bomFieldSx('left'), width: 80, flexShrink: 0 }}>
+                                    sx={{ ...bomFieldSx('left'), width: 72, flexShrink: 0 }}>
                                     {UNITS.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
                                   </TextField>
+                                  <TextField
+                                    size="small"
+                                    value={part.total_consumption}
+                                    onChange={(e) => setTrimPartField(i, pIdx, 'total_consumption', e.target.value)}
+                                    onBlur={() => {
+                                      const formatted = formatBomQty(part.total_consumption);
+                                      if (formatted !== '' && formatted !== String(part.total_consumption)) {
+                                        setTrimPartField(i, pIdx, 'total_consumption', formatted);
+                                      }
+                                    }}
+                                    placeholder="Auto"
+                                    sx={{ ...bomTotalFieldSx('left'), flex: 1.1 }}
+                                  />
                                   <IconButton size="small" color="error" onClick={() => removeTrimPart(i, pIdx)} sx={{ width: 28, flexShrink: 0 }}>
                                     <Delete sx={{ fontSize: 15 }} />
                                   </IconButton>
@@ -2795,9 +2828,19 @@ export default function IndentEditorPage() {
                             </TableCell>
                             <TableCell sx={bodyCell('left')}>
                               <Box sx={bomCellInner('left')}>
-                                <TextField size="small" fullWidth value={row.total_consumption}
+                                <TextField
+                                  size="small"
+                                  fullWidth
+                                  value={row.total_consumption}
                                   onChange={(e) => setTrimField(i, 'total_consumption', e.target.value)}
-                                  sx={bomTotalFieldSx('left')} />
+                                  onBlur={() => {
+                                    const formatted = formatBomQty(row.total_consumption);
+                                    if (formatted !== '' && formatted !== String(row.total_consumption)) {
+                                      setTrimField(i, 'total_consumption', formatted);
+                                    }
+                                  }}
+                                  sx={bomTotalFieldSx('left')}
+                                />
                               </Box>
                             </TableCell>
                             <TableCell sx={bodyCell('left')}>

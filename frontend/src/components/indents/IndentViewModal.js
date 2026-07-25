@@ -24,6 +24,19 @@ const buildColorQty = (piLines) => {
 const val = (v) => (v != null && String(v).trim() !== '' ? v : '—');
 const isInStockRemark = (remarks) => String(remarks || '').trim().toLowerCase() === 'in stock';
 
+/** 2 decimals; hide .00 */
+const formatBomQty = (value) => {
+  if (value === '' || value == null) return '';
+  const n = typeof value === 'number' ? value : parseFloat(value);
+  if (!Number.isFinite(n)) return String(value ?? '');
+  const fixed = n.toFixed(2);
+  return fixed.endsWith('.00') ? fixed.slice(0, -3) : fixed;
+};
+const qtyVal = (v) => {
+  const formatted = formatBomQty(v);
+  return formatted !== '' ? formatted : '—';
+};
+
 const InStockBadge = ({ checked }) => (
   <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6 }}>
     <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: checked ? '#16a34a' : '#94a3b8', flexShrink: 0 }} />
@@ -302,19 +315,23 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                           {row.parts?.length ? (
                             <>
                               <TableCell sx={{ ...viewCellSx('left'), whiteSpace: 'pre-line' }}>
-                                {row.parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${val(p.consumption_per_pc)}`).join('\n')}
+                                {row.parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${qtyVal(p.consumption_per_pc)}`).join('\n')}
                               </TableCell>
                               <TableCell sx={{ ...viewCellSx('left'), fontWeight: 600, whiteSpace: 'pre-line' }}>
                                 {row.parts.map((p) => val(p.unit)).join('\n')}
                               </TableCell>
-                              <TableCell sx={viewCellSx('left')}>—</TableCell>
-                              <TableCell sx={viewCellSx('left')}>—</TableCell>
+                              <TableCell sx={{ ...viewCellSx('left'), fontWeight: 700, whiteSpace: 'pre-line' }}>
+                                {row.parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${qtyVal(p.total_consumption)}`).join('\n')}
+                              </TableCell>
+                              <TableCell sx={{ ...viewCellSx('left'), fontWeight: 600, whiteSpace: 'pre-line' }}>
+                                {row.parts.map((p) => val(p.total_unit || p.unit)).join('\n')}
+                              </TableCell>
                             </>
                           ) : (
                             <>
-                              <TableCell sx={viewCellSx('left')}>{val(row.consumption_per_pc)}</TableCell>
+                              <TableCell sx={viewCellSx('left')}>{qtyVal(row.consumption_per_pc)}</TableCell>
                               <TableCell sx={{ ...viewCellSx('left'), fontWeight: 600 }}>{val(row.unit)}</TableCell>
-                              <TableCell sx={{ ...viewCellSx('left'), fontWeight: 700 }}>{val(row.total_consumption)}</TableCell>
+                              <TableCell sx={{ ...viewCellSx('left'), fontWeight: 700 }}>{qtyVal(row.total_consumption)}</TableCell>
                               <TableCell sx={{ ...viewCellSx('left'), fontWeight: 600 }}>{val(row.total_unit || row.unit)}</TableCell>
                             </>
                           )}
