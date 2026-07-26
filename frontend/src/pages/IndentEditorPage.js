@@ -66,7 +66,7 @@ const PRINT_STYLE = `
 @media print {
   @page {
     size: A4 portrait;
-    margin: 10mm 10mm 12mm 10mm;
+    margin: 6mm 5mm 8mm 5mm;
     @top-left { content: none; }
     @top-center { content: none; }
     @top-right { content: none; }
@@ -1044,12 +1044,12 @@ const buildSizeTable = (piLines) => {
 // ── Table cell sx ─────────────────────────────────────────────────────────────
 const indentCellSx = {
   border: `1px solid ${INDENT_PRINT.border}`,
-  p: '3px 5px',
-  fontSize: '7.5pt',
+  p: '4px 7px',
+  fontSize: '8pt',
   fontFamily: INDENT_PRINT.body,
   verticalAlign: 'middle',
   color: INDENT_PRINT.black,
-  lineHeight: 1.3,
+  lineHeight: 1.35,
 };
 const indentThSx = {
   ...indentCellSx,
@@ -1057,7 +1057,7 @@ const indentThSx = {
   bgcolor: INDENT_PRINT.navy,
   color: INDENT_PRINT.white,
   textAlign: 'left',
-  fontSize: '6.8pt',
+  fontSize: '7.2pt',
   letterSpacing: '0.04em',
   textTransform: 'uppercase',
   border: `1px solid ${INDENT_PRINT.navyDark}`,
@@ -1151,12 +1151,12 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
   return (
     <Box sx={{
       fontFamily: INDENT_PRINT.body,
-      fontSize: '8pt',
+      fontSize: '8.5pt',
       color: INDENT_PRINT.black,
       bgcolor: INDENT_PRINT.white,
       width: '100%',
-      maxWidth: '190mm',
-      mx: 'auto',
+      maxWidth: 'none',
+      mx: 0,
       boxSizing: 'border-box',
     }}>
       {/* ── Letterhead header ── */}
@@ -1307,15 +1307,15 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
           <Box component="thead">
             <Box component="tr">
               {[
-                ['Material / Trim', '26%'],
-                ['Color / Variant', '16%'],
-                ['GSM', '7%'],
-                ['Roll W', '8%'],
+                ['Material / Trim', '28%'],
+                ['Color / Variant', '18%'],
+                ['GSM', '6%'],
+                ['Roll W', '7%'],
                 ['Cons./pc', '9%'],
-                ['Unit', '7%'],
-                ['Total', '10%'],
+                ['Unit', '6%'],
+                ['Total', '11%'],
                 ['Supplier', '10%'],
-                ['Stock', '7%'],
+                ['Stock', '5%'],
               ].map(([h, w]) => (
                 <Box component="th" key={h} sx={{ ...indentThSx, width: w }}>{h}</Box>
               ))}
