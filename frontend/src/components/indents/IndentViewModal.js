@@ -255,7 +255,7 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                           <TableCell sx={viewCellSx('left')}>{val(row.color)}</TableCell>
                           <TableCell sx={viewCellSx('left')}>{row.gsm ? `${row.gsm} GSM` : '—'}</TableCell>
                           <TableCell sx={viewCellSx('left')}>{row.roll_width ? `${row.roll_width} CMS` : '—'}</TableCell>
-                          <TableCell sx={viewCellSx('left')}>{val(row.consumption_per_pc)}</TableCell>
+                          <TableCell sx={viewCellSx('left')}>{qtyVal(row.consumption_per_pc)}</TableCell>
                           <TableCell sx={{ ...viewCellSx('left'), fontWeight: 600 }}>{val(row.unit)}</TableCell>
                           <TableCell sx={{ ...viewCellSx('left'), fontWeight: 700 }}>{val(row.total_consumption)}</TableCell>
                           <TableCell sx={viewCellSx('left')}><InStockBadge checked={isInStockRemark(row.remarks)} /></TableCell>

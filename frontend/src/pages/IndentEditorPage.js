@@ -13,7 +13,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { hasModuleAccess } from '../config/permissions';
-import { ordersAPI, inventoryAPI, suppliersAPI } from '../services/api';
+import { ordersAPI, inventoryAPI, suppliersAPI, companyAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import { normalizeGarmentSize, sortGarmentSizes } from '../utils/normalizeGarmentSize';
@@ -24,6 +24,11 @@ import {
   IN_STOCK_REMARK,
   isInStockRemark,
 } from '../utils/matchInventoryStock';
+import { companyContactLines } from '../utils/formatCompanyPhone';
+import {
+  clearPrintDocumentTitle,
+  restorePrintDocumentTitle,
+} from '../utils/piPrintPageFooters';
 import AddTrimModal from '../components/trims/AddTrimModal';
 import SupplierAutocomplete from '../components/suppliers/SupplierAutocomplete';
 import {
@@ -36,23 +41,73 @@ import {
   TRIM_UNIT_OPTIONS,
 } from '../components/trims/trimConstants';
 
+/** Indent print brand — navy + gold (matches Supplier PO / JBI letterhead). */
+const INDENT_PRINT = {
+  navy: '#1E3A5F',
+  navyDark: '#152a45',
+  gold: '#F3E21A',
+  teal: '#0f766e',
+  border: 'rgba(30, 58, 95, 0.22)',
+  muted: '#475569',
+  soft: 'rgba(30, 58, 95, 0.06)',
+  softTeal: 'rgba(15, 118, 110, 0.08)',
+  white: '#ffffff',
+  black: '#0f172a',
+  display: '"Libre Baskerville", "Georgia", "Times New Roman", serif',
+  body: '"Source Sans 3", "Segoe UI", system-ui, sans-serif',
+};
+
 // ── Print styles ─────────────────────────────────────────────────────────────
+// Use absolute (not fixed) so the browser does not print extra blank pages for
+// the still-laid-out editor UI underneath.
 const PRINT_STYLE = `
+@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600;700;800&display=swap');
+
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 10mm 12mm 10mm;
+    @top-left { content: none; }
+    @top-center { content: none; }
+    @top-right { content: none; }
+    @bottom-left { content: none; }
+    @bottom-center { content: none; }
+    @bottom-right {
+      content: "Page " counter(page) " / " counter(pages);
+      font-family: "Source Sans 3", "Segoe UI", sans-serif;
+      font-size: 8pt;
+      color: #475569;
+    }
+  }
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
   body * { visibility: hidden !important; }
   #indent-print-root,
   #indent-print-root * { visibility: visible !important; }
   #indent-print-root {
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: 100%;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
     display: block !important;
     background: #fff !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  @page { margin: 12mm; size: A4; }
+  .indent-print-no-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  .indent-print-table { page-break-inside: auto !important; break-inside: auto !important; }
+  .indent-print-table thead { display: table-header-group !important; }
+  .indent-print-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
 }
 @media screen {
   #indent-print-root { display: none !important; }
@@ -95,7 +150,9 @@ const normalizeTrimParts = (raw) => {
   if (!Array.isArray(parts) || !parts.length) return [];
   return parts.map((p, idx) => ({
     label: p?.label != null && String(p.label).trim() ? String(p.label) : (idx === 0 ? 'Hook' : idx === 1 ? 'Loop' : `Part ${idx + 1}`),
-    consumption_per_pc: p?.consumption_per_pc != null && p.consumption_per_pc !== '' ? String(p.consumption_per_pc) : '',
+    consumption_per_pc: p?.consumption_per_pc != null && p.consumption_per_pc !== ''
+      ? formatBomQty(p.consumption_per_pc)
+      : '',
     unit: p?.unit || 'MTRS',
     total_consumption: p?.total_consumption != null && p.total_consumption !== ''
       ? formatBomQty(p.total_consumption)
@@ -114,7 +171,9 @@ const mapApiTrimLine = (r) => ({
   supplier: r.supplier ?? null,
   supplier_name: r.supplier_name || '',
   supplier_country: r.supplier_country || '',
-  consumption_per_pc: r.consumption_per_pc != null && r.consumption_per_pc !== '' ? String(r.consumption_per_pc) : '',
+  consumption_per_pc: r.consumption_per_pc != null && r.consumption_per_pc !== ''
+    ? formatBomQty(r.consumption_per_pc)
+    : '',
   total_consumption: r.total_consumption != null && r.total_consumption !== ''
     ? formatBomQty(r.total_consumption)
     : '',
@@ -983,8 +1042,35 @@ const buildSizeTable = (piLines) => {
 };
 
 // ── Table cell sx ─────────────────────────────────────────────────────────────
-const cellSx = { border: '1px solid #000', p: '4px 6px', fontSize: '8.5pt', fontFamily: 'inherit', verticalAlign: 'middle' };
-const thSx   = { ...cellSx, fontWeight: 700, bgcolor: '#e8e8e8', textAlign: 'center' };
+const indentCellSx = {
+  border: `1px solid ${INDENT_PRINT.border}`,
+  p: '3px 5px',
+  fontSize: '7.5pt',
+  fontFamily: INDENT_PRINT.body,
+  verticalAlign: 'middle',
+  color: INDENT_PRINT.black,
+  lineHeight: 1.3,
+};
+const indentThSx = {
+  ...indentCellSx,
+  fontWeight: 800,
+  bgcolor: INDENT_PRINT.navy,
+  color: INDENT_PRINT.white,
+  textAlign: 'left',
+  fontSize: '6.8pt',
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  border: `1px solid ${INDENT_PRINT.navyDark}`,
+};
+const indentSectionLabelSx = {
+  fontFamily: INDENT_PRINT.body,
+  fontWeight: 800,
+  fontSize: '7.5pt',
+  color: INDENT_PRINT.navy,
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  mb: 0.6,
+};
 
 // ── Printed Indent Document ───────────────────────────────────────────────────
 function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedLines, suppliers = [], trimsList = [] }) {
@@ -993,7 +1079,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
   const colors = Object.keys(colorQty);
   const totalQty = Object.values(colorQty).reduce((s, v) => s + v, 0);
 
-  const itemName = [...new Set(piLines.map((l) => l.item_name))].join(' / ');
+  const itemName = [...new Set(piLines.map((l) => l.item_name).filter(Boolean))].join(' / ');
   const sizeBreakdown = piLines.reduce((acc, line) => {
     if (line.size_breakdown?.length) {
       line.size_breakdown.forEach(({ size, qty }) => {
@@ -1007,7 +1093,19 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
   }, {});
   const sizes = sortGarmentSizes(Object.keys(sizeBreakdown));
 
-  const companyName = company?.company_legal_name || 'JB INTERNATIONAL';
+  const companyName = company?.legal_name || company?.company_legal_name || 'J B INTERNATIONAL';
+  const logoSrc = company?.logo_url || company?.logo || '';
+  const { phone, email } = companyContactLines(company);
+  const address = [
+    company?.address_line1,
+    company?.address_line2,
+    [company?.city, company?.region_state, company?.postal_code].filter(Boolean).join(', '),
+    company?.country,
+  ].filter(Boolean).join(', ');
+  const contact = [phone && `Tel: ${phone}`, email && `Email: ${email}`, company?.website].filter(Boolean).join('  ·  ');
+
+  const fabricRows = fabricLines.filter((r) => r.material);
+  const trimRows = trimLines.filter((r) => r.trim_name);
 
   const supplierLabelForTrim = (row) => {
     if (row?.supplier_name) {
@@ -1024,113 +1122,274 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
     return '';
   };
 
+  const metaChip = (label, value) => (
+    <Box sx={{
+      flex: '1 1 0',
+      minWidth: 0,
+      px: 1,
+      py: 0.55,
+      borderRadius: '4px',
+      bgcolor: INDENT_PRINT.soft,
+      border: `1px solid ${INDENT_PRINT.border}`,
+    }}>
+      <Typography sx={{
+        fontFamily: INDENT_PRINT.body, fontSize: '6.2pt', fontWeight: 700,
+        color: INDENT_PRINT.muted, textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1.2,
+      }}>
+        {label}
+      </Typography>
+      <Typography sx={{
+        fontFamily: INDENT_PRINT.body, fontSize: '8.5pt', fontWeight: 800,
+        color: INDENT_PRINT.navyDark, lineHeight: 1.25, mt: 0.15,
+        wordBreak: 'break-word',
+      }}>
+        {value || '—'}
+      </Typography>
+    </Box>
+  );
+
   return (
-    <Box sx={{ fontFamily: 'Arial, sans-serif', fontSize: '9.5pt', color: '#000', bgcolor: '#fff', p: 0 }}>
-      {/* Header */}
-      <Box sx={{ textAlign: 'center', mb: 1.5 }}>
-        <Typography sx={{ fontWeight: 900, fontSize: '13pt', fontFamily: 'inherit', textTransform: 'uppercase' }}>
-          {companyName}
-        </Typography>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-          <Typography sx={{ fontWeight: 700, fontFamily: 'inherit', fontSize: '9.5pt' }}>
-            INDENT NO:- {indent?.indent_number || '___'}
+    <Box sx={{
+      fontFamily: INDENT_PRINT.body,
+      fontSize: '8pt',
+      color: INDENT_PRINT.black,
+      bgcolor: INDENT_PRINT.white,
+      width: '100%',
+      maxWidth: '190mm',
+      mx: 'auto',
+      boxSizing: 'border-box',
+    }}>
+      {/* ── Letterhead header ── */}
+      <Box className="indent-print-no-break" sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.25,
+        mb: 1,
+        pb: 1,
+        borderBottom: `3px solid ${INDENT_PRINT.navy}`,
+        background: `linear-gradient(180deg, ${INDENT_PRINT.soft} 0%, ${INDENT_PRINT.white} 100%)`,
+        px: 0.5,
+        pt: 0.25,
+      }}>
+        {logoSrc ? (
+          <Box
+            component="img"
+            src={logoSrc}
+            alt="JBI"
+            sx={{ width: 52, height: 52, objectFit: 'contain', flexShrink: 0 }}
+          />
+        ) : (
+          <Box sx={{
+            width: 52, height: 52, flexShrink: 0, borderRadius: '6px',
+            bgcolor: INDENT_PRINT.navy, color: INDENT_PRINT.gold,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: INDENT_PRINT.display, fontWeight: 700, fontSize: '14pt',
+          }}>
+            JBI
+          </Box>
+        )}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{
+            fontFamily: INDENT_PRINT.display, fontWeight: 700, fontSize: '13pt',
+            color: INDENT_PRINT.navyDark, lineHeight: 1.15, textTransform: 'uppercase',
+          }}>
+            {companyName}
           </Typography>
-          <Typography sx={{ fontWeight: 700, fontFamily: 'inherit', fontSize: '9.5pt' }}>
-            DATE - {formatDateDisplay(indent?.indent_date) === '—' ? '___' : formatDateDisplay(indent?.indent_date)}
+          {address && (
+            <Typography sx={{
+              fontFamily: INDENT_PRINT.body, fontSize: '6.8pt', color: INDENT_PRINT.muted,
+              mt: 0.25, lineHeight: 1.3,
+            }}>
+              {address}
+            </Typography>
+          )}
+        </Box>
+        <Box sx={{
+          px: 1.25, py: 0.75, borderRadius: '4px',
+          bgcolor: INDENT_PRINT.gold, color: INDENT_PRINT.navyDark,
+          textAlign: 'center', flexShrink: 0,
+          border: `1px solid ${alpha(INDENT_PRINT.navy, 0.15)}`,
+        }}>
+          <Typography sx={{
+            fontFamily: INDENT_PRINT.body, fontWeight: 800, fontSize: '7pt',
+            letterSpacing: '0.12em', textTransform: 'uppercase', lineHeight: 1.2,
+          }}>
+            Material
+          </Typography>
+          <Typography sx={{
+            fontFamily: INDENT_PRINT.display, fontWeight: 700, fontSize: '11pt', lineHeight: 1.15,
+          }}>
+            INDENT
           </Typography>
         </Box>
       </Box>
 
-      {/* Item header */}
-      <Box sx={{ mb: 1 }}>
-        <Typography sx={{ fontWeight: 700, fontFamily: 'inherit', fontSize: '9.5pt', textTransform: 'uppercase' }}>
-          ITEM NO. 1 : {itemName}
-        </Typography>
+      {/* ── Meta chips ── */}
+      <Box className="indent-print-no-break" sx={{ display: 'flex', gap: 0.75, mb: 1.25, flexWrap: 'wrap' }}>
+        {metaChip('Indent No', indent?.indent_number)}
+        {metaChip('Date', formatDateDisplay(indent?.indent_date) === '—' ? '—' : formatDateDisplay(indent?.indent_date))}
+        {metaChip('PI Ref', pi?.pi_number)}
+        {metaChip('Buyer', pi?.client_name)}
       </Box>
 
-      {/* Color × Qty table */}
-      <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', mb: 1.5 }}>
-        <Box component="tbody">
-          <Box component="tr">
-            <Box component="td" sx={thSx}>COLOUR</Box>
-            {colors.map((c) => <Box component="td" key={c} sx={{ ...thSx, width: 70 }}>{c}</Box>)}
-            <Box component="td" sx={{ ...thSx, width: 70 }}>TOTAL</Box>
+      {/* ── Item + qty ── */}
+      <Box className="indent-print-no-break" sx={{ mb: 1.25 }}>
+        <Typography sx={indentSectionLabelSx}>Style / Item</Typography>
+        <Box sx={{
+          display: 'flex', alignItems: 'stretch', gap: 1,
+          p: 0.85, borderRadius: '4px',
+          bgcolor: INDENT_PRINT.softTeal,
+          border: `1px solid ${alpha(INDENT_PRINT.teal, 0.35)}`,
+        }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{
+              fontFamily: INDENT_PRINT.body, fontWeight: 800, fontSize: '9pt',
+              color: INDENT_PRINT.navyDark, textTransform: 'uppercase', lineHeight: 1.3,
+              wordBreak: 'break-word',
+            }}>
+              {itemName || '—'}
+            </Typography>
           </Box>
-          <Box component="tr">
-            <Box component="td" sx={{ ...cellSx, fontWeight: 700 }}>QTY</Box>
-            {colors.map((c) => <Box component="td" key={c} sx={{ ...cellSx, textAlign: 'center', fontWeight: 600 }}>{colorQty[c]}</Box>)}
-            <Box component="td" sx={{ ...cellSx, textAlign: 'center', fontWeight: 700 }}>{totalQty}</Box>
+          <Box sx={{
+            px: 1.25, py: 0.5, borderRadius: '4px', bgcolor: INDENT_PRINT.white,
+            border: `1px solid ${alpha(INDENT_PRINT.teal, 0.4)}`,
+            display: 'flex', flexDirection: 'column', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <Typography sx={{ fontSize: '6pt', fontWeight: 700, color: INDENT_PRINT.muted, textTransform: 'uppercase' }}>
+              Total Qty
+            </Typography>
+            <Typography sx={{
+              fontFamily: INDENT_PRINT.body, fontWeight: 800, fontSize: '11pt',
+              color: INDENT_PRINT.teal, fontVariantNumeric: 'tabular-nums', lineHeight: 1.15,
+            }}>
+              {totalQty.toLocaleString()} pcs
+            </Typography>
           </Box>
         </Box>
       </Box>
 
-      {/* BOM Table */}
-      <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', mb: 1.5 }}>
-        <Box component="thead">
-          <Box component="tr">
-            {['MATERIAL', 'COLOR / VARIANT', 'GSM', 'ROLL W (CMS)', 'CONSUM.', 'UNIT', 'TOT CON.', 'SUPPLIER', 'IN STOCK'].map((h) => (
-              <Box component="th" key={h} sx={thSx}>{h}</Box>
-            ))}
-          </Box>
-        </Box>
-        <Box component="tbody">
-          {fabricLines.filter((r) => r.material).map((row, i) => (
-            <Box component="tr" key={`f${i}`}>
-              <Box component="td" sx={{ ...cellSx, fontWeight: 600 }}>{row.material}</Box>
-              <Box component="td" sx={cellSx}>{row.color}</Box>
-              <Box component="td" sx={cellSx}>{row.gsm ? `${row.gsm} GSM` : '—'}</Box>
-              <Box component="td" sx={cellSx}>{row.roll_width ? `${row.roll_width} CMS` : '—'}</Box>
-              <Box component="td" sx={cellSx}>{row.consumption_per_pc}</Box>
-              <Box component="td" sx={cellSx}>{row.unit}</Box>
-              <Box component="td" sx={{ ...cellSx, fontWeight: 700 }}>{formatBomQty(row.total_consumption) || row.total_consumption}</Box>
-              <Box component="td" sx={{ ...cellSx, fontSize: '7.5pt', color: '#666' }}>—</Box>
-              <Box component="td" sx={{ ...cellSx, fontSize: '7.5pt' }}>{isInStockRemark(row.remarks) ? 'In stock' : '—'}</Box>
-            </Box>
-          ))}
-          {trimLines.filter((r) => r.trim_name).map((row, i) => {
-            const parts = row.parts?.length ? row.parts : null;
-            const supplierLabel = supplierLabelForTrim(row);
-            const trimSchema = row.trim
-              ? trimsList.find((t) => t.id === row.trim)
-              : trimsList.find((t) => String(t.name || '').toLowerCase() === String(row.trim_name || '').toLowerCase());
-            return (
-              <Box component="tr" key={`t${i}`}>
-                <Box component="td" sx={{ ...cellSx, textTransform: 'uppercase' }}>{row.trim_name}</Box>
-                <Box component="td" sx={cellSx}>{formatTrimVariantDisplay(row, trimSchema) || '—'}</Box>
-                <Box component="td" sx={cellSx}>—</Box>
-                <Box component="td" sx={cellSx}>—</Box>
-                <Box component="td" sx={{ ...cellSx, whiteSpace: 'pre-line' }}>
-                  {parts
-                    ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${p.consumption_per_pc}`).join('\n')
-                    : row.consumption_per_pc}
-                </Box>
-                <Box component="td" sx={{ ...cellSx, whiteSpace: 'pre-line' }}>
-                  {parts ? parts.map((p) => p.unit).join('\n') : row.unit}
-                </Box>
-                <Box component="td" sx={{ ...cellSx, fontWeight: 700, whiteSpace: 'pre-line' }}>
-                  {parts
-                    ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${formatBomQty(p.total_consumption) || p.total_consumption || '—'}`).join('\n')
-                    : (formatBomQty(row.total_consumption) || row.total_consumption)}
-                </Box>
-                <Box component="td" sx={{ ...cellSx, fontSize: '7.5pt', fontWeight: supplierLabel ? 600 : 400 }}>
-                  {supplierLabel || '—'}
-                </Box>
-                <Box component="td" sx={{ ...cellSx, fontSize: '7.5pt' }}>{isInStockRemark(row.remarks) ? 'In stock' : '—'}</Box>
+      {/* ── Colour × Qty ── */}
+      {colors.length > 0 && (
+        <Box className="indent-print-no-break" sx={{ mb: 1.25 }}>
+          <Typography sx={indentSectionLabelSx}>Colour breakdown</Typography>
+          <Box component="table" className="indent-print-table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
+            <Box component="tbody">
+              <Box component="tr">
+                <Box component="td" sx={{ ...indentThSx, width: 70 }}>Colour</Box>
+                {colors.map((c) => (
+                  <Box component="td" key={c} sx={{ ...indentThSx, textAlign: 'center' }}>{c}</Box>
+                ))}
+                <Box component="td" sx={{ ...indentThSx, textAlign: 'center', bgcolor: INDENT_PRINT.teal, borderColor: INDENT_PRINT.teal }}>Total</Box>
               </Box>
-            );
-          })}
+              <Box component="tr">
+                <Box component="td" sx={{ ...indentCellSx, fontWeight: 800, bgcolor: INDENT_PRINT.soft }}>Qty</Box>
+                {colors.map((c) => (
+                  <Box component="td" key={c} sx={{ ...indentCellSx, textAlign: 'center', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    {colorQty[c]}
+                  </Box>
+                ))}
+                <Box component="td" sx={{
+                  ...indentCellSx, textAlign: 'center', fontWeight: 800,
+                  bgcolor: alpha(INDENT_PRINT.teal, 0.12), fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {totalQty}
+                </Box>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      {/* ── BOM ── */}
+      <Box sx={{ mb: 1.25 }}>
+        <Typography sx={indentSectionLabelSx}>Bill of materials</Typography>
+        <Box component="table" className="indent-print-table" sx={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <Box component="thead">
+            <Box component="tr">
+              {[
+                ['Material / Trim', '26%'],
+                ['Color / Variant', '16%'],
+                ['GSM', '7%'],
+                ['Roll W', '8%'],
+                ['Cons./pc', '9%'],
+                ['Unit', '7%'],
+                ['Total', '10%'],
+                ['Supplier', '10%'],
+                ['Stock', '7%'],
+              ].map(([h, w]) => (
+                <Box component="th" key={h} sx={{ ...indentThSx, width: w }}>{h}</Box>
+              ))}
+            </Box>
+          </Box>
+          <Box component="tbody">
+            {fabricRows.map((row, i) => (
+              <Box component="tr" key={`f${i}`} sx={{ bgcolor: i % 2 ? INDENT_PRINT.soft : INDENT_PRINT.white }}>
+                <Box component="td" sx={{ ...indentCellSx, fontWeight: 700 }}>{row.material}</Box>
+                <Box component="td" sx={indentCellSx}>{row.color || '—'}</Box>
+                <Box component="td" sx={indentCellSx}>{row.gsm ? `${formatBomQty(row.gsm) || row.gsm}` : '—'}</Box>
+                <Box component="td" sx={indentCellSx}>{row.roll_width || '—'}</Box>
+                <Box component="td" sx={{ ...indentCellSx, fontWeight: 600 }}>{formatBomQty(row.consumption_per_pc) || row.consumption_per_pc || '—'}</Box>
+                <Box component="td" sx={indentCellSx}>{row.unit}</Box>
+                <Box component="td" sx={{ ...indentCellSx, fontWeight: 800, color: INDENT_PRINT.navy }}>{formatBomQty(row.total_consumption) || row.total_consumption || '—'}</Box>
+                <Box component="td" sx={indentCellSx}>—</Box>
+                <Box component="td" sx={{ ...indentCellSx, fontWeight: isInStockRemark(row.remarks) ? 700 : 400, color: isInStockRemark(row.remarks) ? INDENT_PRINT.teal : INDENT_PRINT.muted }}>
+                  {isInStockRemark(row.remarks) ? 'In stock' : '—'}
+                </Box>
+              </Box>
+            ))}
+            {trimRows.map((row, i) => {
+              const parts = row.parts?.length ? row.parts : null;
+              const supplierLabel = supplierLabelForTrim(row);
+              const trimSchema = row.trim
+                ? trimsList.find((t) => t.id === row.trim)
+                : trimsList.find((t) => String(t.name || '').toLowerCase() === String(row.trim_name || '').toLowerCase());
+              return (
+                <Box component="tr" key={`t${i}`} sx={{ bgcolor: (fabricRows.length + i) % 2 ? INDENT_PRINT.soft : INDENT_PRINT.white }}>
+                  <Box component="td" sx={{ ...indentCellSx, fontWeight: 700, textTransform: 'uppercase' }}>{row.trim_name}</Box>
+                  <Box component="td" sx={indentCellSx}>{formatTrimVariantDisplay(row, trimSchema) || '—'}</Box>
+                  <Box component="td" sx={indentCellSx}>—</Box>
+                  <Box component="td" sx={indentCellSx}>—</Box>
+                  <Box component="td" sx={{ ...indentCellSx, fontWeight: 600, whiteSpace: 'pre-line' }}>
+                    {parts
+                      ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${formatBomQty(p.consumption_per_pc) || p.consumption_per_pc || '—'}`).join('\n')
+                      : (formatBomQty(row.consumption_per_pc) || row.consumption_per_pc || '—')}
+                  </Box>
+                  <Box component="td" sx={{ ...indentCellSx, whiteSpace: 'pre-line' }}>
+                    {parts ? parts.map((p) => p.unit).join('\n') : row.unit}
+                  </Box>
+                  <Box component="td" sx={{ ...indentCellSx, fontWeight: 800, color: INDENT_PRINT.navy, whiteSpace: 'pre-line' }}>
+                    {parts
+                      ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${formatBomQty(p.total_consumption) || p.total_consumption || '—'}`).join('\n')
+                      : (formatBomQty(row.total_consumption) || row.total_consumption || '—')}
+                  </Box>
+                  <Box component="td" sx={{ ...indentCellSx, fontWeight: supplierLabel ? 700 : 400 }}>{supplierLabel || '—'}</Box>
+                  <Box component="td" sx={{ ...indentCellSx, fontWeight: isInStockRemark(row.remarks) ? 700 : 400, color: isInStockRemark(row.remarks) ? INDENT_PRINT.teal : INDENT_PRINT.muted }}>
+                    {isInStockRemark(row.remarks) ? 'In stock' : '—'}
+                  </Box>
+                </Box>
+              );
+            })}
+            {!fabricRows.length && !trimRows.length && (
+              <Box component="tr">
+                <Box component="td" colSpan={9} sx={{ ...indentCellSx, color: INDENT_PRINT.muted, fontStyle: 'italic' }}>
+                  No fabric or trim lines
+                </Box>
+              </Box>
+            )}
+          </Box>
         </Box>
       </Box>
 
-      {/* Size breakdown */}
+      {/* ── Size breakdown ── */}
       {sizes.length > 0 && (
-        <>
-          <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', mb: 1.5 }}>
+        <Box className="indent-print-no-break" sx={{ mb: 1.25 }}>
+          <Typography sx={indentSectionLabelSx}>Size details</Typography>
+          <Box component="table" className="indent-print-table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
             <Box component="thead">
               <Box component="tr">
-                <Box component="th" sx={thSx}>ITEM / SIZE DETAILS</Box>
-                {sizes.map((s) => <Box component="th" key={s} sx={{ ...thSx, width: 48 }}>{s}</Box>)}
-                <Box component="th" sx={{ ...thSx, width: 60 }}>TOTAL</Box>
+                <Box component="th" sx={{ ...indentThSx, width: '28%' }}>Color</Box>
+                {sizes.map((s) => <Box component="th" key={s} sx={{ ...indentThSx, textAlign: 'center' }}>{s}</Box>)}
+                <Box component="th" sx={{ ...indentThSx, textAlign: 'center', bgcolor: INDENT_PRINT.teal, borderColor: INDENT_PRINT.teal }}>Total</Box>
               </Box>
             </Box>
             <Box component="tbody">
@@ -1142,32 +1401,130 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
                   if (!normalizedSize) return;
                   sizeMap[normalizedSize] = (sizeMap[normalizedSize] || 0) + (parseInt(qty, 10) || 0);
                 });
-                const lineTotal = line.quantity_pcs;
                 return (
-                  <Box component="tr" key={li}>
-                    <Box component="td" sx={{ ...cellSx, fontWeight: 600 }}>{line.color}</Box>
-                    {sizes.map((s) => <Box component="td" key={s} sx={{ ...cellSx, textAlign: 'center' }}>{sizeMap[s] || ''}</Box>)}
-                    <Box component="td" sx={{ ...cellSx, textAlign: 'center', fontWeight: 700 }}>{lineTotal}</Box>
+                  <Box component="tr" key={li} sx={{ bgcolor: li % 2 ? INDENT_PRINT.soft : INDENT_PRINT.white }}>
+                    <Box component="td" sx={{ ...indentCellSx, fontWeight: 700 }}>{line.color}</Box>
+                    {sizes.map((s) => (
+                      <Box component="td" key={s} sx={{ ...indentCellSx, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
+                        {sizeMap[s] || ''}
+                      </Box>
+                    ))}
+                    <Box component="td" sx={{ ...indentCellSx, textAlign: 'center', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+                      {line.quantity_pcs}
+                    </Box>
                   </Box>
                 );
               })}
             </Box>
           </Box>
-        </>
+        </Box>
       )}
 
-      {/* Sign-off */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3, borderTop: '1px solid #999', pt: 1.5 }}>
+      {/* ── Notes (space for handwritten notes too) ── */}
+      <Box className="indent-print-no-break" sx={{ mb: 1.5 }}>
+        <Typography sx={indentSectionLabelSx}>Notes</Typography>
+        <Box sx={{
+          minHeight: 48,
+          px: 1, py: 0.75,
+          borderRadius: '4px',
+          border: `1px dashed ${INDENT_PRINT.border}`,
+          bgcolor: INDENT_PRINT.soft,
+        }}>
+          <Typography sx={{
+            fontFamily: INDENT_PRINT.body, fontSize: '8pt', color: INDENT_PRINT.black,
+            whiteSpace: 'pre-wrap', lineHeight: 1.4, minHeight: 36,
+          }}>
+            {indent?.notes || ''}
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* ── Sign-off with signature padding ── */}
+      <Box className="indent-print-no-break" sx={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 1.5,
+        mt: 1,
+        pt: 1.25,
+        borderTop: `2px solid ${INDENT_PRINT.navy}`,
+      }}>
         {[
-          ['Prepared By :-', indent?.prepared_by],
-          ['Received By :-', indent?.received_by],
-          ['Approved By :-', indent?.approved_by],
+          ['Prepared By', indent?.prepared_by],
+          ['Received By', indent?.received_by],
+          ['Approved By', indent?.approved_by],
         ].map(([label, val]) => (
-          <Box key={label} sx={{ textAlign: 'center', minWidth: 140 }}>
-            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '8.5pt' }}>{label}</Typography>
-            {val && <Typography sx={{ fontFamily: 'inherit', fontSize: '8.5pt', mt: 0.5 }}>{val}</Typography>}
+          <Box key={label} sx={{
+            flex: 1,
+            textAlign: 'center',
+            px: 0.75,
+            pb: 0.5,
+            borderRadius: '4px',
+            border: `1px solid ${INDENT_PRINT.border}`,
+            bgcolor: INDENT_PRINT.white,
+          }}>
+            {/* Signature / stamp space */}
+            <Box sx={{
+              height: 52,
+              mb: 0.5,
+              borderBottom: `1px solid ${INDENT_PRINT.border}`,
+              bgcolor: alpha(INDENT_PRINT.navy, 0.02),
+            }} />
+            <Typography sx={{
+              fontFamily: INDENT_PRINT.body, fontWeight: 800, fontSize: '7.5pt',
+              color: INDENT_PRINT.navy, textTransform: 'uppercase', letterSpacing: '0.04em',
+            }}>
+              {label}
+            </Typography>
+            <Typography sx={{
+              fontFamily: INDENT_PRINT.body, fontSize: '8pt', fontWeight: 700,
+              color: INDENT_PRINT.black, mt: 0.25, minHeight: '1.2em',
+            }}>
+              {val || ' '}
+            </Typography>
           </Box>
         ))}
+      </Box>
+
+      {/* ── Document footer ── */}
+      <Box className="indent-print-no-break" sx={{
+        mt: 1.75,
+        pt: 0.85,
+        borderTop: `1px solid ${INDENT_PRINT.border}`,
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 1.5,
+        alignItems: 'flex-start',
+      }}>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography sx={{
+            fontFamily: INDENT_PRINT.display, fontWeight: 700, fontSize: '8pt',
+            color: INDENT_PRINT.navyDark, lineHeight: 1.3,
+          }}>
+            {companyName}
+          </Typography>
+          {contact && (
+            <Typography sx={{ fontFamily: INDENT_PRINT.body, fontSize: '6.8pt', color: INDENT_PRINT.muted, mt: 0.2, lineHeight: 1.35 }}>
+              {contact}
+            </Typography>
+          )}
+          {company?.pdf_footer_note && (
+            <Typography sx={{
+              fontFamily: INDENT_PRINT.body, fontSize: '6.5pt', color: INDENT_PRINT.muted,
+              mt: 0.35, whiteSpace: 'pre-line', lineHeight: 1.35,
+            }}>
+              {company.pdf_footer_note}
+            </Typography>
+          )}
+        </Box>
+        <Typography sx={{
+          fontFamily: INDENT_PRINT.body, fontSize: '7pt', fontWeight: 700,
+          color: INDENT_PRINT.navy, textAlign: 'right', flexShrink: 0, lineHeight: 1.35,
+        }}>
+          {[
+            indent?.indent_number && `Indent: ${indent.indent_number}`,
+            pi?.pi_number && `PI: ${pi.pi_number}`,
+          ].filter(Boolean).join('\n') || 'Material Indent'}
+        </Typography>
       </Box>
     </Box>
   );
@@ -1435,6 +1792,31 @@ export default function IndentEditorPage() {
     })();
   }, []);
 
+  // Company letterhead (logo + footer) for indent print
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await companyAPI.getProfile();
+        setCompany(res.data);
+      } catch (err) {
+        console.error('Failed to load company profile:', err);
+      }
+    })();
+  }, []);
+
+  // Avoid browser print headers showing the app title; restore after print
+  useEffect(() => {
+    const onBefore = () => clearPrintDocumentTitle();
+    const onAfter = () => restorePrintDocumentTitle();
+    window.addEventListener('beforeprint', onBefore);
+    window.addEventListener('afterprint', onAfter);
+    return () => {
+      window.removeEventListener('beforeprint', onBefore);
+      window.removeEventListener('afterprint', onAfter);
+      restorePrintDocumentTitle();
+    };
+  }, []);
+
   // Re-evaluate stock badges when inventory / trim library arrives
   useEffect(() => {
     if (!inventoryItems.length) return;
@@ -1507,6 +1889,9 @@ export default function IndentEditorPage() {
               ? data.fabric_lines.map((r) => enrichFabricRowGsm({
                 ...emptyFabric(),
                 ...r,
+                consumption_per_pc: r.consumption_per_pc != null && r.consumption_per_pc !== ''
+                  ? formatBomQty(r.consumption_per_pc)
+                  : '',
                 total_consumption: r.total_consumption != null && r.total_consumption !== ''
                   ? formatBomQty(r.total_consumption)
                   : '',
@@ -2361,7 +2746,13 @@ export default function IndentEditorPage() {
                         <Box sx={bomCellInner('left')}>
                           <TextField size="small" fullWidth type="number" value={row.consumption_per_pc}
                             onChange={(e) => setFabricField(i, 'consumption_per_pc', e.target.value)}
-                            inputProps={{ step: '0.0001', min: '0' }} sx={bomConsFieldSx('left')} />
+                            onBlur={() => {
+                              const formatted = formatBomQty(row.consumption_per_pc);
+                              if (formatted !== '' && formatted !== String(row.consumption_per_pc)) {
+                                setFabricField(i, 'consumption_per_pc', formatted);
+                              }
+                            }}
+                            inputProps={{ step: '0.01', min: '0' }} sx={bomConsFieldSx('left')} />
                         </Box>
                       </TableCell>
                       <TableCell sx={bodyCell('left')}>
@@ -2777,6 +3168,12 @@ export default function IndentEditorPage() {
                                     sx={{ ...bomFieldSx('left'), width: 72, flexShrink: 0 }} />
                                   <TextField size="small" type="number" value={part.consumption_per_pc}
                                     onChange={(e) => setTrimPartField(i, pIdx, 'consumption_per_pc', e.target.value)}
+                                    onBlur={() => {
+                                      const formatted = formatBomQty(part.consumption_per_pc);
+                                      if (formatted !== '' && formatted !== String(part.consumption_per_pc)) {
+                                        setTrimPartField(i, pIdx, 'consumption_per_pc', formatted);
+                                      }
+                                    }}
                                     inputProps={{ step: '0.01', min: '0' }} sx={{ ...bomConsFieldSx('left'), flex: 1 }} />
                                   <TextField size="small" select value={part.unit}
                                     onChange={(e) => setTrimPartField(i, pIdx, 'unit', e.target.value)}
@@ -2815,7 +3212,13 @@ export default function IndentEditorPage() {
                               <Box sx={bomCellInner('left')}>
                                 <TextField size="small" fullWidth type="number" value={row.consumption_per_pc}
                                   onChange={(e) => setTrimField(i, 'consumption_per_pc', e.target.value)}
-                                  inputProps={{ step: '0.0001', min: '0' }} sx={bomConsFieldSx('left')} />
+                                  onBlur={() => {
+                                    const formatted = formatBomQty(row.consumption_per_pc);
+                                    if (formatted !== '' && formatted !== String(row.consumption_per_pc)) {
+                                      setTrimField(i, 'consumption_per_pc', formatted);
+                                    }
+                                  }}
+                                  inputProps={{ step: '0.01', min: '0' }} sx={bomConsFieldSx('left')} />
                               </Box>
                             </TableCell>
                             <TableCell sx={bodyCell('left')}>
@@ -2983,6 +3386,7 @@ export default function IndentEditorPage() {
             prepared_by: preparedBy,
             received_by: receivedBy,
             approved_by: approvedBy,
+            notes,
           }}
           fabricLines={fabricLines}
           trimLines={trimLines}
