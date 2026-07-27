@@ -1300,29 +1300,34 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
         </Box>
       )}
 
-      {/* ── BOM ── */}
+      {/* ── Fabric ── */}
       <Box sx={{ mb: 1.25 }}>
-        <Typography sx={indentSectionLabelSx}>Bill of materials</Typography>
+        <Typography sx={indentSectionLabelSx}>Fabric</Typography>
         <Box component="table" className="indent-print-table" sx={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <Box component="thead">
             <Box component="tr">
               {[
-                ['Material / Trim', '28%'],
-                ['Color / Variant', '18%'],
-                ['GSM', '6%'],
-                ['Roll W', '7%'],
-                ['Cons./pc', '9%'],
-                ['Unit', '6%'],
-                ['Total', '11%'],
-                ['Supplier', '10%'],
-                ['Stock', '5%'],
+                ['Material', '28%'],
+                ['Color', '16%'],
+                ['GSM', '8%'],
+                ['Roll W', '10%'],
+                ['Cons./pc', '10%'],
+                ['Unit', '7%'],
+                ['Total', '12%'],
+                ['Stock', '9%'],
               ].map(([h, w]) => (
                 <Box component="th" key={h} sx={{ ...indentThSx, width: w }}>{h}</Box>
               ))}
             </Box>
           </Box>
           <Box component="tbody">
-            {fabricRows.map((row, i) => (
+            {fabricRows.length === 0 ? (
+              <Box component="tr">
+                <Box component="td" colSpan={8} sx={{ ...indentCellSx, color: INDENT_PRINT.muted, fontStyle: 'italic' }}>
+                  No fabric lines
+                </Box>
+              </Box>
+            ) : fabricRows.map((row, i) => (
               <Box component="tr" key={`f${i}`} sx={{ bgcolor: i % 2 ? INDENT_PRINT.soft : INDENT_PRINT.white }}>
                 <Box component="td" sx={{ ...indentCellSx, fontWeight: 700 }}>{row.material}</Box>
                 <Box component="td" sx={indentCellSx}>{row.color || '—'}</Box>
@@ -1331,24 +1336,52 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
                 <Box component="td" sx={{ ...indentCellSx, fontWeight: 600 }}>{formatBomQty(row.consumption_per_pc) || row.consumption_per_pc || '—'}</Box>
                 <Box component="td" sx={indentCellSx}>{row.unit}</Box>
                 <Box component="td" sx={{ ...indentCellSx, fontWeight: 800, color: INDENT_PRINT.navy }}>{formatBomQty(row.total_consumption) || row.total_consumption || '—'}</Box>
-                <Box component="td" sx={indentCellSx}>—</Box>
                 <Box component="td" sx={{ ...indentCellSx, fontWeight: isInStockRemark(row.remarks) ? 700 : 400, color: isInStockRemark(row.remarks) ? INDENT_PRINT.teal : INDENT_PRINT.muted }}>
                   {isInStockRemark(row.remarks) ? 'In stock' : '—'}
                 </Box>
               </Box>
             ))}
-            {trimRows.map((row, i) => {
+          </Box>
+        </Box>
+      </Box>
+
+      {/* ── Trims ── */}
+      <Box sx={{ mb: 1.25 }}>
+        <Typography sx={indentSectionLabelSx}>Trims &amp; Accessories</Typography>
+        <Box component="table" className="indent-print-table" sx={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <Box component="thead">
+            <Box component="tr">
+              {[
+                ['Trim Name', '22%'],
+                ['Properties', '20%'],
+                ['Supplier', '16%'],
+                ['Cons./pc', '12%'],
+                ['Unit', '8%'],
+                ['Total', '12%'],
+                ['Stock', '10%'],
+              ].map(([h, w]) => (
+                <Box component="th" key={h} sx={{ ...indentThSx, width: w }}>{h}</Box>
+              ))}
+            </Box>
+          </Box>
+          <Box component="tbody">
+            {trimRows.length === 0 ? (
+              <Box component="tr">
+                <Box component="td" colSpan={7} sx={{ ...indentCellSx, color: INDENT_PRINT.muted, fontStyle: 'italic' }}>
+                  No trim lines
+                </Box>
+              </Box>
+            ) : trimRows.map((row, i) => {
               const parts = row.parts?.length ? row.parts : null;
               const supplierLabel = supplierLabelForTrim(row);
               const trimSchema = row.trim
                 ? trimsList.find((t) => t.id === row.trim)
                 : trimsList.find((t) => String(t.name || '').toLowerCase() === String(row.trim_name || '').toLowerCase());
               return (
-                <Box component="tr" key={`t${i}`} sx={{ bgcolor: (fabricRows.length + i) % 2 ? INDENT_PRINT.soft : INDENT_PRINT.white }}>
+                <Box component="tr" key={`t${i}`} sx={{ bgcolor: i % 2 ? INDENT_PRINT.soft : INDENT_PRINT.white }}>
                   <Box component="td" sx={{ ...indentCellSx, fontWeight: 700, textTransform: 'uppercase' }}>{row.trim_name}</Box>
                   <Box component="td" sx={indentCellSx}>{formatTrimVariantDisplay(row, trimSchema) || '—'}</Box>
-                  <Box component="td" sx={indentCellSx}>—</Box>
-                  <Box component="td" sx={indentCellSx}>—</Box>
+                  <Box component="td" sx={{ ...indentCellSx, fontWeight: supplierLabel ? 700 : 400 }}>{supplierLabel || '—'}</Box>
                   <Box component="td" sx={{ ...indentCellSx, fontWeight: 600, whiteSpace: 'pre-line' }}>
                     {parts
                       ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${formatBomQty(p.consumption_per_pc) || p.consumption_per_pc || '—'}`).join('\n')
@@ -1362,20 +1395,12 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
                       ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${formatBomQty(p.total_consumption) || p.total_consumption || '—'}`).join('\n')
                       : (formatBomQty(row.total_consumption) || row.total_consumption || '—')}
                   </Box>
-                  <Box component="td" sx={{ ...indentCellSx, fontWeight: supplierLabel ? 700 : 400 }}>{supplierLabel || '—'}</Box>
                   <Box component="td" sx={{ ...indentCellSx, fontWeight: isInStockRemark(row.remarks) ? 700 : 400, color: isInStockRemark(row.remarks) ? INDENT_PRINT.teal : INDENT_PRINT.muted }}>
                     {isInStockRemark(row.remarks) ? 'In stock' : '—'}
                   </Box>
                 </Box>
               );
             })}
-            {!fabricRows.length && !trimRows.length && (
-              <Box component="tr">
-                <Box component="td" colSpan={9} sx={{ ...indentCellSx, color: INDENT_PRINT.muted, fontStyle: 'italic' }}>
-                  No fabric or trim lines
-                </Box>
-              </Box>
-            )}
           </Box>
         </Box>
       </Box>
