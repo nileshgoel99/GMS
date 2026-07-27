@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import {
   Box, Button, Typography, TextField, MenuItem, Grid, Paper,
@@ -13,22 +14,12 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { hasModuleAccess } from '../config/permissions';
-import { ordersAPI, inventoryAPI, suppliersAPI, companyAPI } from '../services/api';
+import { ordersAPI, suppliersAPI, companyAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import { normalizeGarmentSize, sortGarmentSizes } from '../utils/normalizeGarmentSize';
 import { extractGsmFromFabricComposition, enrichFabricRowGsm } from '../utils/extractFabricGsm';
-import {
-  applyInventoryStockRemark,
-  findMatchingInventoryItem,
-  IN_STOCK_REMARK,
-  isInStockRemark,
-} from '../utils/matchInventoryStock';
 import { companyContactLines } from '../utils/formatCompanyPhone';
-import {
-  clearPrintDocumentTitle,
-  restorePrintDocumentTitle,
-} from '../utils/piPrintPageFooters';
 import AddTrimModal from '../components/trims/AddTrimModal';
 import SupplierAutocomplete from '../components/suppliers/SupplierAutocomplete';
 import {
@@ -58,8 +49,8 @@ const INDENT_PRINT = {
 };
 
 // ── Print styles ─────────────────────────────────────────────────────────────
-// Use absolute (not fixed) so the browser does not print extra blank pages for
-// the still-laid-out editor UI underneath.
+// Print root is portaled to document.body so we can hide #root entirely and
+// avoid blank pages from the tall editor layout under visibility:hidden.
 const PRINT_STYLE = `
 @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600;700;800&display=swap');
 
@@ -86,17 +77,15 @@ const PRINT_STYLE = `
     padding: 0 !important;
     background: #fff !important;
   }
-  body * { visibility: hidden !important; }
-  #indent-print-root,
-  #indent-print-root * { visibility: visible !important; }
+  body > *:not(#indent-print-root) {
+    display: none !important;
+  }
   #indent-print-root {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    display: block !important;
+    position: static !important;
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    display: block !important;
     background: #fff !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -180,63 +169,6 @@ const mapApiTrimLine = (r) => ({
   // Keep API/saved totals when reopening an indent (PI qty effect must not overwrite).
   total_manual: true,
 });
-
-const asInventoryList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
-
-const fmtStockQty = (v) => {
-  const n = typeof v === 'number' ? v : parseFloat(v);
-  if (!Number.isFinite(n)) return '';
-  const rounded = Math.round(n * 1e4) / 1e4;
-  return rounded.toLocaleString(undefined, { maximumFractionDigits: 4, minimumFractionDigits: 0 });
-};
-
-/** Compact clickable "In stock / Not in stock" indicator, replacing free-text remarks. */
-const InStockToggle = ({ checked, onToggle, stockQty, stockUnit }) => {
-  const qtyLabel = checked && stockQty != null && String(stockQty).trim() !== ''
-    ? `${fmtStockQty(stockQty)}${stockUnit ? ` ${String(stockUnit).toUpperCase()}` : ''}`
-    : '';
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.35, minWidth: 0 }}>
-      <Box
-        onClick={onToggle}
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 0.6,
-          px: 1,
-          py: 0.5,
-          borderRadius: 5,
-          cursor: 'pointer',
-          userSelect: 'none',
-          bgcolor: checked ? alpha('#16a34a', 0.1) : alpha('#94a3b8', 0.14),
-          border: `1px solid ${checked ? alpha('#16a34a', 0.35) : alpha('#94a3b8', 0.35)}`,
-          transition: 'background-color 0.15s ease',
-        }}
-      >
-        <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: checked ? '#16a34a' : '#94a3b8', flexShrink: 0 }} />
-        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: checked ? '#15803d' : '#64748b', whiteSpace: 'nowrap' }}>
-          {checked ? 'In stock' : 'Not in stock'}
-        </Typography>
-      </Box>
-      {qtyLabel ? (
-        <Typography
-          className="font-numeric"
-          sx={{
-            fontSize: '0.72rem',
-            fontWeight: 800,
-            color: '#15803d',
-            lineHeight: 1.15,
-            whiteSpace: 'nowrap',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-          title="Available inventory quantity"
-        >
-          {qtyLabel}
-        </Typography>
-      ) : null}
-    </Box>
-  );
-};
 
 /** Trim-name Autocomplete filter — appends a "Create '<typed name>'" option when there's no match. */
 const filterTrimNameOptions = (options, { inputValue }) => {
@@ -436,26 +368,24 @@ const BOM_MULTILINE_H = 56;
 const BOM_ROW_TOTAL = BOM_MULTILINE_H + 18;
 const BOM_CELL_PAD_Y = (BOM_ROW_TOTAL - BOM_MULTILINE_H) / 2;
 const FABRIC_COLS = [
-  { label: 'Fabric composition *', width: '24%', align: 'left' },
-  { label: 'Color', width: '12%', align: 'left' },
-  { label: 'GSM', width: '8%', align: 'left' },
-  { label: 'Roll W (CMS)', width: '9%', align: 'left' },
-  { label: 'Cons./pc', width: '9%', align: 'left' },
-  { label: 'Unit', width: '8%', align: 'left' },
-  { label: 'Total', width: '10%', align: 'left' },
-  { label: 'In Stock', width: '13%', align: 'left' },
-  { label: '', width: '10%', align: 'left' },
+  { label: 'Fabric composition *', width: '28%', align: 'left' },
+  { label: 'Color', width: '14%', align: 'left' },
+  { label: 'GSM', width: '9%', align: 'left' },
+  { label: 'Roll W (CMS)', width: '11%', align: 'left' },
+  { label: 'Cons./pc', width: '10%', align: 'left' },
+  { label: 'Unit', width: '9%', align: 'left' },
+  { label: 'Total', width: '11%', align: 'left' },
+  { label: '', width: '8%', align: 'left' },
 ];
 
 const TRIM_COLS = [
-  { label: 'Trim & Properties', width: '30%', align: 'left' },
-  { label: 'Supplier', width: '20%', align: 'left' },
-  { label: 'Cons./pc', width: '8%', align: 'left' },
-  { label: 'Unit', width: '7%', align: 'left' },
-  { label: 'Total', width: '9%', align: 'left' },
-  { label: 'Tot. Unit', width: '7%', align: 'left' },
-  { label: 'In Stock', width: '11%', align: 'left' },
-  { label: '', width: '8%', align: 'left' },
+  { label: 'Trim & Properties', width: '34%', align: 'left' },
+  { label: 'Supplier', width: '22%', align: 'left' },
+  { label: 'Cons./pc', width: '9%', align: 'left' },
+  { label: 'Unit', width: '8%', align: 'left' },
+  { label: 'Total', width: '10%', align: 'left' },
+  { label: 'Tot. Unit', width: '8%', align: 'left' },
+  { label: '', width: '9%', align: 'left' },
 ];
 
 /** Popper portaled above cards — prefers below the field, flips if needed. */
@@ -1080,6 +1010,8 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
   const totalQty = Object.values(colorQty).reduce((s, v) => s + v, 0);
 
   const itemName = [...new Set(piLines.map((l) => l.item_name).filter(Boolean))].join(' / ');
+  const itemCode = [...new Set(piLines.map((l) => l.item_code).filter(Boolean))].join(' / ');
+  const poNumber = pi?.buyer_po_number || '';
   const sizeBreakdown = piLines.reduce((acc, line) => {
     if (line.size_breakdown?.length) {
       line.size_breakdown.forEach(({ size, qty }) => {
@@ -1229,6 +1161,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
         {metaChip('Indent No', indent?.indent_number)}
         {metaChip('Date', formatDateDisplay(indent?.indent_date) === '—' ? '—' : formatDateDisplay(indent?.indent_date))}
         {metaChip('PI Ref', pi?.pi_number)}
+        {metaChip('PO No', poNumber)}
         {metaChip('Buyer', pi?.client_name)}
       </Box>
 
@@ -1248,6 +1181,12 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
               wordBreak: 'break-word',
             }}>
               {itemName || '—'}
+            </Typography>
+            <Typography sx={{
+              fontFamily: INDENT_PRINT.body, fontWeight: 700, fontSize: '7.5pt',
+              color: INDENT_PRINT.muted, mt: 0.35, lineHeight: 1.3, wordBreak: 'break-word',
+            }}>
+              Item Code: {itemCode || '—'}
             </Typography>
           </Box>
           <Box sx={{
@@ -1307,14 +1246,13 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
           <Box component="thead">
             <Box component="tr">
               {[
-                ['Material', '28%'],
-                ['Color', '16%'],
-                ['GSM', '8%'],
-                ['Roll W', '10%'],
-                ['Cons./pc', '10%'],
-                ['Unit', '7%'],
-                ['Total', '12%'],
-                ['Stock', '9%'],
+                ['Material', '30%'],
+                ['Color', '18%'],
+                ['GSM', '9%'],
+                ['Roll W', '11%'],
+                ['Cons./pc', '11%'],
+                ['Unit', '8%'],
+                ['Total', '13%'],
               ].map(([h, w]) => (
                 <Box component="th" key={h} sx={{ ...indentThSx, width: w }}>{h}</Box>
               ))}
@@ -1323,7 +1261,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
           <Box component="tbody">
             {fabricRows.length === 0 ? (
               <Box component="tr">
-                <Box component="td" colSpan={8} sx={{ ...indentCellSx, color: INDENT_PRINT.muted, fontStyle: 'italic' }}>
+                <Box component="td" colSpan={7} sx={{ ...indentCellSx, color: INDENT_PRINT.muted, fontStyle: 'italic' }}>
                   No fabric lines
                 </Box>
               </Box>
@@ -1336,9 +1274,6 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
                 <Box component="td" sx={{ ...indentCellSx, fontWeight: 600 }}>{formatBomQty(row.consumption_per_pc) || row.consumption_per_pc || '—'}</Box>
                 <Box component="td" sx={indentCellSx}>{row.unit}</Box>
                 <Box component="td" sx={{ ...indentCellSx, fontWeight: 800, color: INDENT_PRINT.navy }}>{formatBomQty(row.total_consumption) || row.total_consumption || '—'}</Box>
-                <Box component="td" sx={{ ...indentCellSx, fontWeight: isInStockRemark(row.remarks) ? 700 : 400, color: isInStockRemark(row.remarks) ? INDENT_PRINT.teal : INDENT_PRINT.muted }}>
-                  {isInStockRemark(row.remarks) ? 'In stock' : '—'}
-                </Box>
               </Box>
             ))}
           </Box>
@@ -1352,13 +1287,12 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
           <Box component="thead">
             <Box component="tr">
               {[
-                ['Trim Name', '22%'],
-                ['Properties', '20%'],
-                ['Supplier', '16%'],
-                ['Cons./pc', '12%'],
-                ['Unit', '8%'],
-                ['Total', '12%'],
-                ['Stock', '10%'],
+                ['Trim Name', '24%'],
+                ['Properties', '22%'],
+                ['Supplier', '18%'],
+                ['Cons./pc', '13%'],
+                ['Unit', '9%'],
+                ['Total', '14%'],
               ].map(([h, w]) => (
                 <Box component="th" key={h} sx={{ ...indentThSx, width: w }}>{h}</Box>
               ))}
@@ -1367,7 +1301,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
           <Box component="tbody">
             {trimRows.length === 0 ? (
               <Box component="tr">
-                <Box component="td" colSpan={7} sx={{ ...indentCellSx, color: INDENT_PRINT.muted, fontStyle: 'italic' }}>
+                <Box component="td" colSpan={6} sx={{ ...indentCellSx, color: INDENT_PRINT.muted, fontStyle: 'italic' }}>
                   No trim lines
                 </Box>
               </Box>
@@ -1395,9 +1329,6 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
                       ? parts.map((p) => `${(p.label || 'Part').toUpperCase()}: ${formatBomQty(p.total_consumption) || p.total_consumption || '—'}`).join('\n')
                       : (formatBomQty(row.total_consumption) || row.total_consumption || '—')}
                   </Box>
-                  <Box component="td" sx={{ ...indentCellSx, fontWeight: isInStockRemark(row.remarks) ? 700 : 400, color: isInStockRemark(row.remarks) ? INDENT_PRINT.teal : INDENT_PRINT.muted }}>
-                    {isInStockRemark(row.remarks) ? 'In stock' : '—'}
-                  </Box>
                 </Box>
               );
             })}
@@ -1407,7 +1338,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
 
       {/* ── Size breakdown ── */}
       {sizes.length > 0 && (
-        <Box className="indent-print-no-break" sx={{ mb: 1.25 }}>
+        <Box sx={{ mb: 1.25 }}>
           <Typography sx={indentSectionLabelSx}>Size details</Typography>
           <Box component="table" className="indent-print-table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
             <Box component="thead">
@@ -1565,6 +1496,7 @@ const piFromIndentData = (data) => {
     id: data.pi,
     pi_number: data.pi_number,
     client_name: data.pi_client_name || '',
+    buyer_po_number: data.buyer_po_number || data.pi_buyer_po_number || '',
     lines: data.pi_lines || [],
   };
 };
@@ -1617,7 +1549,6 @@ export default function IndentEditorPage() {
   const [piList,   setPiList]   = useState([]);
   const [trimsList, setTrimsList] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
-  const [inventoryItems, setInventoryItems] = useState([]);
 
   // Form state
   const [indent,       setIndent]      = useState(null);
@@ -1774,36 +1705,12 @@ export default function IndentEditorPage() {
     }
   };
 
-  const withStockRemark = (row) => applyInventoryStockRemark(row, inventoryItems, trimsList);
-
   useEffect(() => {
     if (location.state?.saveMessage) {
       setSaveNotice(location.state.saveMessage);
       navigate(location.pathname + location.search, { replace: true, state: {} });
     }
   }, [location.pathname, location.search, location.state, navigate]);
-
-  // Load inventory so trim "In stock" can auto-match SKUs by properties
-  useEffect(() => {
-    (async () => {
-      try {
-        const all = [];
-        let page = 1;
-        let guard = 0;
-        while (guard < 40) {
-          guard += 1;
-          const res = await inventoryAPI.getAll({ is_active: true, page });
-          const chunk = asInventoryList(res.data);
-          all.push(...chunk);
-          if (!res.data?.next || !chunk.length) break;
-          page += 1;
-        }
-        setInventoryItems(all);
-      } catch (err) {
-        console.error('Failed to load inventory for stock matching:', err);
-      }
-    })();
-  }, []);
 
   // Load suppliers for per-trim-line picker
   useEffect(() => {
@@ -1829,33 +1736,30 @@ export default function IndentEditorPage() {
     })();
   }, []);
 
-  // Avoid browser print headers showing the app title; restore after print
+  // Browser uses document.title as the default PDF / print save name.
+  const defaultDocTitleRef = useRef(document.title);
   useEffect(() => {
-    const onBefore = () => clearPrintDocumentTitle();
-    const onAfter = () => restorePrintDocumentTitle();
-    window.addEventListener('beforeprint', onBefore);
-    window.addEventListener('afterprint', onAfter);
-    return () => {
-      window.removeEventListener('beforeprint', onBefore);
-      window.removeEventListener('afterprint', onAfter);
-      restorePrintDocumentTitle();
+    const setPrintTitle = () => {
+      const name = String(indentNumber || '').trim();
+      document.title = name || ' ';
     };
-  }, []);
+    const restoreTitle = () => {
+      document.title = defaultDocTitleRef.current;
+    };
+    window.addEventListener('beforeprint', setPrintTitle);
+    window.addEventListener('afterprint', restoreTitle);
+    return () => {
+      window.removeEventListener('beforeprint', setPrintTitle);
+      window.removeEventListener('afterprint', restoreTitle);
+      restoreTitle();
+    };
+  }, [indentNumber]);
 
-  // Re-evaluate stock badges when inventory / trim library arrives
-  useEffect(() => {
-    if (!inventoryItems.length) return;
-    setTrimLines((prev) => {
-      let changed = false;
-      const next = prev.map((row) => {
-        if (!row.trim && !String(row.trim_name || '').trim()) return row;
-        const updated = applyInventoryStockRemark(row, inventoryItems, trimsList);
-        if (updated !== row) changed = true;
-        return updated;
-      });
-      return changed ? next : prev;
-    });
-  }, [inventoryItems, trimsList]);
+  const handlePrint = () => {
+    const name = String(indentNumber || '').trim();
+    if (name) document.title = name;
+    window.print();
+  };
 
   // Recalculate totals when selected PI lines / qty change — never overwrite manual/saved totals.
   useEffect(() => {
@@ -2051,10 +1955,6 @@ export default function IndentEditorPage() {
           updated.total_consumption = trimRowTotal(updated, activeLines, colorQty, totalQty);
         }
       }
-      // Auto stock match when identity / properties change; keep manual remarks toggle as-is
-      if (field === 'color_variant' || field === 'size_variant' || field === 'trim_name' || field === 'category') {
-        updated = withStockRemark(updated);
-      }
       next[i] = updated;
       return next;
     });
@@ -2141,7 +2041,7 @@ export default function IndentEditorPage() {
       if (row.consumption_per_pc) {
         row.total_consumption = trimRowTotal(row, activeLines, colorQty, totalQty);
       }
-      next[i] = withStockRemark(row);
+      next[i] = row;
       return next;
     });
   };
@@ -2166,7 +2066,7 @@ export default function IndentEditorPage() {
           row.total_consumption = trimRowTotal(row, activeLines, colorQty, totalQty);
         }
       }
-      next[i] = withStockRemark(row);
+      next[i] = row;
       return next;
     });
   };
@@ -2183,7 +2083,7 @@ export default function IndentEditorPage() {
       selectTrimFromLibrary(trimModalTargetRow, newTrim);
     } else {
       setTrimLines((prev) => {
-        const entry = withStockRemark({
+        const entry = {
           ...emptyTrim(),
           trim: newTrim.id,
           trim_name: newTrim.name,
@@ -2191,7 +2091,7 @@ export default function IndentEditorPage() {
           unit: newTrim.default_unit || 'PCS',
           total_unit: newTrim.default_unit || 'PCS',
           property_values: initPropertyValues(newTrim.properties),
-        });
+        };
         const blankIdx = prev.findIndex((r) => !r.trim_name.trim());
         if (blankIdx >= 0) {
           const next = [...prev];
@@ -2288,9 +2188,9 @@ export default function IndentEditorPage() {
   const colorChips = Object.entries(colorQty);
 
   return (
+    <>
+    <style>{PRINT_STYLE}</style>
     <Box sx={{ p: { xs: 1.5, sm: 2.5 } }}>
-      <style>{PRINT_STYLE}</style>
-
       <Snackbar
         open={Boolean(saveNotice)}
         autoHideDuration={5000}
@@ -2315,7 +2215,7 @@ export default function IndentEditorPage() {
         </Typography>
         {!isNew && (
           <Button startIcon={<Print />} variant="outlined" size="small"
-            onClick={() => window.print()}
+            onClick={handlePrint}
             sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
             Print
           </Button>
@@ -2803,14 +2703,6 @@ export default function IndentEditorPage() {
                         </Box>
                       </TableCell>
                       <TableCell sx={bodyCell('center')}>
-                        <Box sx={bomCellInner('center')}>
-                          <InStockToggle
-                            checked={isInStockRemark(row.remarks)}
-                            onToggle={() => setFabricField(i, 'remarks', isInStockRemark(row.remarks) ? '' : IN_STOCK_REMARK)}
-                          />
-                        </Box>
-                      </TableCell>
-                      <TableCell sx={bodyCell('center')}>
                         <Box sx={{ ...bomCellInner('center'), gap: 0.25 }}>
                           <Tooltip title="Insert row below">
                             <IconButton size="small" color="primary" onClick={() => insertFabricRowAfter(i)}>
@@ -2863,9 +2755,6 @@ export default function IndentEditorPage() {
                   {trimLines.map((row, i) => {
                     const schema = getTrimSchema(row);
                     const trimMaster = getTrimMaster(row);
-                    const stockMatch = findMatchingInventoryItem(row, inventoryItems, trimsList);
-                    const stockQty = stockMatch?.current_stock ?? row.matched_stock_qty;
-                    const stockUnit = stockMatch?.unit ?? row.matched_stock_unit;
                     return (
                       <TableRow key={i} hover className={i % 2 === 1 ? 'trim-row--alt' : undefined}>
                         <TableCell sx={{ ...bodyCell('left'), verticalAlign: 'top', overflow: 'visible' }}>
@@ -3282,38 +3171,6 @@ export default function IndentEditorPage() {
                           </>
                         )}
                         <TableCell sx={bodyCell('center')}>
-                          <Box sx={{ ...bomCellInner('center'), flexDirection: 'column', minHeight: 'auto', py: 0.5 }}>
-                            <InStockToggle
-                              checked={isInStockRemark(row.remarks)}
-                              stockQty={isInStockRemark(row.remarks) ? stockQty : ''}
-                              stockUnit={isInStockRemark(row.remarks) ? stockUnit : ''}
-                              onToggle={() => {
-                                setTrimLines((prev) => {
-                                  const next = [...prev];
-                                  if (isInStockRemark(row.remarks)) {
-                                    next[i] = {
-                                      ...next[i],
-                                      remarks: '',
-                                      matched_stock_qty: '',
-                                      matched_stock_unit: '',
-                                    };
-                                  } else if (stockMatch) {
-                                    next[i] = applyInventoryStockRemark(next[i], inventoryItems, trimsList);
-                                  } else {
-                                    next[i] = {
-                                      ...next[i],
-                                      remarks: IN_STOCK_REMARK,
-                                      matched_stock_qty: '',
-                                      matched_stock_unit: '',
-                                    };
-                                  }
-                                  return next;
-                                });
-                              }}
-                            />
-                          </Box>
-                        </TableCell>
-                        <TableCell sx={bodyCell('center')}>
                           <Box sx={{ ...bomCellInner('center'), gap: 0.25 }}>
                             <Tooltip title="Insert row below">
                               <IconButton size="small" color="primary" onClick={() => insertTrimRowAfter(i)}>
@@ -3374,7 +3231,7 @@ export default function IndentEditorPage() {
       }}>
         {!isNew && (
           <Button startIcon={<Print />} variant="outlined" size="small"
-            onClick={() => window.print()}
+            onClick={handlePrint}
             sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
             Print
           </Button>
@@ -3399,8 +3256,8 @@ export default function IndentEditorPage() {
         onClose={() => { setTrimModalOpen(false); setTrimModalTargetRow(null); setTrimModalInitialName(''); }}
         onSaved={handleTrimCreated}
       />
-
-      {/* ── Hidden print root (hidden on screen via PRINT_STYLE, not display:none) ── */}
+    </Box>
+    {createPortal(
       <Box id="indent-print-root">
         <IndentDocument
           pi={pi}
@@ -3419,7 +3276,9 @@ export default function IndentEditorPage() {
           suppliers={suppliers}
           trimsList={trimsList}
         />
-      </Box>
-    </Box>
+      </Box>,
+      document.body,
+    )}
+    </>
   );
 }

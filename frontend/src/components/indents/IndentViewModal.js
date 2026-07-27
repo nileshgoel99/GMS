@@ -22,7 +22,6 @@ const buildColorQty = (piLines) => {
 };
 
 const val = (v) => (v != null && String(v).trim() !== '' ? v : '—');
-const isInStockRemark = (remarks) => String(remarks || '').trim().toLowerCase() === 'in stock';
 
 /** 2 decimals; hide .00 */
 const formatBomQty = (value) => {
@@ -36,15 +35,6 @@ const qtyVal = (v) => {
   const formatted = formatBomQty(v);
   return formatted !== '' ? formatted : '—';
 };
-
-const InStockBadge = ({ checked }) => (
-  <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6 }}>
-    <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: checked ? '#16a34a' : '#94a3b8', flexShrink: 0 }} />
-    <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: checked ? '#15803d' : '#64748b' }}>
-      {checked ? 'In stock' : 'Not in stock'}
-    </Typography>
-  </Box>
-);
 
 const viewHeadSx = {
   fontWeight: 700,
@@ -230,14 +220,13 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                   <TableHead>
                     <TableRow>
                       {[
-                        { h: 'Material', a: 'left', w: '22%' },
-                        { h: 'Color', a: 'left', w: '10%' },
-                        { h: 'GSM', a: 'left', w: '8%' },
-                        { h: 'Roll W (CMS)', a: 'left', w: '10%' },
-                        { h: 'Cons./pc', a: 'left', w: '10%' },
-                        { h: 'Unit', a: 'left', w: '8%' },
-                        { h: 'Total', a: 'left', w: '10%' },
-                        { h: 'In Stock', a: 'left', w: '22%' },
+                        { h: 'Material', a: 'left', w: '26%' },
+                        { h: 'Color', a: 'left', w: '12%' },
+                        { h: 'GSM', a: 'left', w: '10%' },
+                        { h: 'Roll W (CMS)', a: 'left', w: '12%' },
+                        { h: 'Cons./pc', a: 'left', w: '12%' },
+                        { h: 'Unit', a: 'left', w: '10%' },
+                        { h: 'Total', a: 'left', w: '18%' },
                       ].map((col) => (
                         <TableCell key={col.h} sx={{ ...viewHeadSx, textAlign: col.a, width: col.w }}>{col.h}</TableCell>
                       ))}
@@ -246,7 +235,7 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                   <TableBody>
                     {(indent.fabric_lines || []).filter((r) => r.material?.trim()).length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} sx={{ ...viewCellSx('left'), color: 'text.disabled' }}>No fabric rows</TableCell>
+                        <TableCell colSpan={7} sx={{ ...viewCellSx('left'), color: 'text.disabled' }}>No fabric rows</TableCell>
                       </TableRow>
                     ) : (
                       (indent.fabric_lines || []).filter((r) => r.material?.trim()).map((row, i) => (
@@ -258,7 +247,6 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                           <TableCell sx={viewCellSx('left')}>{qtyVal(row.consumption_per_pc)}</TableCell>
                           <TableCell sx={{ ...viewCellSx('left'), fontWeight: 600 }}>{val(row.unit)}</TableCell>
                           <TableCell sx={{ ...viewCellSx('left'), fontWeight: 700 }}>{val(row.total_consumption)}</TableCell>
-                          <TableCell sx={viewCellSx('left')}><InStockBadge checked={isInStockRemark(row.remarks)} /></TableCell>
                         </TableRow>
                       ))
                     )}
@@ -275,14 +263,13 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                   <TableHead>
                     <TableRow>
                       {[
-                        { h: 'Trim Name', a: 'left', w: '20%' },
-                        { h: 'Properties', a: 'left', w: '18%' },
-                        { h: 'Supplier', a: 'left', w: '14%' },
-                        { h: 'Cons./pc', a: 'left', w: '9%' },
-                        { h: 'Unit', a: 'left', w: '7%' },
-                        { h: 'Total', a: 'left', w: '9%' },
-                        { h: 'Tot. Unit', a: 'left', w: '8%' },
-                        { h: 'In Stock', a: 'left', w: '15%' },
+                        { h: 'Trim Name', a: 'left', w: '22%' },
+                        { h: 'Properties', a: 'left', w: '22%' },
+                        { h: 'Supplier', a: 'left', w: '16%' },
+                        { h: 'Cons./pc', a: 'left', w: '10%' },
+                        { h: 'Unit', a: 'left', w: '8%' },
+                        { h: 'Total', a: 'left', w: '12%' },
+                        { h: 'Tot. Unit', a: 'left', w: '10%' },
                       ].map((col) => (
                         <TableCell key={col.h} sx={{ ...viewHeadSx, textAlign: col.a, width: col.w }}>{col.h}</TableCell>
                       ))}
@@ -291,7 +278,7 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                   <TableBody>
                     {(indent.trim_lines || []).filter((r) => r.trim_name?.trim()).length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} sx={{ ...viewCellSx('left'), color: 'text.disabled' }}>No trim rows</TableCell>
+                        <TableCell colSpan={7} sx={{ ...viewCellSx('left'), color: 'text.disabled' }}>No trim rows</TableCell>
                       </TableRow>
                     ) : (
                       (indent.trim_lines || []).filter((r) => r.trim_name?.trim()).map((row, i) => (
@@ -335,7 +322,6 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                               <TableCell sx={{ ...viewCellSx('left'), fontWeight: 600 }}>{val(row.total_unit || row.unit)}</TableCell>
                             </>
                           )}
-                          <TableCell sx={viewCellSx('left')}><InStockBadge checked={isInStockRemark(row.remarks)} /></TableCell>
                         </TableRow>
                       ))
                     )}
