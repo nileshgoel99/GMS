@@ -175,6 +175,7 @@ function GridMeta({ bill }) {
     ['Supplier PO', bill.po_number || '—'],
     ['Bill Date', formatDateDisplay(bill.bill_date)],
     ['Payment Terms', bill.payment_terms || '—'],
+    ['Payment Due', formatDateDisplay(bill.due_date || bill.payment_due_date)],
   ];
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 1.5 }}>

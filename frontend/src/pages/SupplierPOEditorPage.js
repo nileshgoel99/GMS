@@ -1993,6 +1993,18 @@ export default function SupplierPOEditorPage() {
             />
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              size="small"
+              label="Payment Terms"
+              value={form.payment_terms}
+              onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))}
+              placeholder="e.g. Net 30 days"
+              helperText="Used on purchase bill to set payment due date"
+              sx={sxInput}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
             <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: slate[600], mb: 0.75 }}>
               Transport paid by
             </Typography>

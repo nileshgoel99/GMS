@@ -13,6 +13,8 @@ import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
 import BillLineParticulars from '../components/procurement/BillLineParticulars';
 import PurchaseBillDocuments from '../components/procurement/PurchaseBillDocuments';
 import { parseParticulars } from '../utils/parseParticulars';
+import { computeBillPaymentDueDate, parsePaymentDays } from '../utils/paymentTerms';
+import { formatDateDisplay } from '../utils/formatDate';
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -103,6 +105,7 @@ const initForm = () => ({
   bill_date: todayIso(),
   received_date: todayIso(),
   payment_terms: '',
+  due_date: '',
   tax_mode: 'CGST_SGST',
   cgst_percent: '9',
   sgst_percent: '9',
@@ -111,6 +114,18 @@ const initForm = () => ({
   notes: '',
   items: [],
 });
+
+const syncDueDate = (prev, overrides = {}) => {
+  const next = { ...prev, ...overrides };
+  if (!Object.prototype.hasOwnProperty.call(overrides, 'due_date')) {
+    next.due_date = computeBillPaymentDueDate({
+      paymentTerms: next.payment_terms,
+      billDate: next.bill_date,
+      receivedDate: next.received_date || next.bill_date,
+    });
+  }
+  return next;
+};
 
 const sectionLabelSx = { fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: slate[600] };
 
@@ -165,6 +180,10 @@ export default function PurchaseBillEditorPage() {
             ...b,
             purchase_order: b.purchase_order,
             po_number: b.po_number || '',
+            payment_terms: b.payment_terms || '',
+            due_date: b.due_date || b.payment_due_date || '',
+            bill_date: b.bill_date || todayIso(),
+            received_date: b.received_date || b.bill_date || todayIso(),
             cgst_percent: String(b.cgst_percent ?? 0),
             sgst_percent: String(b.sgst_percent ?? 0),
             igst_percent: String(b.igst_percent ?? 0),
@@ -199,8 +218,7 @@ export default function PurchaseBillEditorPage() {
       const catalog = (d.items || []).map(mapLineFromApi);
       setPoCatalog(catalog);
       setItemSearch('');
-      setForm((f) => ({
-        ...f,
+      setForm((f) => syncDueDate(f, {
         purchase_order: d.purchase_order,
         po_number: d.po_number || '',
         supplier: d.supplier,
@@ -230,8 +248,7 @@ export default function PurchaseBillEditorPage() {
       console.error(e);
       setFormError(formatApiError(e, 'Could not load Supplier PO details.'));
       if (selectedPo?.payment_terms) {
-        setForm((f) => ({
-          ...f,
+        setForm((f) => syncDueDate(f, {
           purchase_order: selectedPo.id,
           po_number: selectedPo.po_number || '',
           supplier_name: selectedPo.vendor_name || f.supplier_name,
@@ -335,8 +352,7 @@ export default function PurchaseBillEditorPage() {
       return;
     }
     // Prefill payment terms immediately from the PO option, then refresh from API
-    setForm((f) => ({
-      ...f,
+    setForm((f) => syncDueDate(f, {
       purchase_order: po.id,
       po_number: po.po_number || '',
       supplier_name: po.vendor_name || f.supplier_name,
@@ -373,6 +389,7 @@ export default function PurchaseBillEditorPage() {
         bill_date: form.bill_date,
         received_date: form.bill_date || null,
         payment_terms: form.payment_terms,
+        due_date: form.due_date || null,
         tax_mode: form.tax_mode,
         cgst_percent: parseFloat(form.cgst_percent) || 0,
         sgst_percent: parseFloat(form.sgst_percent) || 0,
@@ -474,8 +491,20 @@ export default function PurchaseBillEditorPage() {
               onChange={(e) => setForm((f) => ({ ...f, supplier_name: e.target.value }))} sx={sxInput} />
           </Grid>
           <Grid item xs={12} sm={6} md={4}>
-            <TextField fullWidth size="small" label="Payment Terms" value={form.payment_terms}
-              onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))} sx={sxInput} />
+            <TextField
+              fullWidth
+              size="small"
+              label="Payment Terms"
+              value={form.payment_terms}
+              onChange={(e) => setForm((f) => syncDueDate(f, { payment_terms: e.target.value }))}
+              placeholder="e.g. Net 30 days"
+              helperText={
+                parsePaymentDays(form.payment_terms) != null
+                  ? `${parsePaymentDays(form.payment_terms)} days from bill date`
+                  : 'Copied from Supplier PO when linked'
+              }
+              sx={sxInput}
+            />
           </Grid>
         </Grid>
 
@@ -493,16 +522,44 @@ export default function PurchaseBillEditorPage() {
           Document
         </Typography>
         <Grid container spacing={1.5}>
-          <Grid item xs={12} sm={6} md={4}>
+          <Grid item xs={12} sm={6} md={3}>
             <TextField fullWidth size="small" label="Internal Ref" value={form.internal_ref} InputProps={{ readOnly: true }} sx={sxInput} />
           </Grid>
-          <Grid item xs={12} sm={6} md={4}>
+          <Grid item xs={12} sm={6} md={3}>
             <TextField fullWidth size="small" label="Supplier Bill No. *" value={form.bill_number}
               onChange={(e) => setForm((f) => ({ ...f, bill_number: e.target.value }))} sx={sxInput} />
           </Grid>
-          <Grid item xs={12} sm={6} md={4}>
-            <TextField fullWidth size="small" type="date" label="Bill Date" InputLabelProps={{ shrink: true }}
-              value={form.bill_date} onChange={(e) => setForm((f) => ({ ...f, bill_date: e.target.value }))} sx={sxInput} />
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              size="small"
+              type="date"
+              label="Bill Date"
+              InputLabelProps={{ shrink: true }}
+              value={form.bill_date}
+              onChange={(e) => setForm((f) => syncDueDate(f, {
+                bill_date: e.target.value,
+                received_date: e.target.value,
+              }))}
+              sx={sxInput}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              size="small"
+              type="date"
+              label="Payment Due Date"
+              InputLabelProps={{ shrink: true }}
+              value={form.due_date || ''}
+              onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
+              helperText={
+                form.due_date
+                  ? `Due ${formatDateDisplay(form.due_date)}`
+                  : 'Auto from payment terms + bill date'
+              }
+              sx={sxInput}
+            />
           </Grid>
         </Grid>
       </Paper>

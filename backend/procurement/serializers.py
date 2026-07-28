@@ -10,7 +10,7 @@ from .models import (
 )
 from .po_numbering import next_supplier_po_number
 from .bill_numbering import next_purchase_bill_ref
-from .payment_due import compute_payment_due_date, compute_bill_due_date
+from .payment_due import compute_payment_due_date, compute_bill_due_date, parse_payment_days
 from .stock_receive import post_purchase_bill_to_stock, reverse_purchase_bill_stock
 from inventory.models import InventoryLog
 from inventory.serializers import InventoryItemListSerializer
@@ -315,8 +315,10 @@ def _should_post_bill_stock(bill):
 
 
 def _default_bill_due_date(validated_data):
+    """Compute purchase-bill due date from payment terms + bill/received date."""
     if validated_data.get('due_date'):
         return validated_data['due_date']
+
     po = validated_data.get('purchase_order')
     if po and not hasattr(po, 'payment_terms'):
         from .models import PurchaseOrder
@@ -324,17 +326,36 @@ def _default_bill_due_date(validated_data):
             po = PurchaseOrder.objects.get(pk=po)
         except PurchaseOrder.DoesNotExist:
             po = None
-    received = validated_data.get('received_date') or validated_data.get('bill_date')
+
+    terms = (validated_data.get('payment_terms') or '').strip()
+    if not terms and po is not None:
+        terms = (po.payment_terms or '').strip()
+
+    bill_date = validated_data.get('bill_date')
+    received = validated_data.get('received_date') or bill_date
+    days = parse_payment_days(terms)
+    if days is not None:
+        terms_u = terms.upper()
+        # Receipt/delivery-linked terms use goods date; otherwise invoice/bill date.
+        if any(k in terms_u for k in ('DELIVERY', 'RECEIPT', 'GRN', 'DISPATCH', 'SUPPLY')):
+            base = received or bill_date
+        else:
+            base = bill_date or received
+        if base:
+            from datetime import timedelta
+            return base + timedelta(days=days)
+
+    # Fallback: keep previous PO-anchor behaviour when terms are free text without days
     if po and received:
         class _Anchor:
-            payment_terms = validated_data.get('payment_terms') or po.payment_terms
-            order_date = po.order_date
+            payment_terms = terms
+            order_date = bill_date or po.order_date
             expected_delivery_date = received
             actual_delivery_date = received
         due = compute_payment_due_date(_Anchor())
         if due:
             return due
-    return validated_data.get('bill_date')
+    return bill_date
 
 
 class PurchaseBillDocumentSerializer(serializers.ModelSerializer):

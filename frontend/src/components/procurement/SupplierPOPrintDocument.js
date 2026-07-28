@@ -362,6 +362,7 @@ function PoMeta({ po, piLabel, buyerPoLabel }) {
       <MetaChip label="Delivery" value={formatDateDisplay(po.expected_delivery_date)} />
       <MetaChip label="PI Ref" value={piLabel || '—'} />
       <MetaChip label="Buyer PO" value={buyerPoLabel || '—'} />
+      {po.payment_terms && <MetaChip label="Payment Terms" value={po.payment_terms} />}
       {po.delivery_terms && <MetaChip label="Delivery Terms" value={po.delivery_terms} />}
       {po.transport_paid_by && (
         <MetaChip
