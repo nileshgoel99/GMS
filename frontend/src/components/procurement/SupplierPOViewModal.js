@@ -192,9 +192,6 @@ export default function SupplierPOViewModal({ open, poId, onClose, onEdit }) {
 
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
-                <InfoItem label="Payment Terms" value={po.payment_terms} />
-              </Grid>
-              <Grid item xs={12} sm={6}>
                 <InfoItem label="Delivery Terms" value={po.delivery_terms} />
               </Grid>
               <Grid item xs={12} sm={6}>

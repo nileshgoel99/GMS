@@ -13,6 +13,8 @@ import {
   isCartonBoxCategory,
   formatTrimPropertyLabel,
   formatCartonBoxSummary,
+  indentTrimCategoryRank,
+  sortIndentTrimLines,
 } from '../components/trims/trimConstants';
 import AddTrimModal from '../components/trims/AddTrimModal';
 
@@ -37,7 +39,7 @@ export default function TrimsLibraryPage() {
     if (showSpinner) setLoading(true);
     try {
       const res = await ordersAPI.getTrimsMaster({ search: debouncedSearch });
-      setRows(asList(res.data));
+      setRows(sortIndentTrimLines(asList(res.data)));
       initialLoadDone.current = true;
     } catch (e) {
       console.error(e);
@@ -113,6 +115,14 @@ export default function TrimsLibraryPage() {
     },
     {
       field: 'category', headerName: 'Category', flex: 1, minWidth: 100, align: 'center', headerAlign: 'center',
+      sortComparator: (v1, v2, cellParams1, cellParams2) => {
+        const row1 = cellParams1?.api?.getRow?.(cellParams1.id) || {};
+        const row2 = cellParams2?.api?.getRow?.(cellParams2.id) || {};
+        const r1 = indentTrimCategoryRank(v1, row1.name);
+        const r2 = indentTrimCategoryRank(v2, row2.name);
+        if (r1 !== r2) return r1 - r2;
+        return String(v1 || '').localeCompare(String(v2 || ''), undefined, { sensitivity: 'base' });
+      },
       renderCell: (p) => cell('center',
         p.value ? (
           <Chip label={p.value} size="small" sx={{ fontWeight: 600, fontSize: '0.7rem', bgcolor: alpha('#6366f1', 0.1), color: '#4338ca' }} />
@@ -221,7 +231,10 @@ export default function TrimsLibraryPage() {
           sx={trimsGridSx}
           disableRowSelectionOnClick
           pageSizeOptions={[25, 50, 100]}
-          initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+          initialState={{
+            pagination: { paginationModel: { pageSize: 25 } },
+            sorting: { sortModel: [{ field: 'category', sort: 'asc' }] },
+          }}
         />
       </DataGridShell>
 

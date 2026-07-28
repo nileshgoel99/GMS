@@ -1,5 +1,73 @@
 export const CARTON_BOX_CATEGORY = 'Carton Box';
 
+/**
+ * Preferred indent trim sequence for save + print.
+ * Unknown categories sort after Polybag and before Carton Box.
+ * Carton Box is always last.
+ */
+export const INDENT_TRIM_CATEGORY_ORDER = [
+  'Pocketing Fabric',
+  'Threads',
+  'Zipper',
+  'Velcro',
+  'Reflective Tape',
+  'Labels',
+  'Others',
+  'Polybag',
+];
+
+const INDENT_TRIM_CATEGORY_RANKERS = [
+  [/^POCKETING(\s+FABRIC)?$/, 0],
+  [/^THREADS?$/, 1],
+  [/^ZIPPERS?$/, 2],
+  [/^(VELCRO|HOOK\s*(&|AND)?\s*LOOP)$/, 3],
+  [/^REFLECTIVE(\s+TAPE)?$/, 4],
+  [/^LABELS?$/, 5],
+  [/^OTHERS?$/, 6],
+  [/^POLY\s*BAGS?$/, 7],
+];
+
+const INDENT_TRIM_UNKNOWN_RANK = INDENT_TRIM_CATEGORY_ORDER.length; // after Polybag
+const INDENT_TRIM_CARTON_RANK = INDENT_TRIM_UNKNOWN_RANK + 1;
+
+export const normalizeIndentTrimCategoryKey = (value) =>
+  String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+
+/** Rank used to order indent trim rows (lower = earlier). */
+export const indentTrimCategoryRank = (category, trimName = '') => {
+  const key = normalizeIndentTrimCategoryKey(category)
+    || normalizeIndentTrimCategoryKey(trimName);
+  if (!key) return INDENT_TRIM_UNKNOWN_RANK;
+  if (/^CARTON(\s*BOX)?$/.test(key)) {
+    return INDENT_TRIM_CARTON_RANK;
+  }
+  for (const [pattern, rank] of INDENT_TRIM_CATEGORY_RANKERS) {
+    if (pattern.test(key)) return rank;
+  }
+  return INDENT_TRIM_UNKNOWN_RANK;
+};
+
+/** Stable sort: known categories → extras → Carton Box last. */
+export const sortIndentTrimLines = (rows = []) => (
+  rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const nameA = a.row?.trim_name || a.row?.name || '';
+      const nameB = b.row?.trim_name || b.row?.name || '';
+      const ra = indentTrimCategoryRank(a.row?.category, nameA);
+      const rb = indentTrimCategoryRank(b.row?.category, nameB);
+      if (ra !== rb) return ra - rb;
+      const byName = String(nameA).localeCompare(String(nameB), undefined, { sensitivity: 'base' });
+      if (byName !== 0) return byName;
+      return a.index - b.index;
+    })
+    .map(({ row }) => row)
+);
+
 /** Full set of measurement units usable anywhere a trim/property unit is picked. */
 export const TRIM_UNIT_OPTIONS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GROSS', 'CMS', 'CM', 'MM', 'INCH', 'GMS'];
 
@@ -23,8 +91,14 @@ export const TRIM_PROPERTY_NAME_SUGGESTIONS = [
 ];
 
 export const TRIM_CATEGORY_SUGGESTIONS = [
-  'Fabric', 'Tape', 'Button', 'Velcro', 'Zipper', 'Thread', 'Label',
-  'Polybag', 'Waist Band', 'Hook & Loop', 'Sticker', CARTON_BOX_CATEGORY, 'Other',
+  ...INDENT_TRIM_CATEGORY_ORDER,
+  'Waist Band',
+  'Hook & Loop',
+  'Sticker',
+  'Button',
+  'Tape',
+  'Fabric',
+  CARTON_BOX_CATEGORY,
 ];
 
 /** PI garment size (S, M, L…) — links trim qty to PI size breakdown. */

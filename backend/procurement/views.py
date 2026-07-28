@@ -43,7 +43,7 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     serializer_class = PurchaseOrderSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'vendor_name', 'order_date', 'pi']
-    search_fields = ['po_number', 'vendor_name', 'vendor_email', 'reference_number', 'attention']
+    search_fields = ['po_number', 'vendor_name', 'vendor_email', 'reference_number', 'pi_number', 'attention']
     ordering_fields = ['order_date', 'created_at', 'po_number']
 
     def get_serializer_class(self):

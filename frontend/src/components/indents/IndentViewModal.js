@@ -9,7 +9,7 @@ import { alpha } from '@mui/material/styles';
 import { ordersAPI } from '../../services/api';
 import { slate } from '../../theme/appTheme';
 import { formatDateDisplay } from '../../utils/formatDate';
-import { formatTrimVariantDisplay } from '../trims/trimConstants';
+import { formatTrimVariantDisplay, sortIndentTrimLines } from '../trims/trimConstants';
 
 const STATUS_COLOR = { DRAFT: 'default', CONFIRMED: 'success' };
 
@@ -276,12 +276,18 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {(indent.trim_lines || []).filter((r) => r.trim_name?.trim()).length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} sx={{ ...viewCellSx('left'), color: 'text.disabled' }}>No trim rows</TableCell>
-                      </TableRow>
-                    ) : (
-                      (indent.trim_lines || []).filter((r) => r.trim_name?.trim()).map((row, i) => (
+                    {(() => {
+                      const trimRows = sortIndentTrimLines(
+                        (indent.trim_lines || []).filter((r) => r.trim_name?.trim()),
+                      );
+                      if (!trimRows.length) {
+                        return (
+                          <TableRow>
+                            <TableCell colSpan={7} sx={{ ...viewCellSx('left'), color: 'text.disabled' }}>No trim rows</TableCell>
+                          </TableRow>
+                        );
+                      }
+                      return trimRows.map((row, i) => (
                         <TableRow key={i} hover>
                           <TableCell sx={viewCellSx('left')}>
                             <Typography sx={{ fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>{row.trim_name}</Typography>
@@ -323,8 +329,8 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                             </>
                           )}
                         </TableRow>
-                      ))
-                    )}
+                      ));
+                    })()}
                   </TableBody>
                 </Table>
               </Box>

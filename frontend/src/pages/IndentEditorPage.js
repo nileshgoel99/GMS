@@ -28,6 +28,7 @@ import {
   isGarmentSizeTrimProperty,
   isNumericTrimProperty,
   normalizeTrimPropertyName,
+  sortIndentTrimLines,
   TRIM_PROPERTY_NAME_SUGGESTIONS,
   TRIM_UNIT_OPTIONS,
 } from '../components/trims/trimConstants';
@@ -1037,7 +1038,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
   const contact = [phone && `Tel: ${phone}`, email && `Email: ${email}`, company?.website].filter(Boolean).join('  ·  ');
 
   const fabricRows = fabricLines.filter((r) => r.material);
-  const trimRows = trimLines.filter((r) => r.trim_name);
+  const trimRows = sortIndentTrimLines(trimLines.filter((r) => r.trim_name));
 
   const supplierLabelForTrim = (row) => {
     if (row?.supplier_name) {
@@ -1828,7 +1829,11 @@ export default function IndentEditorPage() {
               }))
               : [emptyFabric()],
           );
-          setTrimLines(data.trim_lines?.length ? data.trim_lines.map(mapApiTrimLine) : [emptyTrim()]);
+          setTrimLines(
+            data.trim_lines?.length
+              ? sortIndentTrimLines(data.trim_lines.map(mapApiTrimLine))
+              : [emptyTrim()],
+          );
           setSelectedLineIds(data.selected_pi_line_ids?.length ? data.selected_pi_line_ids : []);
 
           const piData = piFromIndentData(data);
@@ -1865,7 +1870,7 @@ export default function IndentEditorPage() {
             setFabricLines(tmpl.fabric_lines.map((r) => enrichFabricRowGsm({ ...emptyFabric(), ...r })));
           }
           if (tmpl.trim_lines?.length) {
-            setTrimLines(tmpl.trim_lines.map(mapApiTrimLine));
+            setTrimLines(sortIndentTrimLines(tmpl.trim_lines.map(mapApiTrimLine)));
           }
           setAutoFilled(true);
           break;
@@ -2113,6 +2118,9 @@ export default function IndentEditorPage() {
 
     setSaving(true);
     try {
+      const orderedTrimLines = sortIndentTrimLines(
+        trimLines.filter((r) => r.trim_name.trim()),
+      );
       // Carton Box is a normal trim with user-defined properties — clear legacy indent carton fields.
       const payload = {
         pi: pi.id,
@@ -2130,7 +2138,7 @@ export default function IndentEditorPage() {
         approved_by: approvedBy,
         notes,
         fabric_lines: fabricLines.filter((r) => r.material.trim()).map(serializeFabricLine),
-        trim_lines: trimLines.filter((r) => r.trim_name.trim()).map(serializeTrimLine),
+        trim_lines: orderedTrimLines.map(serializeTrimLine),
       };
 
       let res;
@@ -2152,7 +2160,9 @@ export default function IndentEditorPage() {
         setIndent(res.data);
         setStatus(res.data.status);
         if (res.data.trim_lines?.length) {
-          setTrimLines(res.data.trim_lines.map(mapApiTrimLine));
+          setTrimLines(sortIndentTrimLines(res.data.trim_lines.map(mapApiTrimLine)));
+        } else {
+          setTrimLines(orderedTrimLines.length ? orderedTrimLines : [emptyTrim()]);
         }
         if (res.data.linked_trims?.length) {
           setTrimsList((prev) => {

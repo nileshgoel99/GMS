@@ -40,12 +40,45 @@ def _sync_supplier_fields(validated_data):
     return validated_data
 
 
-def _build_reference_number(pi, buyer_po, explicit=''):
-    if explicit:
-        return explicit
-    if buyer_po:
-        return buyer_po.po_number
-    return ''
+def _sync_reference_strings(validated_data, instance=None):
+    """
+    Store PI / Buyer PO as free-text numbers.
+    Optional FKs may be set when the user picks an existing record; they are never
+    required, and typed values are never used to create new PI / Buyer PO rows.
+    """
+    pi = validated_data['pi'] if 'pi' in validated_data else (instance.pi if instance else None)
+    buyer_po = validated_data['buyer_po'] if 'buyer_po' in validated_data else (
+        instance.buyer_po if instance else None
+    )
+
+    if 'pi_number' in validated_data:
+        pi_number = (validated_data.get('pi_number') or '').strip()
+    elif instance is not None:
+        pi_number = (instance.pi_number or '').strip()
+    else:
+        pi_number = ''
+    if not pi_number and pi is not None:
+        pi_number = getattr(pi, 'pi_number', '') or ''
+    validated_data['pi_number'] = pi_number
+
+    if 'reference_number' in validated_data:
+        reference_number = (validated_data.get('reference_number') or '').strip()
+    elif instance is not None:
+        reference_number = (instance.reference_number or '').strip()
+    else:
+        reference_number = ''
+    if not reference_number and buyer_po is not None:
+        reference_number = getattr(buyer_po, 'po_number', '') or ''
+    validated_data['reference_number'] = reference_number
+    return validated_data
+
+
+def _display_pi_number(obj):
+    return (obj.pi_number or '').strip() or (obj.pi.pi_number if obj.pi_id else '')
+
+
+def _display_buyer_po_number(obj):
+    return (obj.reference_number or '').strip() or (obj.buyer_po.po_number if obj.buyer_po_id else '')
 
 
 class PurchaseOrderItemSerializer(serializers.ModelSerializer):
@@ -67,8 +100,7 @@ class PurchaseOrderItemSerializer(serializers.ModelSerializer):
 class PurchaseOrderSerializer(serializers.ModelSerializer):
     items = PurchaseOrderItemSerializer(many=True, required=False)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
-    pi_number = serializers.CharField(source='pi.pi_number', read_only=True)
-    buyer_po_number = serializers.CharField(source='buyer_po.po_number', read_only=True)
+    buyer_po_number = serializers.SerializerMethodField()
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     payment_due_date = serializers.SerializerMethodField()
 
@@ -80,18 +112,23 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'subtotal', 'cgst_amount', 'sgst_amount', 'igst_amount', 'round_off', 'total_amount',
         )
 
+    def get_buyer_po_number(self, obj):
+        return _display_buyer_po_number(obj)
+
     def get_payment_due_date(self, obj):
         due = compute_payment_due_date(obj)
         return due.isoformat() if due else None
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['pi_number'] = _display_pi_number(instance)
+        data['buyer_po_number'] = _display_buyer_po_number(instance)
+        return data
+
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
         validated_data = _sync_supplier_fields(validated_data)
-        pi = validated_data.get('pi')
-        buyer_po = validated_data.get('buyer_po')
-        validated_data['reference_number'] = _build_reference_number(
-            pi, buyer_po, validated_data.get('reference_number', ''),
-        )
+        validated_data = _sync_reference_strings(validated_data)
         if not (validated_data.get('po_number') or '').strip():
             validated_data['po_number'] = next_supplier_po_number()['po_number']
         validated_data['status'] = 'ORDERED'
@@ -108,10 +145,7 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         items_data = validated_data.pop('items', None)
         validated_data = _sync_supplier_fields(validated_data)
-        pi = validated_data.get('pi', instance.pi)
-        buyer_po = validated_data.get('buyer_po', instance.buyer_po)
-        if 'reference_number' not in validated_data or not validated_data.get('reference_number'):
-            validated_data['reference_number'] = _build_reference_number(pi, buyer_po, instance.reference_number)
+        validated_data = _sync_reference_strings(validated_data, instance)
 
         validated_data['status'] = 'ORDERED'
 
@@ -134,8 +168,7 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 
 class PurchaseOrderListSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
-    pi_number = serializers.CharField(source='pi.pi_number', read_only=True)
-    buyer_po_number = serializers.CharField(source='buyer_po.po_number', read_only=True)
+    buyer_po_number = serializers.SerializerMethodField()
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     items_count = serializers.SerializerMethodField()
     payment_due_date = serializers.SerializerMethodField()
@@ -150,6 +183,9 @@ class PurchaseOrderListSerializer(serializers.ModelSerializer):
             'created_by_name', 'items_count', 'created_at',
         ]
 
+    def get_buyer_po_number(self, obj):
+        return _display_buyer_po_number(obj)
+
     def get_items_count(self, obj):
         return obj.items.count()
 
@@ -157,6 +193,11 @@ class PurchaseOrderListSerializer(serializers.ModelSerializer):
         due = compute_payment_due_date(obj)
         return due.isoformat() if due else None
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['pi_number'] = _display_pi_number(instance)
+        data['buyer_po_number'] = _display_buyer_po_number(instance)
+        return data
 
 class POReceiptItemSerializer(serializers.ModelSerializer):
     po_item_details = serializers.SerializerMethodField()

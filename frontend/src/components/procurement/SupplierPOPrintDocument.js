@@ -346,7 +346,7 @@ function PoHeader({ po, company, companyName, addrLine, contactLine }) {
   );
 }
 
-function PoMeta({ po, piLabel }) {
+function PoMeta({ po, piLabel, buyerPoLabel }) {
   return (
     <div style={{
       display: 'grid',
@@ -360,8 +360,8 @@ function PoMeta({ po, piLabel }) {
     >
       <MetaChip label="Order Date" value={formatDateDisplay(po.order_date)} />
       <MetaChip label="Delivery" value={formatDateDisplay(po.expected_delivery_date)} />
-      <MetaChip label="Payment Terms" value={po.payment_terms} />
       <MetaChip label="PI Ref" value={piLabel || '—'} />
+      <MetaChip label="Buyer PO" value={buyerPoLabel || '—'} />
       {po.delivery_terms && <MetaChip label="Delivery Terms" value={po.delivery_terms} />}
       {po.transport_paid_by && (
         <MetaChip
@@ -694,6 +694,10 @@ export default function SupplierPOPrintDocument({ po, company, trimsMap = {} }) 
   const totals = calcTotals(po);
   const companyName = company?.legal_name || 'J.B. International';
   const piLabel = po.pi_number || (typeof po.pi === 'object' && po.pi?.pi_number) || null;
+  const buyerPoLabel = po.reference_number
+    || po.buyer_po_number
+    || (typeof po.buyer_po === 'object' && po.buyer_po?.po_number)
+    || null;
 
   const addrLine = [
     company?.address_line1,
@@ -718,7 +722,7 @@ export default function SupplierPOPrintDocument({ po, company, trimsMap = {} }) 
           {page.isFirst && (
             <>
               <PrintSection><PoHeader {...headerProps} /></PrintSection>
-              <PrintSection><PoMeta po={po} piLabel={piLabel} /></PrintSection>
+              <PrintSection><PoMeta po={po} piLabel={piLabel} buyerPoLabel={buyerPoLabel} /></PrintSection>
               <PrintSection><PoParties po={po} /></PrintSection>
             </>
           )}

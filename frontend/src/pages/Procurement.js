@@ -4,7 +4,9 @@ import {
   Box, Button, Typography, IconButton, Chip, Tooltip,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { Add, Edit, Delete, LocalShipping, Visibility, ReceiptLong, Checkroom } from '@mui/icons-material';
+import {
+  Add, Edit, Delete, LocalShipping, Visibility, Checkroom, Print,
+} from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
 import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
@@ -23,14 +25,6 @@ const STATUS_COLORS = {
 };
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
-
-/** Taller rows when supplier names wrap to multiple lines. */
-const estimatePoRowHeight = (vendorName = '') => {
-  const text = String(vendorName || '').trim();
-  if (text.length <= 26) return 64;
-  const lines = Math.ceil(text.length / 26);
-  return Math.min(64 + (lines - 1) * 24, 128);
-};
 
 export default function Procurement() {
   const navigate = useNavigate();
@@ -63,12 +57,18 @@ export default function Procurement() {
     }
   };
 
-  const cell = (align = 'left', children, { multiline = false } = {}) => (
-    <Box sx={{
-      display: 'flex', alignItems: multiline ? 'flex-start' : 'center', width: '100%', height: '100%', px: 0.5,
-      py: multiline ? 0.75 : 0,
-      justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
-    }}>
+  const cell = (align = 'left', children) => (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
+        width: '100%',
+        minWidth: 0,
+        px: 0.25,
+        overflow: 'visible',
+      }}
+    >
       {children}
     </Box>
   );
@@ -76,38 +76,53 @@ export default function Procurement() {
   const gridSx = {
     ...dataGridSx,
     width: '100%',
+    maxWidth: '100%',
     bgcolor: '#fff',
+    border: 'none',
+    // Grow with rows — no internal vertical scrollbar; page scrolls instead.
+    '& .MuiDataGrid-main': { overflow: 'visible' },
+    '& .MuiDataGrid-virtualScroller': {
+      overflowX: 'auto !important',
+      overflowY: 'visible !important',
+    },
+    // MUI X v7 adds a filler / scrollbar gutter that looks like an empty last column.
+    '& .MuiDataGrid-filler': { display: 'none !important', width: '0 !important', minWidth: '0 !important' },
+    '& .MuiDataGrid-scrollbarFiller': { display: 'none !important', width: '0 !important', minWidth: '0 !important' },
+    '& .MuiDataGrid-scrollbarFiller--header': { display: 'none !important' },
+    '& .MuiDataGrid-scrollbarFiller--borderTop': { display: 'none !important' },
+    '& .MuiDataGrid-scrollbarFiller--borderBottom': { display: 'none !important' },
+    '& .MuiDataGrid-columnHeadersInner': { width: '100% !important' },
+    '& .MuiDataGrid-virtualScrollerContent': { width: '100% !important' },
     '& .MuiDataGrid-columnHeaders': {
       ...(dataGridSx['& .MuiDataGrid-columnHeaders'] || {}),
       bgcolor: slate[50],
       borderBottom: `2px solid ${slate[200]}`,
+    },
+    '& .MuiDataGrid-columnHeaderTitle': {
+      whiteSpace: 'normal',
+      lineHeight: 1.2,
+      overflow: 'visible',
+      textOverflow: 'clip',
     },
     '& .MuiDataGrid-cell': {
       ...(dataGridSx['& .MuiDataGrid-cell'] || {}),
       display: 'flex',
       alignItems: 'center',
       borderBottom: `1px solid ${slate[100]}`,
-    },
-    '& .MuiDataGrid-cell[data-field="total_amount"]': {
-      overflow: 'visible',
-      '& .MuiTypography-root': {
-        overflow: 'visible',
-        textOverflow: 'clip',
-      },
-    },
-    '& .MuiDataGrid-cell[data-field="vendor_name"]': {
-      overflow: 'visible',
-      whiteSpace: 'normal',
+      outline: 'none',
+      py: '12px !important',
+      px: '8px !important',
+      whiteSpace: 'normal !important',
+      overflow: 'visible !important',
+      textOverflow: 'clip !important',
       lineHeight: 1.45,
-      alignItems: 'flex-start',
-      py: 0.75,
-      '& .MuiTypography-root': {
-        whiteSpace: 'normal',
-        wordBreak: 'break-word',
-        overflow: 'visible',
-        textOverflow: 'clip',
-        lineHeight: 1.45,
-      },
+    },
+    '& .MuiDataGrid-cellContent': {
+      whiteSpace: 'normal',
+      overflow: 'visible',
+      textOverflow: 'clip',
+      lineHeight: 1.45,
+      width: '100%',
     },
     '& .MuiDataGrid-row.po-row--alt': {
       bgcolor: `${alpha('#0f766e', 0.07)} !important`,
@@ -116,25 +131,26 @@ export default function Procurement() {
 
   const columns = [
     {
-      field: 'po_number', headerName: 'PO Number', flex: 1, minWidth: 130,
+      field: 'po_number', headerName: 'PO Number', width: 150,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', fontFamily: 'monospace', color: 'primary.main' }}>{p.value}</Typography>
+        <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', fontFamily: 'monospace', color: 'primary.main', whiteSpace: 'nowrap' }}>
+          {p.value}
+        </Typography>
       ),
     },
     {
-      field: 'vendor_name', headerName: 'Supplier', flex: 1.8, minWidth: 200,
+      field: 'vendor_name', headerName: 'Supplier', flex: 1, minWidth: 200,
       renderCell: (p) => cell('left',
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0, width: '100%' }}>
           <LocalShipping sx={{ fontSize: 16, color: 'primary.main', opacity: 0.7, mt: 0.15, flexShrink: 0 }} />
           <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.45 }}>
             {p.value || '—'}
           </Typography>
-        </Box>,
-        { multiline: true },
+        </Box>
       ),
     },
     {
-      field: 'reference_number', headerName: 'Reference', flex: 1, minWidth: 140,
+      field: 'reference_number', headerName: 'Reference', width: 150,
       renderCell: (p) => {
         const label = p.value || p.row.buyer_po_number || '—';
         const canOpen = Boolean(p.row.buyer_po);
@@ -156,35 +172,37 @@ export default function Procurement() {
                 textAlign: 'left',
                 textDecoration: 'underline',
                 textUnderlineOffset: '2px',
+                whiteSpace: 'normal',
+                wordBreak: 'break-word',
                 '&:hover': { color: 'primary.dark' },
               }}
             >
               {label}
             </Typography>
           ) : (
-            <Typography sx={{ fontSize: '0.82rem' }}>{label}</Typography>
+            <Typography sx={{ fontSize: '0.82rem', whiteSpace: 'normal', wordBreak: 'break-word' }}>{label}</Typography>
           )
         );
       },
     },
     {
-      field: 'order_date', headerName: 'Order Date', width: 110,
-      renderCell: (p) => cell('left', <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{formatDateDisplay(p.value)}</Typography>),
-    },
-    {
-      field: 'payment_due_date', headerName: 'Payment Due', width: 120,
+      field: 'order_date', headerName: 'Order Date', width: 118,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: p.value ? 'warning.dark' : 'text.disabled' }}>
+        <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
           {formatDateDisplay(p.value)}
         </Typography>
       ),
     },
     {
-      field: 'expected_delivery_date', headerName: 'Delivery', width: 110,
-      renderCell: (p) => cell('left', <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{formatDateDisplay(p.value)}</Typography>),
+      field: 'expected_delivery_date', headerName: 'Delivery', width: 118,
+      renderCell: (p) => cell('left',
+        <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
+          {formatDateDisplay(p.value)}
+        </Typography>
+      ),
     },
     {
-      field: 'total_amount', headerName: 'Total (₹)', flex: 0.9, minWidth: 150, align: 'right', headerAlign: 'right',
+      field: 'total_amount', headerName: 'Total (₹)', width: 130, align: 'right', headerAlign: 'right',
       renderCell: (p) => cell('right',
         <Typography
           className="font-numeric"
@@ -192,8 +210,6 @@ export default function Procurement() {
             fontWeight: 700,
             fontSize: '0.85rem',
             whiteSpace: 'nowrap',
-            overflow: 'visible',
-            textOverflow: 'clip',
           }}
         >
           {p.value != null ? Number(p.value).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
@@ -201,43 +217,48 @@ export default function Procurement() {
       ),
     },
     {
-      field: 'status', headerName: 'Status', width: 110, align: 'center', headerAlign: 'center',
+      field: 'status', headerName: 'Status', width: 120, align: 'center', headerAlign: 'center',
       renderCell: (p) => cell('center',
         <Chip label={p.value} size="small" color={STATUS_COLORS[p.value] || 'default'}
           sx={{ fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase' }} />
       ),
     },
     {
-      field: 'actions', headerName: '', width: 160, sortable: false, align: 'center', headerAlign: 'center',
+      field: 'actions', headerName: 'Actions', width: 108, sortable: false, align: 'center', headerAlign: 'center',
+      disableColumnMenu: true,
       renderCell: (p) => cell('center',
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="Record bill">
-            <IconButton size="small" color="secondary" onClick={() => navigate(`/purchase-bills/new?poId=${p.row.id}`)}>
-              <ReceiptLong fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="View">
-            <IconButton size="small" onClick={() => setViewId(p.row.id)}>
-              <Visibility fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Edit / Print">
-            <IconButton size="small" color="primary" onClick={() => navigate(`/procurement/${p.row.id}`)}>
-              <Edit fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete">
-            <IconButton size="small" color="error" onClick={() => handleDelete(p.row.id)}>
-              <Delete fontSize="small" />
-            </IconButton>
-          </Tooltip>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.15, py: 0.25 }}>
+          <Box sx={{ display: 'flex', gap: 0.15 }}>
+            <Tooltip title="View">
+              <IconButton size="small" onClick={() => setViewId(p.row.id)}>
+                <Visibility fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Print">
+              <IconButton size="small" onClick={() => navigate(`/procurement/${p.row.id}?print=1`)}>
+                <Print fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 0.15 }}>
+            <Tooltip title="Edit">
+              <IconButton size="small" color="primary" onClick={() => navigate(`/procurement/${p.row.id}`)}>
+                <Edit fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete">
+              <IconButton size="small" color="error" onClick={() => handleDelete(p.row.id)}>
+                <Delete fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
       ),
     },
   ];
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 } }}>
+    <Box sx={{ p: { xs: 2, sm: 3 }, width: '100%', maxWidth: '100%', minWidth: 0 }}>
       <PageHeader
         title="Supplier Purchase Orders"
         subtitle="Raise POs to trim and fabric suppliers with GST breakdown and print-ready layout"
@@ -276,16 +297,30 @@ export default function Procurement() {
         }
       />
 
-      <DataGridShell>
+      <DataGridShell
+        sx={{
+          width: '100%',
+          maxWidth: '100%',
+          minWidth: 0,
+          // Let the grid size to its rows (no fixed viewport → no table vertical scroll).
+          '& > .MuiDataGrid-root': {
+            height: 'auto !important',
+            width: '100%',
+          },
+        }}
+      >
         <DataGrid
           rows={rows}
           columns={columns}
           loading={loading}
-          getRowHeight={(params) => estimatePoRowHeight(params.model.vendor_name)}
+          autoHeight
+          getRowHeight={() => 'auto'}
           columnHeaderHeight={48}
-          getRowClassName={(p) => (rows.findIndex((r) => r.id === p.id) % 2 === 1 ? 'po-row--alt' : '')}
+          scrollbarSize={0}
+          getRowClassName={(p) => (p.indexRelativeToCurrentPage % 2 === 1 ? 'po-row--alt' : '')}
           sx={gridSx}
           disableRowSelectionOnClick
+          disableColumnMenu
           pageSizeOptions={[25, 50]}
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
         />

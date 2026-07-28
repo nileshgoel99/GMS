@@ -1,4 +1,5 @@
 from decimal import Decimal
+import re
 
 from django.db.models import Sum
 from rest_framework import serializers
@@ -430,6 +431,52 @@ CARTON_BOX_PROPERTIES = [
     {'name': 'Dim. Unit', 'unit': 'CMS/INCH'},
 ]
 
+# Preferred indent trim sequence (unknowns after Polybag, Carton Box last).
+_INDENT_TRIM_CATEGORY_RANKERS = (
+    (re.compile(r'^POCKETING(\s+FABRIC)?$', re.I), 0),
+    (re.compile(r'^THREADS?$', re.I), 1),
+    (re.compile(r'^ZIPPERS?$', re.I), 2),
+    (re.compile(r'^(VELCRO|HOOK\s*(&|AND)?\s*LOOP)$', re.I), 3),
+    (re.compile(r'^REFLECTIVE(\s+TAPE)?$', re.I), 4),
+    (re.compile(r'^LABELS?$', re.I), 5),
+    (re.compile(r'^OTHERS?$', re.I), 6),
+    (re.compile(r'^POLY\s*BAGS?$', re.I), 7),
+)
+_INDENT_TRIM_UNKNOWN_RANK = 8
+_INDENT_TRIM_CARTON_RANK = 9
+
+
+def _normalize_indent_trim_category_key(value):
+    key = re.sub(r'[_-]+', ' ', str(value or '').strip().upper())
+    return re.sub(r'\s+', ' ', key).strip()
+
+
+def _indent_trim_category_rank(category='', trim_name=''):
+    key = _normalize_indent_trim_category_key(category) or _normalize_indent_trim_category_key(trim_name)
+    if not key:
+        return _INDENT_TRIM_UNKNOWN_RANK
+    if re.match(r'^CARTON(\s*BOX)?$', key, re.I):
+        return _INDENT_TRIM_CARTON_RANK
+    for pattern, rank in _INDENT_TRIM_CATEGORY_RANKERS:
+        if pattern.match(key):
+            return rank
+    return _INDENT_TRIM_UNKNOWN_RANK
+
+
+def _sort_indent_trim_rows(trim_data):
+    """Stable sort for save order: known categories → extras → Carton Box."""
+    rows = list(trim_data or [])
+    return sorted(
+        enumerate(rows),
+        key=lambda item: (
+            _indent_trim_category_rank(
+                (item[1] or {}).get('category', ''),
+                (item[1] or {}).get('trim_name', ''),
+            ),
+            item[0],
+        ),
+    )
+
 
 def _get_carton_box_trim():
     """Carton Box is just another trim in the library — one shared entry, like Velcro or Button.
@@ -581,7 +628,7 @@ class IndentSerializer(serializers.ModelSerializer):
             IndentFabricLine.objects.create(indent=indent, sort_order=i, **row)
 
         indent.trim_lines.all().delete()
-        for i, row in enumerate(trim_data or []):
+        for i, (_orig_idx, row) in enumerate(_sort_indent_trim_rows(trim_data)):
             row = dict(row)
             row.pop('id', None)
             row.pop('supplier_name', None)
@@ -592,6 +639,8 @@ class IndentSerializer(serializers.ModelSerializer):
             supplier_fk = row.pop('supplier', None)
             if supplier_fk and hasattr(supplier_fk, 'pk'):
                 supplier_fk = supplier_fk.pk
+            # sort_order always follows the canonical category sequence
+            row.pop('sort_order', None)
             line = IndentTrimLine.objects.create(
                 indent=indent,
                 trim_id=trim_fk,

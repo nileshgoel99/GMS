@@ -36,11 +36,15 @@ class PurchaseOrder(models.Model):
     buyer_po = models.ForeignKey(
         BuyerPO, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='supplier_purchase_orders',
-        help_text='Buyer PO this supplier order references',
+        help_text='Buyer PO this supplier order references (optional link)',
+    )
+    pi_number = models.CharField(
+        max_length=80, blank=True, default='',
+        help_text='PI reference number for display (free text; need not match a saved PI)',
     )
     reference_number = models.CharField(
         max_length=120, blank=True, default='',
-        help_text='Buyer PO reference number for display',
+        help_text='Buyer PO reference number for display (free text; need not match a saved Buyer PO)',
     )
 
     vendor_name = models.CharField(max_length=200)
