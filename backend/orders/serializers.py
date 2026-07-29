@@ -373,6 +373,76 @@ class TrimMasterSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ('id', 'created_at', 'updated_at')
 
+    def validate_properties(self, value):
+        """Normalize property definitions and prevent ambiguous duplicate keys."""
+        normalized = []
+        seen = set()
+        for prop in value or []:
+            name = str((prop or {}).get('name') or '').strip()
+            if not name:
+                continue
+            key = name.casefold()
+            if key in seen:
+                raise serializers.ValidationError(
+                    f'Duplicate property name: {name}. Property names must be unique.'
+                )
+            seen.add(key)
+            normalized.append({
+                'name': name,
+                'unit': str((prop or {}).get('unit') or '').strip(),
+            })
+        return normalized
+
+    def update(self, instance, validated_data):
+        """
+        Rename property keys everywhere the trim is used.
+
+        The editor keeps property order stable, so a changed name at the same
+        index is a rename. This prevents existing indent rows from continuing
+        to display the old property after the Trim Library schema is edited.
+        """
+        old_properties = list(instance.properties or [])
+        new_properties = list(validated_data.get('properties', old_properties) or [])
+        renames = []
+        for index, old_prop in enumerate(old_properties):
+            if index >= len(new_properties):
+                break
+            old_name = str((old_prop or {}).get('name') or '').strip()
+            new_name = str((new_properties[index] or {}).get('name') or '').strip()
+            if old_name and new_name and old_name != new_name:
+                renames.append((old_name, new_name))
+
+        instance = super().update(instance, validated_data)
+        if not renames:
+            return instance
+
+        defaults = dict(instance.default_property_values or {})
+        defaults_changed = False
+        for old_name, new_name in renames:
+            if old_name in defaults:
+                if new_name not in defaults:
+                    defaults[new_name] = defaults[old_name]
+                del defaults[old_name]
+                defaults_changed = True
+        if defaults_changed:
+            instance.default_property_values = defaults
+            instance.save(update_fields=['default_property_values', 'updated_at'])
+
+        for line in instance.indent_lines.all().only('id', 'property_values'):
+            values = dict(line.property_values or {})
+            changed = False
+            for old_name, new_name in renames:
+                if old_name in values:
+                    if new_name not in values:
+                        values[new_name] = values[old_name]
+                    del values[old_name]
+                    changed = True
+            if changed:
+                line.property_values = values
+                line.save(update_fields=['property_values'])
+
+        return instance
+
 
 class IndentPiOptionSerializer(serializers.ModelSerializer):
     """Minimal PI fields for indent creation picker."""

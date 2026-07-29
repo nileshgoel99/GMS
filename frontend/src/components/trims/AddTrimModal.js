@@ -109,13 +109,34 @@ export default function AddTrimModal({
       .filter((p) => p.name.trim())
       .map((p) => ({ name: p.name.trim(), unit: (p.unit || '').trim() }));
 
+    // Preserve default values when editing and move a value with a renamed
+    // property at the same position (e.g. "Colour" → "Shade").
+    const defaultPropertyValues = { ...(editing?.default_property_values || {}) };
+    if (isEdit) {
+      (editing.properties || []).forEach((oldProp, index) => {
+        const oldName = String(oldProp?.name || '').trim();
+        const newName = String(properties[index]?.name || '').trim();
+        if (
+          oldName
+          && newName
+          && oldName !== newName
+          && Object.prototype.hasOwnProperty.call(defaultPropertyValues, oldName)
+        ) {
+          if (!Object.prototype.hasOwnProperty.call(defaultPropertyValues, newName)) {
+            defaultPropertyValues[newName] = defaultPropertyValues[oldName];
+          }
+          delete defaultPropertyValues[oldName];
+        }
+      });
+    }
+
     const payload = {
       name: form.name,
       category: form.category,
       default_unit: form.default_unit,
       notes: form.notes,
       properties,
-      default_property_values: {},
+      default_property_values: defaultPropertyValues,
     };
 
     setSaving(true);
@@ -272,7 +293,8 @@ export default function AddTrimModal({
                         <Autocomplete
                           freeSolo
                           selectOnFocus
-                          clearOnBlur
+                          clearOnBlur={false}
+                          blurOnSelect
                           handleHomeEndKeys
                           options={nameOptions}
                           filterOptions={(options, params) => {
@@ -295,9 +317,10 @@ export default function AddTrimModal({
                             if (o?.inputValue) return o.inputValue;
                             return o?.title || '';
                           }}
-                          value={prop.name}
+                          value={prop.name || null}
+                          inputValue={prop.name || ''}
                           onChange={(_, v) => {
-                            const next = typeof v === 'string' ? v : (v?.inputValue || v?.title || '');
+                            const next = typeof v === 'string' ? v : (v?.inputValue || '');
                             updateProperty(idx, 'name', next);
                           }}
                           onInputChange={(_, v, reason) => {

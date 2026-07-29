@@ -38,7 +38,10 @@ export default function TrimsLibraryPage() {
     const showSpinner = !initialLoadDone.current;
     if (showSpinner) setLoading(true);
     try {
-      const res = await ordersAPI.getTrimsMaster({ search: debouncedSearch });
+      const res = await ordersAPI.getTrimsMaster({
+        search: debouncedSearch,
+        page_size: 500,
+      });
       setRows(sortIndentTrimLines(asList(res.data)));
       initialLoadDone.current = true;
     } catch (e) {
@@ -53,6 +56,16 @@ export default function TrimsLibraryPage() {
   const openNew = () => { setEditing(null); setModalOpen(true); };
   const openEdit = (row) => { setEditing(row); setModalOpen(true); };
   const closeModal = () => { setModalOpen(false); setEditing(null); };
+  const handleSaved = (saved) => {
+    if (saved?.id) {
+      setRows((prev) => sortIndentTrimLines(
+        prev.some((row) => row.id === saved.id)
+          ? prev.map((row) => (row.id === saved.id ? saved : row))
+          : [...prev, saved],
+      ));
+    }
+    load();
+  };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this trim? This won\'t affect existing indents.')) return;
@@ -71,8 +84,10 @@ export default function TrimsLibraryPage() {
         alignItems: 'center',
         justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
         width: '100%',
-        height: '100%',
-        px: 0.5,
+        minWidth: 0,
+        minHeight: 64,
+        px: 0.75,
+        py: 1,
       }}
     >
       {children}
@@ -82,13 +97,18 @@ export default function TrimsLibraryPage() {
   const trimsGridSx = {
     ...dataGridSx,
     width: '100%',
-    height: '100%',
     border: 'none',
     bgcolor: '#fff',
-    '& .MuiDataGrid-main': { overflow: 'hidden' },
+    '& .MuiDataGrid-main': { overflow: 'visible' },
     '& .MuiDataGrid-virtualScroller': {
-      overflowY: 'auto !important',
-      overscrollBehavior: 'contain',
+      overflowX: 'auto !important',
+      overflowY: 'visible !important',
+      overscrollBehavior: 'auto',
+    },
+    '& .MuiDataGrid-filler, & .MuiDataGrid-scrollbarFiller': {
+      display: 'none !important',
+      width: '0 !important',
+      minWidth: '0 !important',
     },
     '& .MuiDataGrid-columnHeaders': {
       ...(dataGridSx['& .MuiDataGrid-columnHeaders'] || {}),
@@ -100,21 +120,48 @@ export default function TrimsLibraryPage() {
       display: 'flex',
       alignItems: 'center',
       borderBottom: `1px solid ${slate[100]}`,
+      py: '6px !important',
+      overflow: 'visible !important',
+      whiteSpace: 'normal !important',
+      lineHeight: 1.4,
+    },
+    '& .MuiDataGrid-row': {
+      minHeight: '76px !important',
+    },
+    '& .MuiDataGrid-row.trim-row--alt': {
+      bgcolor: `${alpha('#0f766e', 0.075)} !important`,
+    },
+    '& .MuiDataGrid-row.trim-row--alt:hover': {
+      bgcolor: `${alpha('#0f766e', 0.13)} !important`,
+    },
+    '& .MuiDataGrid-row:not(.trim-row--alt):hover': {
+      bgcolor: `${alpha('#6366f1', 0.055)} !important`,
     },
   };
 
   const columns = [
     {
-      field: 'name', headerName: 'Trim Name', flex: 2, minWidth: 200,
+      field: 'name', headerName: 'Trim Name', flex: 2.2, minWidth: 280,
       renderCell: (p) => cell('left',
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <LibraryBooks sx={{ fontSize: 16, color: 'primary.main', opacity: 0.7 }} />
-          <Typography sx={{ fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>{p.value}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, minWidth: 0, width: '100%' }}>
+          <Box sx={{
+            width: 32, height: 32, borderRadius: 1.25, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            bgcolor: alpha('#0f766e', 0.1), color: '#0f766e',
+          }}>
+            <LibraryBooks sx={{ fontSize: 18 }} />
+          </Box>
+          <Typography sx={{
+            fontWeight: 750, fontSize: '0.88rem', textTransform: 'uppercase',
+            whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.4,
+          }}>
+            {p.value}
+          </Typography>
         </Box>
       ),
     },
     {
-      field: 'category', headerName: 'Category', flex: 1, minWidth: 100, align: 'center', headerAlign: 'center',
+      field: 'category', headerName: 'Category', flex: 1, minWidth: 150, align: 'center', headerAlign: 'center',
       sortComparator: (v1, v2, cellParams1, cellParams2) => {
         const row1 = cellParams1?.api?.getRow?.(cellParams1.id) || {};
         const row2 = cellParams2?.api?.getRow?.(cellParams2.id) || {};
@@ -125,14 +172,18 @@ export default function TrimsLibraryPage() {
       },
       renderCell: (p) => cell('center',
         p.value ? (
-          <Chip label={p.value} size="small" sx={{ fontWeight: 600, fontSize: '0.7rem', bgcolor: alpha('#6366f1', 0.1), color: '#4338ca' }} />
+          <Chip label={p.value} size="small" sx={{
+            height: 28, fontWeight: 700, fontSize: '0.72rem',
+            bgcolor: alpha('#6366f1', 0.11), color: '#4338ca',
+            border: `1px solid ${alpha('#6366f1', 0.2)}`,
+          }} />
         ) : (
           <Typography sx={{ fontSize: '0.8rem', color: 'text.disabled' }}>—</Typography>
         )
       ),
     },
     {
-      field: 'properties', headerName: 'Properties', flex: 2, minWidth: 200, sortable: false,
+      field: 'properties', headerName: 'Properties', flex: 2.4, minWidth: 330, sortable: false,
       renderCell: (p) => {
         const props = p.value || [];
         const defaults = p.row.default_property_values || {};
@@ -147,13 +198,17 @@ export default function TrimsLibraryPage() {
           return cell('left', <Typography sx={{ fontSize: '0.8rem', color: 'text.disabled' }}>—</Typography>);
         }
         return cell('left',
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.65, alignItems: 'center', py: 0.25 }}>
             {props.map((prop, i) => (
               <Chip
                 key={i}
                 size="small"
                 label={formatTrimPropertyLabel(prop)}
-                sx={{ fontSize: '0.68rem', fontWeight: 600 }}
+                variant="outlined"
+                sx={{
+                  height: 27, fontSize: '0.7rem', fontWeight: 650,
+                  bgcolor: '#fff', borderColor: slate[300],
+                }}
               />
             ))}
           </Box>
@@ -161,14 +216,14 @@ export default function TrimsLibraryPage() {
       },
     },
     {
-      field: 'default_unit', headerName: 'Default Unit', width: 110, align: 'center', headerAlign: 'center',
-      renderCell: (p) => cell('center', <Chip label={p.value} size="small" variant="outlined" sx={{ fontSize: '0.7rem', fontWeight: 700 }} />),
+      field: 'default_unit', headerName: 'Default Unit', width: 135, align: 'center', headerAlign: 'center',
+      renderCell: (p) => cell('center', <Chip label={p.value} size="small" variant="outlined" sx={{ height: 28, fontSize: '0.72rem', fontWeight: 750 }} />),
     },
     {
-      field: 'actions', headerName: '', width: 100, sortable: false, align: 'center', headerAlign: 'center',
+      field: 'actions', headerName: 'Actions', width: 120, sortable: false, align: 'center', headerAlign: 'center',
       renderCell: (p) => cell('center',
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="Edit"><IconButton size="small" onClick={() => openEdit(p.row)}><Edit fontSize="small" /></IconButton></Tooltip>
+          <Tooltip title="Edit trim"><IconButton size="small" color="primary" onClick={() => openEdit(p.row)}><Edit fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Delete"><IconButton size="small" color="error" onClick={() => handleDelete(p.row.id)}><Delete fontSize="small" /></IconButton></Tooltip>
         </Box>
       ),
@@ -178,18 +233,12 @@ export default function TrimsLibraryPage() {
   return (
     <Box
       sx={{
-        height: {
-          xs: 'calc(100dvh - 68px - 32px)',
-          sm: 'calc(100dvh - 76px - 48px)',
-          md: 'calc(100dvh - 76px - 64px)',
-        },
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: 0,
-        overflow: 'hidden',
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
       }}
     >
-      <Box sx={{ flexShrink: 0 }}>
+      <Box>
         <PageHeader
           title="Trims Library"
           subtitle="Define trims with configurable properties (name + unit) used when building indents"
@@ -214,11 +263,13 @@ export default function TrimsLibraryPage() {
 
       <DataGridShell
         sx={{
-          flex: 1,
-          minHeight: 0,
           width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
+          maxWidth: '100%',
+          minWidth: 0,
+          '& > .MuiDataGrid-root': {
+            height: 'auto !important',
+            width: '100%',
+          },
           '&:hover': { boxShadow: (theme) => theme.shadows[1] },
         }}
       >
@@ -226,14 +277,17 @@ export default function TrimsLibraryPage() {
           rows={rows}
           columns={columns}
           loading={loading}
-          rowHeight={64}
+          autoHeight
+          getRowHeight={() => 'auto'}
           columnHeaderHeight={48}
+          scrollbarSize={0}
+          getRowClassName={(p) => (p.indexRelativeToCurrentPage % 2 === 1 ? 'trim-row--alt' : '')}
           sx={trimsGridSx}
           disableRowSelectionOnClick
-          pageSizeOptions={[25, 50, 100]}
+          disableColumnMenu
+          pageSizeOptions={[50, 100, 250, 500]}
           initialState={{
-            pagination: { paginationModel: { pageSize: 25 } },
-            sorting: { sortModel: [{ field: 'category', sort: 'asc' }] },
+            pagination: { paginationModel: { pageSize: 100 } },
           }}
         />
       </DataGridShell>
@@ -242,7 +296,7 @@ export default function TrimsLibraryPage() {
         open={modalOpen}
         editing={editing}
         onClose={closeModal}
-        onSaved={() => load()}
+        onSaved={handleSaved}
       />
     </Box>
   );
