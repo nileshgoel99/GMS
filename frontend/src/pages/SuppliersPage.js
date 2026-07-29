@@ -54,8 +54,10 @@ export default function SuppliersPage() {
         alignItems: 'center',
         justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
         width: '100%',
-        height: '100%',
+        minWidth: 0,
+        minHeight: 64,
         px: 0.5,
+        py: 0.75,
       }}
     >
       {children}
@@ -66,6 +68,17 @@ export default function SuppliersPage() {
     ...dataGridSx,
     width: '100%',
     bgcolor: '#fff',
+    '& .MuiDataGrid-main': { overflow: 'visible' },
+    '& .MuiDataGrid-virtualScroller': {
+      overflowX: 'auto !important',
+      overflowY: 'visible !important',
+      overscrollBehavior: 'auto',
+    },
+    '& .MuiDataGrid-filler, & .MuiDataGrid-scrollbarFiller': {
+      display: 'none !important',
+      width: '0 !important',
+      minWidth: '0 !important',
+    },
     '& .MuiDataGrid-columnHeaders': {
       ...(dataGridSx['& .MuiDataGrid-columnHeaders'] || {}),
       bgcolor: slate[50],
@@ -76,6 +89,8 @@ export default function SuppliersPage() {
       display: 'flex',
       alignItems: 'center',
       borderBottom: `1px solid ${slate[100]}`,
+      overflow: 'visible !important',
+      whiteSpace: 'normal !important',
     },
   };
 
@@ -201,13 +216,25 @@ export default function SuppliersPage() {
         />
       </Box>
 
-      <DataGridShell>
+      <DataGridShell
+        sx={{
+          width: '100%',
+          maxWidth: '100%',
+          minWidth: 0,
+          '& > .MuiDataGrid-root': {
+            height: 'auto !important',
+            width: '100%',
+          },
+        }}
+      >
         <DataGrid
           rows={rows}
           columns={columns}
           loading={loading}
-          rowHeight={64}
+          autoHeight
+          getRowHeight={() => 'auto'}
           columnHeaderHeight={48}
+          scrollbarSize={0}
           sx={suppliersGridSx}
           disableRowSelectionOnClick
           pageSizeOptions={[25, 50, 100]}
