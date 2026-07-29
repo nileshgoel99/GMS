@@ -15,12 +15,12 @@ import {
   TRIM_UNIT_OPTIONS,
   isNumericTrimProperty,
   normalizeTrimPropertyName,
+  filterTrimPropertyNameOptions,
 } from './trimConstants';
 
 export { TRIM_CATEGORY_SUGGESTIONS, TRIM_UNIT_OPTIONS } from './trimConstants';
 
 const emptyProperty = () => ({ name: '', unit: '' });
-const filterPropertyOptions = createFilterOptions({ stringify: (o) => (typeof o === 'string' ? o : o.inputValue || o.title || '') });
 const filterCategoryOptions = createFilterOptions({ stringify: (o) => (typeof o === 'string' ? o : o.inputValue || o.title || '') });
 export const emptyTrimForm = () => ({
   name: '', category: '', default_unit: 'PCS', notes: '', properties: [],
@@ -296,9 +296,10 @@ export default function AddTrimModal({
                           clearOnBlur={false}
                           blurOnSelect
                           handleHomeEndKeys
+                          autoHighlight
                           options={nameOptions}
                           filterOptions={(options, params) => {
-                            const filtered = filterPropertyOptions(options, params);
+                            const filtered = filterTrimPropertyNameOptions(options, params);
                             const typed = normalizeTrimPropertyName(params.inputValue || '');
                             if (
                               typed
@@ -317,9 +318,18 @@ export default function AddTrimModal({
                             if (o?.inputValue) return o.inputValue;
                             return o?.title || '';
                           }}
+                          isOptionEqualToValue={(option, value) => {
+                            const a = typeof option === 'string' ? option : (option?.inputValue || '');
+                            const b = typeof value === 'string' ? value : (value?.inputValue || '');
+                            return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+                          }}
                           value={prop.name || null}
                           inputValue={prop.name || ''}
                           onChange={(_, v) => {
+                            if (v == null) {
+                              updateProperty(idx, 'name', '');
+                              return;
+                            }
                             const next = typeof v === 'string' ? v : (v?.inputValue || '');
                             updateProperty(idx, 'name', next);
                           }}

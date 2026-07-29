@@ -12,7 +12,9 @@ export const normalizePropKey = (label) => {
   if (!k) return '';
   if (/^(no|number|num)$/.test(k)) return 'number';
   if (/^colou?r$/.test(k)) return 'color';
-  if (/^(chain\s+)?material$/.test(k)) return 'material';
+  // Keep Material and Chain Material as separate match keys.
+  if (/^chain\s+material$/.test(k)) return 'chain material';
+  if (/^material$/.test(k)) return 'material';
   if (/^zipper\s*type$/.test(k) || k === 'type') return 'type';
   if (/^puller(\s*type)?$/.test(k)) return 'puller';
   if (/^size$/.test(k)) return 'size';

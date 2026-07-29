@@ -25,6 +25,7 @@ import SupplierAutocomplete from '../components/suppliers/SupplierAutocomplete';
 import {
   formatTrimPropertyLabel,
   formatTrimVariantDisplay,
+  filterTrimPropertyNameOptions,
   isGarmentSizeTrimProperty,
   isNumericTrimProperty,
   normalizeTrimPropertyName,
@@ -2971,9 +2972,14 @@ export default function IndentEditorPage() {
                                     <Autocomplete
                                       freeSolo
                                       size="small"
+                                      autoHighlight
                                       options={TRIM_PROPERTY_NAME_SUGGESTIONS.filter(
                                         (n) => !schema.some((p) => String(p.name).toLowerCase() === n.toLowerCase()),
                                       )}
+                                      filterOptions={filterTrimPropertyNameOptions}
+                                      isOptionEqualToValue={(option, value) =>
+                                        String(option || '').trim().toLowerCase() === String(value || '').trim().toLowerCase()
+                                      }
                                       value={newPropName}
                                       onChange={(_, v) => setNewPropName(typeof v === 'string' ? v : v || '')}
                                       onInputChange={(_, v) => setNewPropName(v)}

@@ -229,8 +229,39 @@ export const normalizeTrimPropertyName = (name) => {
   if (/^dimensions?$/i.test(trimmed)) return 'Dimensions';
   if (/^dim\.?\s*unit$/i.test(trimmed)) return 'Dim. Unit';
   if (/^colou?r$/i.test(trimmed)) return 'Color';
-  if (/^(chain\s+)?material$/i.test(trimmed)) return 'Chain Material';
+  // Keep Material and Chain Material distinct (e.g. snap buttons use both).
+  if (/^chain\s+material$/i.test(trimmed)) return 'Chain Material';
+  if (/^material$/i.test(trimmed)) return 'Material';
   if (/^zipper\s*type$/i.test(trimmed)) return 'Zipper Type';
   if (/^puller(\s*type)?$/i.test(trimmed)) return 'Puller Type';
   return trimmed;
+};
+
+const propertyOptionLabel = (option) => {
+  if (typeof option === 'string') return option;
+  if (option?.inputValue) return String(option.inputValue);
+  return String(option?.title || '');
+};
+
+/**
+ * Autocomplete filter for trim property names.
+ * Prefix/exact only — typing "Material" must not match "Chain Material".
+ */
+export const filterTrimPropertyNameOptions = (options, params) => {
+  const input = String(params?.inputValue || '').trim().toLowerCase();
+  if (!input) return options;
+  const matched = (options || []).filter((option) => {
+    const label = propertyOptionLabel(option).trim().toLowerCase();
+    return label === input || label.startsWith(input);
+  });
+  // Prefer exact match so Enter selects "Material", not a longer prefix hit.
+  matched.sort((a, b) => {
+    const la = propertyOptionLabel(a).trim().toLowerCase();
+    const lb = propertyOptionLabel(b).trim().toLowerCase();
+    const ea = la === input ? 0 : 1;
+    const eb = lb === input ? 0 : 1;
+    if (ea !== eb) return ea - eb;
+    return la.localeCompare(lb);
+  });
+  return matched;
 };
