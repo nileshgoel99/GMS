@@ -20,6 +20,7 @@ import { alpha } from '@mui/material/styles';
 import { Close, CloudUpload, DeleteOutline } from '@mui/icons-material';
 import { ticketsAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
+import { confirmDiscardUnsaved } from '../hooks/useUnsavedChanges';
 
 const MAX_IMAGES = 5;
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -34,6 +35,14 @@ export default function ReportTicketModal({ open, onClose, pageUrl = '' }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  const isDirty = Boolean(title.trim() || description.trim() || files.length);
+
+  const requestClose = () => {
+    if (saving) return;
+    if (!confirmDiscardUnsaved(isDirty)) return;
+    onClose?.();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -115,12 +124,12 @@ export default function ReportTicketModal({ open, onClose, pageUrl = '' }) {
   };
 
   return (
-    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={saving ? undefined : requestClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
         <Typography component="span" sx={{ fontWeight: 800, fontSize: '1.05rem' }}>
           Report a bug or request a feature
         </Typography>
-        <IconButton size="small" onClick={onClose} disabled={saving} aria-label="Close">
+        <IconButton size="small" onClick={requestClose} disabled={saving} aria-label="Close">
           <Close fontSize="small" />
         </IconButton>
       </DialogTitle>
@@ -242,7 +251,7 @@ export default function ReportTicketModal({ open, onClose, pageUrl = '' }) {
       </DialogContent>
       {!success && (
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={onClose} disabled={saving} sx={{ textTransform: 'none' }}>
+          <Button onClick={requestClose} disabled={saving} sx={{ textTransform: 'none' }}>
             Cancel
           </Button>
           <Button

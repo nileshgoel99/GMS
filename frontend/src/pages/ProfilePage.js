@@ -8,6 +8,7 @@ import PageHeader from '../components/PageHeader';
 import { slate } from '../theme/appTheme';
 import { authAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
 
 const sxInput = {
   '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: '#fff' },
@@ -20,6 +21,9 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState({ first_name: '', last_name: '' });
+
+  const { markSaved } = useUnsavedDraft(form);
+  useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: 'profile' });
 
   useEffect(() => {
     (async () => {
@@ -50,6 +54,7 @@ export default function ProfilePage() {
         last_name: form.last_name.trim(),
       });
       await refreshUser();
+      markSaved(form);
       setSuccess('Profile updated.');
     } catch (err) {
       setError(err.response?.data?.detail || 'Could not save profile.');

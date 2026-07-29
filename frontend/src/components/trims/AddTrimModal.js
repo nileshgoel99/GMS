@@ -17,6 +17,7 @@ import {
   normalizeTrimPropertyName,
   filterTrimPropertyNameOptions,
 } from './trimConstants';
+import { confirmDiscardUnsaved } from '../../hooks/useUnsavedChanges';
 
 export { TRIM_CATEGORY_SUGGESTIONS, TRIM_UNIT_OPTIONS } from './trimConstants';
 
@@ -26,6 +27,13 @@ export const emptyTrimForm = () => ({
   name: '', category: '', default_unit: 'PCS', notes: '', properties: [],
 });
 
+const formSnapshot = (f) => JSON.stringify({
+  name: f?.name || '',
+  category: f?.category || '',
+  default_unit: f?.default_unit || 'PCS',
+  notes: f?.notes || '',
+  properties: f?.properties || [],
+});
 const noEllipsisFieldSx = {
   '& .MuiInputBase-input, & input': {
     textOverflow: 'clip',
@@ -46,35 +54,38 @@ export default function AddTrimModal({
   const [form, setForm] = useState(emptyTrimForm());
   const [saving, setSaving] = useState(false);
   const wasOpen = useRef(false);
+  const baselineRef = useRef(formSnapshot(emptyTrimForm()));
   const isEdit = Boolean(editing?.id);
 
   useEffect(() => {
     if (open && !wasOpen.current) {
-      if (editing) {
-        setForm({
+      const next = editing
+        ? {
           name: (editing.name || '').toUpperCase(),
           category: editing.category || '',
           default_unit: editing.default_unit || 'PCS',
           notes: editing.notes || '',
           properties: (editing.properties || []).map((p) => ({ name: p.name || '', unit: p.unit || '' })),
-        });
-      } else {
-        setForm({
+        }
+        : {
           ...emptyTrimForm(),
           name: (initialName || '').toUpperCase(),
           category: initialCategory || '',
           default_unit: initialUnit || 'PCS',
-        });
-      }
+        };
+      setForm(next);
+      baselineRef.current = formSnapshot(next);
     }
     wasOpen.current = open;
   }, [open, editing, initialName, initialCategory, initialUnit]);
 
+  const isDirty = open && formSnapshot(form) !== baselineRef.current;
+
   const handleClose = () => {
-    if (!saving) {
-      setForm(emptyTrimForm());
-      onClose();
-    }
+    if (saving) return;
+    if (!confirmDiscardUnsaved(isDirty)) return;
+    setForm(emptyTrimForm());
+    onClose();
   };
 
   const addProperty = () => setForm((f) => ({ ...f, properties: [...f.properties, emptyProperty()] }));

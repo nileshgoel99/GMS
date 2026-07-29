@@ -20,6 +20,7 @@ import { alpha } from '@mui/material/styles';
 import { slate } from '../theme/appTheme';
 import PageHeader from '../components/PageHeader';
 import { companyAPI } from '../services/api';
+import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
 
 const emptyForm = {
   legal_name: '',
@@ -67,6 +68,13 @@ const CompanyPage = () => {
   const [currencyBanks, setCurrencyBanks] = useState([]);
   const [bankEditing, setBankEditing] = useState(null); // id or 'new'
   const [bankDraft, setBankDraft] = useState({ currency: '', intermediary_bank_details: '', notes: '' });
+
+  const companyDraft = useMemo(
+    () => ({ form, logoFileName: logoFile?.name || null, ourBankEditing, bankEditing }),
+    [form, logoFile, ourBankEditing, bankEditing],
+  );
+  const { markSaved } = useUnsavedDraft(companyDraft);
+  useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: 'company' });
 
   const logoObjectUrl = useMemo(() => {
     if (!logoFile) return null;
@@ -147,6 +155,7 @@ const CompanyPage = () => {
       }
       await load();
       alert('Company details saved. PI PDFs will use this letterhead.');
+      // load() flips loading; markSavedWhenReady will re-baseline after reload.
     } catch (e) {
       console.error(e);
       const msg = e.response?.data ? JSON.stringify(e.response.data) : e.message;

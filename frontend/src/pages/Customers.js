@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Box,
   Button,
@@ -46,6 +46,7 @@ import PageHeader from '../components/PageHeader';
 import DataGridShell from '../components/DataGridShell';
 import { slate, warm, dataGridSx } from '../theme/appTheme';
 import { customersAPI } from '../services/api';
+import { confirmDiscardUnsaved } from '../hooks/useUnsavedChanges';
 
 const emptyContact = (primary = false) => ({
   name: '',
@@ -293,6 +294,7 @@ const Customers = () => {
   const [groupByCode, setGroupByCode] = useState(false);
   const [detailCustomer, setDetailCustomer] = useState(null);
   const [openDetail, setOpenDetail] = useState(false);
+  const customerBaselineRef = useRef(JSON.stringify(emptyForm));
 
   const isLastStep = activeStep === STEPS.length - 1;
   const isNew = !selected;
@@ -329,7 +331,9 @@ const Customers = () => {
         const res = await customersAPI.getById(row.id);
         const c = res.data;
         setSelected(c);
-        setFormData(customerToForm(c));
+        const next = customerToForm(c);
+        setFormData(next);
+        customerBaselineRef.current = JSON.stringify(next);
       } catch (e) {
         console.error(e);
         alert('Could not load customer');
@@ -338,11 +342,14 @@ const Customers = () => {
     } else {
       setSelected(null);
       setFormData(emptyForm);
+      customerBaselineRef.current = JSON.stringify(emptyForm);
     }
     setOpenDialog(true);
   };
 
   const handleCloseDialog = () => {
+    const dirty = JSON.stringify(formData) !== customerBaselineRef.current;
+    if (!confirmDiscardUnsaved(dirty)) return;
     setOpenDialog(false);
     setSelected(null);
     setActiveStep(0);

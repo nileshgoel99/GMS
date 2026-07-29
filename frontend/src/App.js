@@ -1,5 +1,10 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import {
+  createBrowserRouter,
+  RouterProvider,
+  Navigate,
+  useParams,
+} from 'react-router-dom';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import { appTheme } from './theme/appTheme';
 import { AuthProvider } from './context/AuthContext';
@@ -37,248 +42,68 @@ function BuyerPOEditorPageKeyed() {
   return <BuyerPOEditorPage key={id} />;
 }
 
+function ProtectedLayout() {
+  return (
+    <PrivateRoute>
+      <Layout />
+    </PrivateRoute>
+  );
+}
+
+const router = createBrowserRouter([
+  { path: '/login', element: <Login /> },
+  { path: '/documentation', element: <DocumentationRoute /> },
+  {
+    element: <ProtectedLayout />,
+    children: [
+      { index: true, element: <Dashboard /> },
+      { path: 'customers', element: <Customers /> },
+      { path: 'orders/pi/:id/view', element: <PIViewPage /> },
+      { path: 'orders', element: <Orders /> },
+      { path: 'indents', element: <Indents /> },
+      { path: 'indents/:id', element: <IndentEditorPage /> },
+      { path: 'trims', element: <TrimsLibraryPage /> },
+      { path: 'suppliers', element: <SuppliersPage /> },
+      { path: 'inventory', element: <Inventory /> },
+      { path: 'sales/:id', element: <SalesEntryEditorPage /> },
+      { path: 'sales', element: <SalesEntries /> },
+      { path: 'purchase-bills/:id', element: <PurchaseBillEditorPage /> },
+      { path: 'purchase-bills', element: <PurchaseBills /> },
+      { path: 'procurement/:id', element: <SupplierPOEditorPage /> },
+      { path: 'procurement', element: <Procurement /> },
+      { path: 'production', element: <Production /> },
+      { path: 'company', element: <CompanyPage /> },
+      { path: 'buyer-pos', element: <BuyerPOs /> },
+      { path: 'buyer-pos/:id', element: <BuyerPOEditorPageKeyed /> },
+      { path: 'buyer-pos/:id/generate-pi', element: <GeneratePIPage /> },
+      { path: 'profile', element: <ProfilePage /> },
+      {
+        path: 'users',
+        element: (
+          <PrivateRoute module="users">
+            <UsersPage />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: 'tickets',
+        element: (
+          <PrivateRoute adminOnly>
+            <TicketsPage />
+          </PrivateRoute>
+        ),
+      },
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
+  },
+]);
+
 function App() {
   return (
     <ThemeProvider theme={appTheme}>
       <CssBaseline />
       <AuthProvider>
-        <Router>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <Dashboard />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/customers"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <Customers />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/orders/pi/:id/view"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PIViewPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/orders"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <Orders />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/indents"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <Indents />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/indents/:id"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <IndentEditorPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/trims"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <TrimsLibraryPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/suppliers"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <SuppliersPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/inventory"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <Inventory />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/sales/:id"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <SalesEntryEditorPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/sales"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <SalesEntries />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/purchase-bills/:id"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PurchaseBillEditorPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/purchase-bills"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PurchaseBills />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/procurement/:id"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <SupplierPOEditorPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/procurement"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <Procurement />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/production"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <Production />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/company"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <CompanyPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/buyer-pos"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <BuyerPOs />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/buyer-pos/:id"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <BuyerPOEditorPageKeyed />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/buyer-pos/:id/generate-pi"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <GeneratePIPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <ProfilePage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route path="/documentation" element={<DocumentationRoute />} />
-            <Route
-              path="/users"
-              element={
-                <PrivateRoute module="users">
-                  <Layout>
-                    <UsersPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/tickets"
-              element={
-                <PrivateRoute adminOnly>
-                  <Layout>
-                    <TicketsPage />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        </Router>
+        <RouterProvider router={router} />
       </AuthProvider>
     </ThemeProvider>
   );

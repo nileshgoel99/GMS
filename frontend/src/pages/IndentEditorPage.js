@@ -33,6 +33,7 @@ import {
   TRIM_PROPERTY_NAME_SUGGESTIONS,
   TRIM_UNIT_OPTIONS,
 } from '../components/trims/trimConstants';
+import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
 
 /** Indent print brand — navy + gold (matches Supplier PO / JBI letterhead). */
 const INDENT_PRINT = {
@@ -1575,6 +1576,25 @@ export default function IndentEditorPage() {
   const [newPropUnit, setNewPropUnit] = useState('');
   const [addingProp, setAddingProp] = useState(false);
 
+  const draft = useMemo(() => ({
+    indentNumber,
+    indentDate,
+    status,
+    preparedBy,
+    receivedBy,
+    approvedBy,
+    notes,
+    selectedLineIds,
+    fabricLines,
+    trimLines,
+    piId: pi?.id ?? null,
+  }), [
+    indentNumber, indentDate, status, preparedBy, receivedBy, approvedBy, notes,
+    selectedLineIds, fabricLines, trimLines, pi?.id,
+  ]);
+  const { markSaved } = useUnsavedDraft(draft);
+  useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: id });
+
   const resetBomFormState = () => {
     setFabricLines([emptyFabric()]);
     setTrimLines([emptyTrim()]);
@@ -2152,6 +2172,7 @@ export default function IndentEditorPage() {
 
       if (isNew) {
         res = await ordersAPI.createIndent(payload);
+        markSaved(draft);
         navigate(`/indents/${res.data.id}`, {
           replace: true,
           state: { saveMessage: successMessage },
@@ -2177,6 +2198,21 @@ export default function IndentEditorPage() {
           });
         }
         setSaveNotice(successMessage);
+        markSaved({
+          indentNumber,
+          indentDate,
+          status: res.data.status,
+          preparedBy,
+          receivedBy,
+          approvedBy,
+          notes,
+          selectedLineIds,
+          fabricLines,
+          trimLines: res.data.trim_lines?.length
+            ? sortIndentTrimLines(res.data.trim_lines.map(mapApiTrimLine))
+            : (orderedTrimLines.length ? orderedTrimLines : [emptyTrim()]),
+          piId: pi?.id ?? null,
+        });
       }
     } catch (e) {
       const msg = e.response?.data ? JSON.stringify(e.response.data) : e.message;

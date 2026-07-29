@@ -10,6 +10,7 @@ import PIDocumentFooter from '../components/orders/PIDocumentFooter';
 import PIPrintSheet from '../components/orders/PIPrintSheet';
 import { bindPiPrintPageFooters, installPiPrintPageFooters } from '../utils/piPrintPageFooters';
 import { companyContactLines } from '../utils/formatCompanyPhone';
+import { useUnsavedDraft, useMarkSavedWhenReady, confirmDiscardUnsaved } from '../hooks/useUnsavedChanges';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
@@ -436,6 +437,9 @@ export default function PIViewPage() {
   const [detailDraft, setDetailDraft]       = useState({});
   const [savingDetails, setSavingDetails]   = useState(false);
 
+  const { isDirty, markSaved } = useUnsavedDraft(detailDraft);
+  useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: id });
+
   useEffect(() => {
     const style = document.createElement('style');
     style.id = 'pi-view-print-style';
@@ -512,6 +516,7 @@ export default function PIViewPage() {
     try {
       const res = await ordersAPI.patchPI(id, detailDraft);
       setPi((prev) => ({ ...prev, ...res.data }));
+      markSaved(detailDraft);
       setEditingDetails(false);
     } catch (e) {
       const msg = e.response?.data ? JSON.stringify(e.response.data) : e.message;
@@ -568,7 +573,10 @@ export default function PIViewPage() {
           Create Indent
         </Button>
         <Button startIcon={editingDetails ? <Close /> : <Edit />} variant="outlined" size="small"
-          onClick={() => setEditingDetails((v) => !v)}
+          onClick={() => {
+            if (editingDetails && isDirty && !confirmDiscardUnsaved(true)) return;
+            setEditingDetails((v) => !v);
+          }}
           sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5,
             borderColor: editingDetails ? '#e53935' : undefined,
             color: editingDetails ? '#e53935' : undefined }}>
@@ -685,7 +693,10 @@ export default function PIViewPage() {
             </Grid>
           </Grid>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2.5, gap: 1.5 }}>
-            <Button variant="outlined" size="small" onClick={() => setEditingDetails(false)}
+            <Button variant="outlined" size="small" onClick={() => {
+              if (isDirty && !confirmDiscardUnsaved(true)) return;
+              setEditingDetails(false);
+            }}
               sx={{ fontWeight: 700, textTransform: 'none' }}>
               Cancel
             </Button>

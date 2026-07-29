@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box, Button, Typography, TextField, Grid, Paper,
   IconButton, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem,
@@ -13,6 +13,7 @@ import PIDocumentFooter from '../components/orders/PIDocumentFooter';
 import PIPrintSheet from '../components/orders/PIPrintSheet';
 import { bindPiPrintPageFooters, installPiPrintPageFooters } from '../utils/piPrintPageFooters';
 import { companyContactLines } from '../utils/formatCompanyPhone';
+import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
 
 // ── Number to words ───────────────────────────────────────────────────────────
 const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
@@ -207,6 +208,24 @@ export default function GeneratePIPage() {
   // Editable grouped items (user can adjust unit price per group)
   const [piLines, setPiLines] = useState([]);
 
+  const draft = useMemo(() => ({
+    piDate,
+    piRef,
+    portOfDischarge,
+    portOfLoading,
+    incoTerms,
+    ourBank,
+    interBank,
+    selectedBankId,
+    paymentTerms,
+    piLines,
+  }), [
+    piDate, piRef, portOfDischarge, portOfLoading, incoTerms,
+    ourBank, interBank, selectedBankId, paymentTerms, piLines,
+  ]);
+  const { markSaved } = useUnsavedDraft(draft);
+  useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: id });
+
   useEffect(() => {
     // Inject print style
     const style = document.createElement('style');
@@ -347,6 +366,7 @@ export default function GeneratePIPage() {
       });
 
       // Navigate to the saved PI view
+      markSaved(draft);
       navigate(`/orders/pi/${res.data.id}/view`, { replace: true });
     } catch (e) {
       console.error(e);

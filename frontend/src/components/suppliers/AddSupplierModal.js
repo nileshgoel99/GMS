@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog, DialogContent, DialogActions,
   Box, Button, TextField, IconButton, Typography, Grid, MenuItem,
@@ -13,6 +13,7 @@ import {
 import { alpha, useTheme } from '@mui/material/styles';
 import { suppliersAPI } from '../../services/api';
 import { slate, warm } from '../../theme/appTheme';
+import { confirmDiscardUnsaved } from '../../hooks/useUnsavedChanges';
 
 export const COUNTRY_SUGGESTIONS = [
   'India', 'China', 'Bangladesh', 'Vietnam', 'Turkey', 'Pakistan', 'Sri Lanka',
@@ -162,16 +163,25 @@ export default function AddSupplierModal({ open, onClose, onSaved, editing = nul
   const theme = useTheme();
   const [form, setForm] = useState(emptySupplierForm());
   const [saving, setSaving] = useState(false);
+  const baselineRef = useRef(JSON.stringify(emptySupplierForm()));
+  const wasOpen = useRef(false);
 
   useEffect(() => {
-    if (open) setForm(supplierToForm(editing));
+    if (open && !wasOpen.current) {
+      const next = supplierToForm(editing);
+      setForm(next);
+      baselineRef.current = JSON.stringify(next);
+    }
+    wasOpen.current = open;
   }, [open, editing]);
 
+  const isDirty = open && JSON.stringify(form) !== baselineRef.current;
+
   const handleClose = () => {
-    if (!saving) {
-      setForm(emptySupplierForm());
-      onClose();
-    }
+    if (saving) return;
+    if (!confirmDiscardUnsaved(isDirty)) return;
+    setForm(emptySupplierForm());
+    onClose();
   };
 
   const setInternational = (checked) => {

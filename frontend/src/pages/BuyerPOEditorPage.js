@@ -40,6 +40,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, customersAPI } from '../services/api';
 import { normalizeGarmentSize, normalizeSizeBreakdownEntries, sortSizeBreakdownEntries } from '../utils/normalizeGarmentSize';
 import { slate, warm, spectrum } from '../theme/appTheme';
+import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
 
 // ── Status config ────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = [
@@ -1039,6 +1040,10 @@ export default function BuyerPOEditorPage() {
   const [sectionTab, setSectionTab] = useState(0);
   const [formData, setFormData]     = useState(emptyForm());
   const [lines, setLines]           = useState([emptyLine()]);
+
+  const draft = useMemo(() => ({ formData, lines }), [formData, lines]);
+  const { markSaved } = useUnsavedDraft(draft);
+  useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: id });
   
   // Section expansion state
   const [expanded, setExpanded] = useState({
@@ -1268,8 +1273,10 @@ export default function BuyerPOEditorPage() {
         savedId = numericId;
       }
       if (generatePI) {
+        markSaved(draft);
         navigate(`/buyer-pos/${savedId}/generate-pi`);
       } else {
+        markSaved(draft);
         navigate('/buyer-pos');
       }
     } catch (e) {

@@ -8,6 +8,7 @@ import {
 import { ArrowBack, Save, Add, Delete, PointOfSale } from '@mui/icons-material';
 import { ordersAPI, salesEntryAPI } from '../services/api';
 import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
+import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -53,6 +54,9 @@ export default function SalesEntryEditorPage() {
   const [buyerPos, setBuyerPos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const { markSaved } = useUnsavedDraft(form);
+  useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: id });
 
   const applyBuyerPoPrefill = async (poId) => {
     const res = await salesEntryAPI.prefillFromBuyerPo(poId);
@@ -191,6 +195,7 @@ export default function SalesEntryEditorPage() {
       };
       if (isNew) await salesEntryAPI.create(payload);
       else await salesEntryAPI.update(id, payload);
+      markSaved(form);
       navigate('/sales');
     } catch (e) {
       alert('Save failed: ' + (e.response?.data ? JSON.stringify(e.response.data) : e.message));

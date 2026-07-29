@@ -47,7 +47,7 @@ import {
   ConfirmationNumber as ConfirmationNumberIcon,
   BugReport as BugReportIcon,
 } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { layoutDrawerWidth, navChrome, slate } from '../theme/appTheme';
 import { hasModuleAccess, dashboardTitleForUser } from '../config/permissions';
@@ -191,6 +191,7 @@ const loadNavCollapsed = () => {
 };
 
 const Layout = ({ children }) => {
+  // Prefer <Outlet /> under createBrowserRouter; keep children for any legacy wrap.
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -857,7 +858,7 @@ const Layout = ({ children }) => {
             mx: 'auto',
           }}
         >
-          {children}
+          {children ?? <Outlet />}
         </Box>
       </Box>
 

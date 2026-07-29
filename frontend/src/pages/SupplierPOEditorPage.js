@@ -24,6 +24,7 @@ import {
 import SupplierPOPrintDocument, { SUPPLIER_PO_PRINT_STYLE } from '../components/procurement/SupplierPOPrintDocument';
 import AddTrimModal from '../components/trims/AddTrimModal';
 import AddSupplierModal from '../components/suppliers/AddSupplierModal';
+import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
 
 const DEFAULT_COMMENTS = `This purchase order is subject to seller's acceptance of the attached terms and conditions.
 Please sign below and return acknowledgement of this purchase order. Please notify us immediately if you are unable to supply.`;
@@ -963,6 +964,9 @@ export default function SupplierPOEditorPage() {
   const [trimModalTargetRow, setTrimModalTargetRow] = useState(null);
   const [trimModalInitialName, setTrimModalInitialName] = useState('');
   const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+
+  const { markSaved } = useUnsavedDraft(form);
+  useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: id });
   const defaultDocTitleRef = useRef(document.title);
 
   useEffect(() => {
@@ -1713,6 +1717,7 @@ export default function SupplierPOEditorPage() {
       } else {
         await procurementAPI.update(id, payload);
       }
+      markSaved(form);
       navigate('/procurement');
     } catch (e) {
       alert('Save failed: ' + (e.response?.data ? JSON.stringify(e.response.data) : e.message));

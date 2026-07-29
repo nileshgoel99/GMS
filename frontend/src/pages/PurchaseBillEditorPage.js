@@ -15,6 +15,7 @@ import PurchaseBillDocuments from '../components/procurement/PurchaseBillDocumen
 import { parseParticulars } from '../utils/parseParticulars';
 import { computeBillPaymentDueDate, parsePaymentDays } from '../utils/paymentTerms';
 import { formatDateDisplay } from '../utils/formatDate';
+import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -157,6 +158,9 @@ export default function PurchaseBillEditorPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [catalogLoading, setCatalogLoading] = useState(false);
+
+  const { markSaved } = useUnsavedDraft(form);
+  useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: id });
 
   useEffect(() => {
     let cancelled = false;
@@ -412,6 +416,7 @@ export default function PurchaseBillEditorPage() {
       } else {
         await purchaseBillAPI.update(id, payload);
       }
+      markSaved(form);
       navigate('/purchase-bills');
     } catch (e) {
       setFormError(formatApiError(e, 'Save failed.'));

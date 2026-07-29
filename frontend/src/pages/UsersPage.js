@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Button, Typography, TextField, IconButton, Chip, MenuItem, Switch,
   FormControlLabel, Tabs, Tab, Checkbox, FormGroup, FormControlLabel as MuiFormControlLabel,
@@ -12,6 +12,7 @@ import DataGridShell from '../components/DataGridShell';
 import { dataGridSx, slate } from '../theme/appTheme';
 import { accountsAPI } from '../services/api';
 import { ALL_MODULES, moduleLabel } from '../config/permissions';
+import { confirmDiscardUnsaved } from '../hooks/useUnsavedChanges';
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 
@@ -56,14 +57,18 @@ const emptyRoleForm = () => ({
   modules: ['dashboard'],
 });
 
-function DialogShell({ open, title, onClose, children, onSave, saving, saveLabel = 'Save' }) {
+function DialogShell({ open, title, onClose, children, onSave, saving, saveLabel = 'Save', isDirty = false }) {
   if (!open) return null;
+  const requestClose = () => {
+    if (!confirmDiscardUnsaved(isDirty)) return;
+    onClose();
+  };
   return (
     <Box sx={{
       position: 'fixed', inset: 0, bgcolor: 'rgba(15,23,42,0.45)', zIndex: 1300,
       display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2,
     }}
-    onClick={onClose}
+    onClick={requestClose}
     >
       <Box sx={{ bgcolor: '#fff', borderRadius: 2, p: 3, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}
         onClick={(e) => e.stopPropagation()}
@@ -71,7 +76,7 @@ function DialogShell({ open, title, onClose, children, onSave, saving, saveLabel
         <Typography sx={{ fontWeight: 800, fontSize: '1.05rem', mb: 2 }}>{title}</Typography>
         {children}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 3 }}>
-          <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button onClick={requestClose} sx={{ textTransform: 'none' }}>Cancel</Button>
           <Button variant="contained" onClick={onSave} disabled={saving} sx={{ textTransform: 'none', fontWeight: 700 }}>
             {saving ? 'Saving…' : saveLabel}
           </Button>
@@ -99,6 +104,8 @@ export default function UsersPage() {
   const [roleForm, setRoleForm] = useState(emptyRoleForm());
 
   const [saving, setSaving] = useState(false);
+  const userBaselineRef = useRef(JSON.stringify(emptyUserForm()));
+  const roleBaselineRef = useRef(JSON.stringify(emptyRoleForm()));
 
   const loadRoles = useCallback(async () => {
     setLoadingRoles(true);
@@ -143,13 +150,15 @@ export default function UsersPage() {
   // ── User handlers ──
   const openNewUser = () => {
     setEditingUser(null);
-    setUserForm(emptyUserForm(defaultRoleId));
+    const next = emptyUserForm(defaultRoleId);
+    setUserForm(next);
+    userBaselineRef.current = JSON.stringify(next);
     setUserDialog(true);
   };
 
   const openEditUser = (row) => {
     setEditingUser(row);
-    setUserForm({
+    const next = {
       username: row.username,
       email: row.email || '',
       first_name: row.first_name || '',
@@ -157,7 +166,9 @@ export default function UsersPage() {
       password: '',
       role_id: row.role_id || defaultRoleId,
       is_active: row.is_active,
-    });
+    };
+    setUserForm(next);
+    userBaselineRef.current = JSON.stringify(next);
     setUserDialog(true);
   };
 
@@ -192,19 +203,23 @@ export default function UsersPage() {
   // ── Role handlers ──
   const openNewRole = () => {
     setEditingRole(null);
-    setRoleForm(emptyRoleForm());
+    const next = emptyRoleForm();
+    setRoleForm(next);
+    roleBaselineRef.current = JSON.stringify(next);
     setRoleDialog(true);
   };
 
   const openEditRole = (row) => {
     setEditingRole(row);
-    setRoleForm({
+    const next = {
       name: row.name,
       code: row.code,
       description: row.description || '',
       is_admin: row.is_admin,
       modules: row.is_admin ? [] : [...(row.modules || [])],
-    });
+    };
+    setRoleForm(next);
+    roleBaselineRef.current = JSON.stringify(next);
     setRoleDialog(true);
   };
 
@@ -429,6 +444,7 @@ export default function UsersPage() {
         onClose={() => setUserDialog(false)}
         onSave={saveUser}
         saving={saving}
+        isDirty={JSON.stringify(userForm) !== userBaselineRef.current}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {!editingUser && (
@@ -466,6 +482,7 @@ export default function UsersPage() {
         onClose={() => setRoleDialog(false)}
         onSave={saveRole}
         saving={saving}
+        isDirty={JSON.stringify(roleForm) !== roleBaselineRef.current}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TextField size="small" fullWidth label="Role name *" value={roleForm.name}
