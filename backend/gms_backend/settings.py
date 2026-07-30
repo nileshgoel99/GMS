@@ -78,6 +78,13 @@ if USE_SQLITE:
         }
     }
 else:
+    _db_options = {
+        'sslmode': config('DB_SSLMODE', default='require'),
+    }
+    _sslrootcert = config('DB_SSLROOTCERT', default='')
+    if _sslrootcert:
+        _db_options['sslrootcert'] = _sslrootcert
+
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -86,6 +93,9 @@ else:
             'PASSWORD': config('DB_PASSWORD', default='postgres'),
             'HOST': config('DB_HOST', default='localhost'),
             'PORT': config('DB_PORT', default='5432'),
+            'OPTIONS': _db_options,
+            # Safe default with managed Postgres / PgBouncer transaction pools.
+            'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=0, cast=int),
         }
     }
 
