@@ -5,7 +5,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('orders', '0001_initial'),
+        ('orders', '0013_itemindenttemplate_trimmaster_and_more'),
         ('inventory', '0001_initial'),
     ]
 
