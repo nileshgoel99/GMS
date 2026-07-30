@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 
 from django.db.models import Sum
 from rest_framework import serializers
@@ -16,16 +17,68 @@ class InventoryLogSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_code = serializers.CharField(source='item.item_code', read_only=True)
+    # Prefer business date; fall back to created_at for older rows.
+    effective_date = serializers.SerializerMethodField()
 
     class Meta:
         model = InventoryLog
         fields = '__all__'
         read_only_fields = ('stock_before', 'stock_after', 'created_by', 'created_at')
 
+    def get_effective_date(self, obj):
+        if obj.transaction_date:
+            return obj.transaction_date.isoformat()
+        if obj.created_at:
+            return obj.created_at.date().isoformat()
+        return None
+
 
 class ReleaseStockSerializer(serializers.Serializer):
     quantity = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.01'))
     remarks = serializers.CharField(required=False, allow_blank=True, default='')
+    transaction_date = serializers.DateField(required=False, allow_null=True)
+
+
+class OpeningStockSerializer(serializers.Serializer):
+    """Add opening / initial stock to an inventory item."""
+    quantity = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.01'))
+    remarks = serializers.CharField(required=False, allow_blank=True, default='')
+    transaction_date = serializers.DateField(required=False, allow_null=True)
+
+    def validate_transaction_date(self, value):
+        if value and value > date.today():
+            raise serializers.ValidationError('Opening stock date cannot be in the future.')
+        return value
+
+
+class CreateOpeningStockSerializer(serializers.Serializer):
+    """
+    Create a trim (optional), resolve/create inventory SKU, and post opening stock.
+
+    Provide either:
+    - trim_id: existing TrimMaster, or
+    - trim: { name, category, default_unit, properties?, notes? } to create one.
+    """
+    trim_id = serializers.IntegerField(required=False, allow_null=True)
+    trim = serializers.DictField(required=False, allow_null=True)
+    property_values = serializers.DictField(required=False, allow_null=True)
+    quantity = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.01'))
+    remarks = serializers.CharField(required=False, allow_blank=True, default='')
+    transaction_date = serializers.DateField(required=False, allow_null=True)
+
+    def validate_transaction_date(self, value):
+        if value and value > date.today():
+            raise serializers.ValidationError('Opening stock date cannot be in the future.')
+        return value
+
+    def validate(self, attrs):
+        trim_id = attrs.get('trim_id')
+        trim_payload = attrs.get('trim')
+        if not trim_id and not (isinstance(trim_payload, dict) and str(trim_payload.get('name') or '').strip()):
+            raise serializers.ValidationError(
+                {'trim': 'Select an existing trim or provide a new trim name.'}
+            )
+        return attrs
 
 
 class InventoryItemSerializer(serializers.ModelSerializer):

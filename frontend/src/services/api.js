@@ -172,6 +172,8 @@ export const inventoryAPI = {
   getSummary: (id) => api.get(`/inventory/items/${id}/summary/`),
   getStatistics: () => api.get('/inventory/items/statistics/'),
   release: (id, data) => api.post(`/inventory/items/${id}/release/`, data),
+  addOpeningStock: (id, data) => api.post(`/inventory/items/${id}/opening-stock/`, data),
+  createWithOpeningStock: (data) => api.post('/inventory/items/create-with-opening-stock/', data),
   
   getLogs: (params) => api.get('/inventory/logs/', { params }),
   createLog: (data) => api.post('/inventory/logs/', data),

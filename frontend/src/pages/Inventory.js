@@ -24,6 +24,12 @@ import {
   IconButton,
   Tooltip,
   CircularProgress,
+  Autocomplete,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  FormControl,
+  FormLabel,
 } from '@mui/material';
 import {
   Search,
@@ -57,17 +63,20 @@ import {
   ExpandMore,
   ExpandLess,
   Unarchive,
+  AddBox,
+  Add,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import PageHeader from '../components/PageHeader';
 import { InventoryItemFull } from '../components/inventory/InventoryItemParticulars';
+import AddTrimModal from '../components/trims/AddTrimModal';
 import { extractTrimProperties, getItemDisplayName } from '../utils/extractTrimProperties';
 import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
-import { inventoryAPI } from '../services/api';
+import { inventoryAPI, ordersAPI } from '../services/api';
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
-
+const todayIso = () => new Date().toISOString().slice(0, 10);
 const fmtQty = (v) => {
   const n = typeof v === 'number' ? v : parseFloat(v);
   if (!Number.isFinite(n)) return '—';
@@ -427,6 +436,18 @@ const Inventory = () => {
   const [releaseQty, setReleaseQty] = useState('');
   const [releaseRemarks, setReleaseRemarks] = useState('');
   const [releaseLoading, setReleaseLoading] = useState(false);
+  const [openingItem, setOpeningItem] = useState(null);
+  const [openingQty, setOpeningQty] = useState('');
+  const [openingRemarks, setOpeningRemarks] = useState('');
+  const [openingDate, setOpeningDate] = useState(todayIso);
+  const [openingLoading, setOpeningLoading] = useState(false);
+  const [newOpeningOpen, setNewOpeningOpen] = useState(false);
+  const [newOpeningMode, setNewOpeningMode] = useState('library'); // library | create
+  const [trimOptions, setTrimOptions] = useState([]);
+  const [trimsLoading, setTrimsLoading] = useState(false);
+  const [selectedTrim, setSelectedTrim] = useState(null);
+  const [propertyValues, setPropertyValues] = useState({});
+  const [trimModalOpen, setTrimModalOpen] = useState(false);
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' });
   const searchRef = useRef(null);
 
@@ -712,7 +733,167 @@ const Inventory = () => {
     }
   };
 
-  const logLabel = (type) => {
+  const openOpeningStock = (item, e) => {
+    e?.stopPropagation?.();
+    setOpeningItem(item);
+    setOpeningQty('');
+    setOpeningRemarks('');
+    setOpeningDate(todayIso());
+  };
+
+  const closeOpeningStock = () => {
+    setOpeningItem(null);
+    setOpeningQty('');
+    setOpeningRemarks('');
+    setOpeningDate(todayIso());
+  };
+
+  const handleOpeningStock = async () => {
+    if (!openingItem) return;
+    const qty = parseFloat(openingQty);
+    if (!qty || qty <= 0) {
+      setSnack({ open: true, message: 'Enter a valid opening stock quantity', severity: 'warning' });
+      return;
+    }
+    if (!openingDate) {
+      setSnack({ open: true, message: 'Opening stock date is required', severity: 'warning' });
+      return;
+    }
+
+    setOpeningLoading(true);
+    try {
+      await inventoryAPI.addOpeningStock(openingItem.id, {
+        quantity: qty,
+        remarks: openingRemarks,
+        transaction_date: openingDate,
+      });
+      setSnack({
+        open: true,
+        message: `Added opening stock of ${fmtQty(qty)} ${openingItem.unit}`,
+        severity: 'success',
+      });
+      closeOpeningStock();
+      fetchAll();
+      if (detailItem?.id === openingItem.id) {
+        openDetail({
+          ...openingItem,
+          current_stock: (parseFloat(openingItem.current_stock) || 0) + qty,
+        });
+      }
+    } catch (error) {
+      const msg = error.response?.data?.quantity
+        || error.response?.data?.transaction_date
+        || error.response?.data?.detail
+        || 'Failed to add opening stock';
+      setSnack({ open: true, message: String(Array.isArray(msg) ? msg[0] : msg), severity: 'error' });
+    } finally {
+      setOpeningLoading(false);
+    }
+  };
+
+  const loadTrimOptions = useCallback(async () => {
+    setTrimsLoading(true);
+    try {
+      const res = await ordersAPI.getTrimsMaster({ page_size: 500 });
+      setTrimOptions(asList(res.data));
+    } catch (e) {
+      console.error(e);
+      setSnack({ open: true, message: 'Could not load trim library', severity: 'error' });
+    } finally {
+      setTrimsLoading(false);
+    }
+  }, []);
+
+  const openNewOpeningStock = () => {
+    setNewOpeningOpen(true);
+    setNewOpeningMode('library');
+    setSelectedTrim(null);
+    setPropertyValues({});
+    setOpeningQty('');
+    setOpeningRemarks('');
+    setOpeningDate(todayIso());
+    loadTrimOptions();
+  };
+
+  const closeNewOpeningStock = () => {
+    if (openingLoading) return;
+    setNewOpeningOpen(false);
+    setSelectedTrim(null);
+    setPropertyValues({});
+    setOpeningQty('');
+    setOpeningRemarks('');
+    setOpeningDate(todayIso());
+  };
+
+  const handleTrimCreatedForOpening = (trim) => {
+    setTrimModalOpen(false);
+    setSelectedTrim(trim);
+    setNewOpeningMode('library');
+    setPropertyValues({});
+    setTrimOptions((prev) => {
+      if (prev.some((t) => t.id === trim.id)) return prev;
+      return [trim, ...prev];
+    });
+    setSnack({
+      open: true,
+      message: `Trim “${trim.name}” created — enter opening stock below`,
+      severity: 'success',
+    });
+  };
+
+  const handleCreateWithOpeningStock = async () => {
+    if (!selectedTrim?.id) {
+      setSnack({
+        open: true,
+        message: newOpeningMode === 'create'
+          ? 'Create a trim first, then enter opening stock'
+          : 'Select a trim from the library',
+        severity: 'warning',
+      });
+      return;
+    }
+    const qty = parseFloat(openingQty);
+    if (!qty || qty <= 0) {
+      setSnack({ open: true, message: 'Enter a valid opening stock quantity', severity: 'warning' });
+      return;
+    }
+    if (!openingDate) {
+      setSnack({ open: true, message: 'Opening stock date is required', severity: 'warning' });
+      return;
+    }
+
+    setOpeningLoading(true);
+    try {
+      const res = await inventoryAPI.createWithOpeningStock({
+        trim_id: selectedTrim.id,
+        property_values: propertyValues,
+        quantity: qty,
+        remarks: openingRemarks,
+        transaction_date: openingDate,
+      });
+      const unit = res.data?.item?.unit || selectedTrim.default_unit || 'PCS';
+      setSnack({
+        open: true,
+        message: `Opening stock of ${fmtQty(qty)} ${unit} added for ${selectedTrim.name}`,
+        severity: 'success',
+      });
+      closeNewOpeningStock();
+      fetchAll();
+    } catch (error) {
+      const data = error.response?.data;
+      const msg = data?.quantity || data?.trim || data?.trim_id || data?.transaction_date
+        || data?.detail || (typeof data === 'object' ? JSON.stringify(data) : null)
+        || 'Failed to add opening stock';
+      setSnack({ open: true, message: String(Array.isArray(msg) ? msg[0] : msg), severity: 'error' });
+    } finally {
+      setOpeningLoading(false);
+    }
+  };
+
+  const logLabel = (type, log) => {
+    if (type === 'ADJUST' && (log?.reference_type === 'OPENING' || log?.reference_number === 'Opening stock')) {
+      return 'Opening stock';
+    }
     const map = {
       RECEIVE: 'Received',
       ISSUE: 'Released',
@@ -722,6 +903,8 @@ const Inventory = () => {
     };
     return map[type] || type;
   };
+
+  const logDate = (log) => log?.effective_date || log?.transaction_date || log?.created_at;
 
   const clearFilters = () => {
     setSearch('');
@@ -738,10 +921,11 @@ const Inventory = () => {
         sx={{
           display: 'flex',
           flexWrap: 'wrap',
-          alignItems: 'flex-end',
+          alignItems: 'flex-start',
           justifyContent: 'space-between',
           gap: 1.5,
           mb: 2,
+          width: '100%',
         }}
       >
         <PageHeader
@@ -750,6 +934,21 @@ const Inventory = () => {
           subtitle="Search by trim name, color, size, or supplier — click a row for history"
           compact
         />
+        <Button
+          variant="contained"
+          startIcon={<AddBox />}
+          onClick={openNewOpeningStock}
+          sx={{
+            fontWeight: 700,
+            textTransform: 'none',
+            borderRadius: 1.5,
+            ml: 'auto',
+            flexShrink: 0,
+            alignSelf: { xs: 'stretch', sm: 'flex-start' },
+          }}
+        >
+          Add opening stock
+        </Button>
       </Box>
 
       {/* Category summary cards */}
@@ -1157,6 +1356,18 @@ const Inventory = () => {
                                 sx={{ color: slate[500], '&:hover': { color: accent, bgcolor: alpha(accent, 0.08) } }}
                               >
                                 <History fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Add opening stock">
+                              <IconButton
+                                size="small"
+                                onClick={(e) => openOpeningStock(row, e)}
+                                sx={{
+                                  color: '#0f766e',
+                                  '&:hover': { bgcolor: alpha('#0f766e', 0.1) },
+                                }}
+                              >
+                                <AddBox fontSize="small" />
                               </IconButton>
                             </Tooltip>
                             <Tooltip title="Release to production">
@@ -1817,7 +2028,7 @@ const Inventory = () => {
                   >
                     <Chip
                       size="small"
-                      label={logLabel(log.transaction_type)}
+                      label={logLabel(log.transaction_type, log)}
                       color={log.transaction_type === 'ISSUE' ? 'warning' : 'default'}
                       variant="outlined"
                     />
@@ -1828,7 +2039,7 @@ const Inventory = () => {
                       {fmtQty(log.quantity)}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {formatDateDisplay(log.created_at)}
+                      {formatDateDisplay(logDate(log))}
                       {log.remarks ? ` · ${log.remarks}` : ''}
                     </Typography>
                   </Box>
@@ -1839,6 +2050,15 @@ const Inventory = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDetail}>Close</Button>
+          {detailItem && (
+            <Button
+              variant="outlined"
+              startIcon={<AddBox />}
+              onClick={() => openOpeningStock(detailItem)}
+            >
+              Add opening stock
+            </Button>
+          )}
           {detailItem && parseFloat(detailItem.current_stock) > 0 && (
             <Button
               variant="contained"
@@ -1850,6 +2070,208 @@ const Inventory = () => {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Opening stock dialog (existing inventory item) */}
+      <Dialog open={Boolean(openingItem)} onClose={closeOpeningStock} maxWidth="xs" fullWidth>
+        <DialogTitle>Add opening stock</DialogTitle>
+        <DialogContent>
+          {openingItem && (
+            <Box sx={{ pt: 1 }}>
+              <InventoryItemFull item={openingItem} compact />
+              <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+                Current on hand:{' '}
+                <strong>{fmtQty(openingItem.current_stock)} {openingItem.unit}</strong>
+                . Opening stock will be added to this balance.
+              </Alert>
+              <TextField
+                fullWidth
+                autoFocus
+                label="Opening stock quantity"
+                type="number"
+                value={openingQty}
+                onChange={(e) => setOpeningQty(e.target.value)}
+                inputProps={{ min: 0, step: 'any' }}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Opening stock date"
+                type="date"
+                value={openingDate}
+                onChange={(e) => setOpeningDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Remarks (optional)"
+                placeholder="e.g. Opening balance as of go-live"
+                multiline
+                rows={2}
+                value={openingRemarks}
+                onChange={(e) => setOpeningRemarks(e.target.value)}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeOpeningStock} disabled={openingLoading}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleOpeningStock} disabled={openingLoading}>
+            {openingLoading ? 'Saving…' : 'Add opening stock'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* New trim / library trim opening stock */}
+      <Dialog open={newOpeningOpen} onClose={closeNewOpeningStock} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <AddBox color="primary" />
+          Add opening stock
+        </DialogTitle>
+        <DialogContent>
+          <FormControl sx={{ mt: 1, mb: 2 }}>
+            <FormLabel sx={{ fontWeight: 700, fontSize: '0.8rem', mb: 0.5 }}>Trim source</FormLabel>
+            <RadioGroup
+              row
+              value={newOpeningMode}
+              onChange={(e) => {
+                setNewOpeningMode(e.target.value);
+                if (e.target.value === 'create') {
+                  setSelectedTrim(null);
+                  setPropertyValues({});
+                }
+              }}
+            >
+              <FormControlLabel value="library" control={<Radio size="small" />} label="From trim library" />
+              <FormControlLabel value="create" control={<Radio size="small" />} label="Create new trim" />
+            </RadioGroup>
+          </FormControl>
+
+          {newOpeningMode === 'library' ? (
+            <Autocomplete
+              options={trimOptions}
+              loading={trimsLoading}
+              value={selectedTrim}
+              onChange={(_, v) => {
+                setSelectedTrim(v);
+                setPropertyValues({});
+              }}
+              getOptionLabel={(o) => (o?.name ? `${o.name}${o.category ? ` · ${o.category}` : ''}` : '')}
+              isOptionEqualToValue={(a, b) => a?.id === b?.id}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Select trim"
+                  placeholder="Search trim library…"
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {trimsLoading ? <CircularProgress size={16} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
+              sx={{ mb: 2 }}
+            />
+          ) : (
+            <Box sx={{ mb: 2 }}>
+              {selectedTrim ? (
+                <Alert severity="success" sx={{ mb: 1.5 }}>
+                  New trim ready: <strong>{selectedTrim.name}</strong>
+                  {selectedTrim.category ? ` · ${selectedTrim.category}` : ''}
+                </Alert>
+              ) : (
+                <Alert severity="info" sx={{ mb: 1.5 }}>
+                  Create the trim in the library first, then enter opening quantity and date.
+                </Alert>
+              )}
+              <Button
+                variant="outlined"
+                startIcon={<Add />}
+                onClick={() => setTrimModalOpen(true)}
+                sx={{ fontWeight: 700, textTransform: 'none' }}
+              >
+                {selectedTrim ? 'Create a different trim' : 'Create new trim'}
+              </Button>
+            </Box>
+          )}
+
+          {selectedTrim?.properties?.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.78rem', color: slate[600], mb: 1 }}>
+                Variant properties (optional)
+              </Typography>
+              <Grid container spacing={1.5}>
+                {selectedTrim.properties.map((prop) => (
+                  <Grid item xs={12} sm={6} key={prop.name}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label={prop.unit ? `${prop.name} (${prop.unit})` : prop.name}
+                      value={propertyValues[prop.name] || ''}
+                      onChange={(e) => setPropertyValues((prev) => ({
+                        ...prev,
+                        [prop.name]: e.target.value,
+                      }))}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </Box>
+          )}
+
+          <TextField
+            fullWidth
+            label="Opening stock quantity"
+            type="number"
+            value={openingQty}
+            onChange={(e) => setOpeningQty(e.target.value)}
+            inputProps={{ min: 0, step: 'any' }}
+            helperText={selectedTrim?.default_unit ? `Unit: ${selectedTrim.default_unit}` : undefined}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            label="Opening stock date"
+            type="date"
+            value={openingDate}
+            onChange={(e) => setOpeningDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            required
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            label="Remarks (optional)"
+            placeholder="e.g. Physical count / opening balance"
+            multiline
+            rows={2}
+            value={openingRemarks}
+            onChange={(e) => setOpeningRemarks(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeNewOpeningStock} disabled={openingLoading}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleCreateWithOpeningStock}
+            disabled={openingLoading || !selectedTrim}
+          >
+            {openingLoading ? 'Saving…' : 'Save opening stock'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <AddTrimModal
+        open={trimModalOpen}
+        onClose={() => setTrimModalOpen(false)}
+        onSaved={handleTrimCreatedForOpening}
+      />
 
       {/* Release dialog */}
       <Dialog open={Boolean(releaseItem)} onClose={closeRelease} maxWidth="xs" fullWidth>

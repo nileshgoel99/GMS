@@ -98,7 +98,11 @@ class InventoryLog(models.Model):
     
     stock_before = models.DecimalField(max_digits=12, decimal_places=2)
     stock_after = models.DecimalField(max_digits=12, decimal_places=2)
-    
+
+    # Business date of the movement (e.g. opening stock as-of date).
+    # Falls back to created_at.date() in the API when null.
+    transaction_date = models.DateField(null=True, blank=True, db_index=True)
+
     remarks = models.TextField(blank=True, null=True)
     
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
