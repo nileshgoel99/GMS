@@ -23,6 +23,8 @@ import PurchaseBillEditorPage from './pages/PurchaseBillEditorPage';
 import SalesEntries from './pages/SalesEntries';
 import SalesEntryEditorPage from './pages/SalesEntryEditorPage';
 import Production from './pages/Production';
+import Cuttings from './pages/Cuttings';
+import CuttingEditorPage from './pages/CuttingEditorPage';
 import Indents from './pages/Indents';
 import IndentEditorPage from './pages/IndentEditorPage';
 import TrimsLibraryPage from './pages/TrimsLibraryPage';
@@ -71,6 +73,9 @@ const router = createBrowserRouter([
       { path: 'purchase-bills', element: <PurchaseBills /> },
       { path: 'procurement/:id', element: <SupplierPOEditorPage /> },
       { path: 'procurement', element: <Procurement /> },
+      { path: 'production/cutting/new', element: <CuttingEditorPage /> },
+      { path: 'production/cutting/:id', element: <CuttingEditorPage /> },
+      { path: 'production/cutting', element: <Cuttings /> },
       { path: 'production', element: <Production /> },
       { path: 'company', element: <CompanyPage /> },
       { path: 'buyer-pos', element: <BuyerPOs /> },

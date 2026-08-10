@@ -1,6 +1,13 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from rest_framework import serializers
-from .models import ProductionIssue, ProductionIssueItem, ProductionReturn, ProductionReturnItem
+from .models import (
+    ProductionIssue, ProductionIssueItem, ProductionReturn, ProductionReturnItem,
+    CuttingRecord,
+)
 from inventory.serializers import InventoryItemListSerializer
+from orders.size_utils import normalize_size_breakdown_list
+from .cutting import normalize_roll_entries, sum_roll_used_meters, sync_rolls_for_cutting
 
 
 class ProductionIssueItemSerializer(serializers.ModelSerializer):
@@ -136,3 +143,117 @@ class ProductionReturnSerializer(serializers.ModelSerializer):
             issue_item.item.save()
         
         return return_record
+
+
+class CuttingRecordListSerializer(serializers.ModelSerializer):
+    buyer_po_number = serializers.CharField(source='buyer_po.po_number', read_only=True)
+    pi_number = serializers.CharField(source='pi.pi_number', read_only=True, default='')
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+
+    class Meta:
+        model = CuttingRecord
+        fields = [
+            'id', 'cutting_number', 'cutting_date', 'buyer_po', 'buyer_po_number',
+            'pi', 'pi_number', 'item_code', 'item_name', 'fabric', 'color',
+            'roll_width', 'roll_numbers', 'total_pcs', 'ideal_consumption', 'total_consumption',
+            'consumption_unit', 'status', 'created_by_name', 'created_at',
+        ]
+
+
+class CuttingRecordSerializer(serializers.ModelSerializer):
+    buyer_po_number = serializers.CharField(source='buyer_po.po_number', read_only=True)
+    pi_number = serializers.CharField(source='pi.pi_number', read_only=True, default='')
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+
+    class Meta:
+        model = CuttingRecord
+        fields = [
+            'id', 'cutting_number', 'cutting_date',
+            'buyer_po', 'buyer_po_number', 'pi', 'pi_number',
+            'pi_line', 'buyer_po_line',
+            'item_code', 'item_name', 'fabric', 'color', 'roll_width',
+            'roll_numbers', 'size_breakdown',
+            'consumption_per_pc', 'consumption_unit',
+            'total_pcs', 'ideal_consumption', 'total_consumption',
+            'status', 'notes',
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
+        ]
+        read_only_fields = (
+            'id', 'total_pcs', 'ideal_consumption', 'total_consumption',
+            'created_by', 'created_at', 'updated_at',
+        )
+
+    def validate_roll_numbers(self, value):
+        rolls = normalize_roll_entries(value)
+        if not rolls:
+            raise serializers.ValidationError('Add at least one roll with a roll number.')
+        return rolls
+
+    def validate(self, attrs):
+        buyer_po = attrs.get('buyer_po') or getattr(self.instance, 'buyer_po', None)
+        if buyer_po is None:
+            raise serializers.ValidationError({'buyer_po': 'Buyer PO is required.'})
+
+        pi = attrs.get('pi', serializers.empty)
+        if pi is serializers.empty:
+            pi = getattr(self.instance, 'pi', None) if self.instance else None
+        if pi is None and buyer_po.pi_id:
+            attrs['pi'] = buyer_po.pi
+
+        sizes = attrs.get('size_breakdown')
+        if sizes is None and self.instance:
+            sizes = self.instance.size_breakdown
+        sizes = normalize_size_breakdown_list(sizes or [])
+        attrs['size_breakdown'] = sizes
+
+        total_pcs = sum(int(row.get('qty') or 0) for row in sizes)
+        attrs['total_pcs'] = total_pcs
+
+        rate = attrs.get('consumption_per_pc')
+        if rate is None and self.instance:
+            rate = self.instance.consumption_per_pc
+        rate = Decimal(str(rate or 0))
+        attrs['consumption_per_pc'] = rate
+        attrs['ideal_consumption'] = (rate * Decimal(total_pcs)).quantize(
+            Decimal('0.0001'), rounding=ROUND_HALF_UP,
+        )
+
+        rolls = attrs.get('roll_numbers')
+        if rolls is None and self.instance:
+            rolls = self.instance.roll_numbers
+        rolls = normalize_roll_entries(rolls or [])
+        attrs['roll_numbers'] = rolls
+
+        actual_used = sum_roll_used_meters(rolls)
+        if actual_used <= 0:
+            raise serializers.ValidationError({
+                'roll_numbers': 'Enter meters used on at least one roll.',
+            })
+        attrs['total_consumption'] = actual_used
+
+        if total_pcs <= 0:
+            raise serializers.ValidationError({'size_breakdown': 'Enter cut quantity for at least one size.'})
+
+        return attrs
+
+    def validate_size_breakdown(self, value):
+        return normalize_size_breakdown_list(value)
+
+    def create(self, validated_data):
+        cutting = super().create(validated_data)
+        sync_rolls_for_cutting(cutting)
+        return cutting
+
+    def update(self, instance, validated_data):
+        previous_roll_nos = {
+            e['roll_no'] for e in normalize_roll_entries(instance.roll_numbers or [])
+        }
+        cutting = super().update(instance, validated_data)
+        sync_rolls_for_cutting(cutting, previous_roll_nos=previous_roll_nos)
+        return cutting
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['size_breakdown'] = normalize_size_breakdown_list(data.get('size_breakdown'))
+        data['roll_numbers'] = normalize_roll_entries(data.get('roll_numbers'))
+        return data

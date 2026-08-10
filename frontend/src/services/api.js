@@ -232,6 +232,20 @@ export const productionAPI = {
   
   getReturns: (params) => api.get('/production/returns/', { params }),
   createReturn: (data) => api.post('/production/returns/', data),
+
+  getCuttings: (params) => api.get('/production/cuttings/', { params }),
+  getCutting: (id) => api.get(`/production/cuttings/${id}/`),
+  createCutting: (data) => api.post('/production/cuttings/', data),
+  updateCutting: (id, data) => api.put(`/production/cuttings/${id}/`, data),
+  deleteCutting: (id) => api.delete(`/production/cuttings/${id}/`),
+  getNextCuttingNumber: () => api.get('/production/cuttings/next-number/'),
+  getCuttingContext: (buyerPoId, params = {}) =>
+    api.get('/production/cuttings/context/', { params: { buyer_po: buyerPoId, ...params } }),
+  getFabricRolls: (params) => api.get('/production/rolls/', { params }),
+  getFabricRoll: (rollNo, params = {}) =>
+    api.get(`/production/rolls/by-number/${encodeURIComponent(rollNo)}/`, { params }),
+  getFabricRollHistory: (rollNo, params = {}) =>
+    api.get(`/production/rolls/by-number/${encodeURIComponent(rollNo)}/history/`, { params }),
 };
 
 export const ticketsAPI = {

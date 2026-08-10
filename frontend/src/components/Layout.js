@@ -46,6 +46,8 @@ import {
   Warehouse as WarehouseIcon,
   ConfirmationNumber as ConfirmationNumberIcon,
   BugReport as BugReportIcon,
+  ContentCut as ContentCutIcon,
+  PrecisionManufacturing as PrecisionManufacturingIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -61,6 +63,7 @@ const defaultExpandedState = {
   overview: true,
   commercial: true,
   planning: false,
+  production: true,
   supply: false,
   stock: false,
   organization: false,
@@ -96,6 +99,15 @@ const navGroups = [
     icon: <ListAltIcon sx={{ fontSize: 16 }} />,
     accent: '#0ea5e9',
     items: [{ text: 'Indents', icon: <ListAltIcon />, path: '/indents', module: 'indents' }],
+  },
+  {
+    id: 'production',
+    label: 'Production',
+    icon: <PrecisionManufacturingIcon sx={{ fontSize: 16 }} />,
+    accent: '#0891b2',
+    items: [
+      { text: 'Cutting', icon: <ContentCutIcon />, path: '/production/cutting', module: 'production' },
+    ],
   },
   {
     id: 'supply',
@@ -153,6 +165,8 @@ const routeMeta = {
     '/sales': { title: 'Sales' },
     '/sales/new': { title: 'New sales entry' },
   '/production': { title: 'Production' },
+  '/production/cutting': { title: 'Cutting' },
+  '/production/cutting/new': { title: 'Record Cutting' },
   '/company': { title: 'Company details' },
   '/profile': { title: 'My profile' },
   '/documentation': { title: 'Documentation' },
@@ -361,7 +375,12 @@ const Layout = ({ children }) => {
         title: params.get('mode') === 'fabric' ? 'Raise Fabric PO' : 'Raise Trim PO',
       };
     }
-    const meta = routeMeta[location.pathname] || { title: 'FabriFlow' };
+    const path = location.pathname;
+    let meta = routeMeta[path];
+    if (!meta && path.startsWith('/production/cutting/')) {
+      meta = routeMeta['/production/cutting/new'] || { title: 'Cutting' };
+    }
+    if (!meta) meta = { title: 'FabriFlow' };
     return { title: meta.title };
   }, [location.pathname, location.search, user]);
 
