@@ -15,7 +15,7 @@ export const DOCUMENTATION_GUIDES = [
     id: 'create-customers',
     title: 'How to Create Customers',
     category: 'Buyers',
-    description: 'Add new buyers to FabriFlow with contact and billing details.',
+    description: 'Add new buyers to WeaveCore with contact and billing details.',
     embedUrl: 'https://www.youtube.com/embed/OwJm9qiObxY',
   },
   {
@@ -48,14 +48,14 @@ export const DOCUMENTATION_GUIDES = [
   },
   {
     id: 'supplier-po-fabric',
-    title: 'Creating a Fabric Supplier Purchase Order in FabriFlow',
+    title: 'Creating a Fabric Supplier Purchase Order in WeaveCore',
     category: 'Procurement',
     description: 'Raise a fabric Supplier PO with material details, meters, rates, and terms.',
     embedUrl: 'https://www.youtube.com/embed/evOUwyX4_Ho',
   },
   {
     id: 'purchase-bills-inventory',
-    title: 'Recording and Managing Purchase Bills & Inventory in FabriFlow',
+    title: 'Recording and Managing Purchase Bills & Inventory in WeaveCore',
     category: 'Procurement',
     description: 'Enter supplier purchase bills, receive stock into inventory, and track what was billed.',
     embedUrl: 'https://www.youtube.com/embed/-UK1toqA8J8',
@@ -64,7 +64,7 @@ export const DOCUMENTATION_GUIDES = [
     id: 'user-role-management',
     title: 'User & Role Management Guide',
     category: 'Users',
-    description: 'Create users, assign roles, and control module access in FabriFlow.',
+    description: 'Create users, assign roles, and control module access in WeaveCore.',
     embedUrl: 'https://www.youtube.com/embed/WM4XxhC8S5k',
   },
 ];

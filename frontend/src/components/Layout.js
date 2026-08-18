@@ -52,6 +52,7 @@ import {
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { layoutDrawerWidth, navChrome, slate } from '../theme/appTheme';
+import BrandLogo from './BrandLogo';
 import { hasModuleAccess, dashboardTitleForUser } from '../config/permissions';
 import ReportTicketModal from './ReportTicketModal';
 
@@ -77,7 +78,7 @@ const navGroups = [
     icon: <DashboardIcon sx={{ fontSize: 16 }} />,
     accent: '#14b8a6',
     items: [
-      { text: 'Dashboard', icon: <DashboardIcon />, path: '/', module: null },
+      { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard', module: null },
       { text: 'Documentation', icon: <MenuBookIcon />, path: '/documentation', module: null },
     ],
   },
@@ -150,7 +151,8 @@ const navGroups = [
 ];
 
 const routeMeta = {
-  '/': { title: 'Plant dashboard' },
+  '/': { title: 'WeaveCore' },
+  '/dashboard': { title: 'Plant dashboard' },
   '/customers': { title: 'Buyers' },
   '/orders': { title: 'Proforma invoices' },
   '/indents': { title: 'Indents' },
@@ -176,6 +178,7 @@ const routeMeta = {
 
 const pathMatchesNav = (pathname, path) => {
   if (path === '/') return pathname === '/';
+  if (path === '/dashboard') return pathname === '/dashboard';
   if (path === '/documentation') return pathname === '/documentation';
   if (path === '/orders') return pathname === '/orders' || pathname.startsWith('/orders/');
   if (path === '/indents') return pathname === '/indents' || pathname.startsWith('/indents/');
@@ -366,7 +369,7 @@ const Layout = ({ children }) => {
     if (location.pathname === '/purchase-bills/new') {
       return { title: 'Purchase Bill' };
     }
-    if (location.pathname === '/') {
+    if (location.pathname === '/' || location.pathname === '/dashboard') {
       return { title: dashboardTitleForUser(user) };
     }
     if (location.pathname === '/procurement/new') {
@@ -380,7 +383,7 @@ const Layout = ({ children }) => {
     if (!meta && path.startsWith('/production/cutting/')) {
       meta = routeMeta['/production/cutting/new'] || { title: 'Cutting' };
     }
-    if (!meta) meta = { title: 'FabriFlow' };
+    if (!meta) meta = { title: 'WeaveCore' };
     return { title: meta.title };
   }, [location.pathname, location.search, user]);
 
@@ -474,45 +477,19 @@ const Layout = ({ children }) => {
             cursor: 'pointer',
             width: compactNav ? 'auto' : undefined,
           }}
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/dashboard')}
         >
-          <Box
-            sx={{
-              width: compactNav ? 36 : 42,
-              height: compactNav ? 36 : 42,
-              borderRadius: '12px',
-              display: 'grid',
-              placeItems: 'center',
-              fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-              fontWeight: 700,
-              letterSpacing: -0.5,
-              color: '#fff',
-              background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-              boxShadow: `0 2px 10px ${alpha(theme.palette.primary.main, 0.35)}`,
-              flexShrink: 0,
-            }}
-          >
-            F
-          </Box>
-          {!compactNav ? (
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                variant="subtitle1"
-                sx={{
-                  fontWeight: 700,
-                  lineHeight: 1.15,
-                  color: '#ffffff',
-                  letterSpacing: '-0.03em',
-                  textTransform: 'none',
-                }}
-              >
-                FabriFlow
-              </Typography>
-              <Typography variant="caption" sx={{ color: alpha('#ffffff', 0.78), fontWeight: 600 }}>
-                Garment production suite
-              </Typography>
-            </Box>
-          ) : null}
+          {compactNav ? (
+            <BrandLogo variant="mark" tone="dark" size={40} />
+          ) : (
+            <BrandLogo
+              variant="lockup"
+              tone="dark"
+              size={38}
+              showTagline
+              tagline="One connected operation"
+            />
+          )}
         </Box>
         <Tooltip
           title={collapsed ? 'Expand navigation' : 'Minimise navigation'}

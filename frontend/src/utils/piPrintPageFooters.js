@@ -4,7 +4,7 @@
  * space and never paint over Value / Date of Dispatch / etc.
  *
  * Also blanks document.title during print so the browser header does not show
- * the app/website title (e.g. "FabriFlow").
+ * the app/website title (e.g. "WeaveCore").
  */
 
 const MM = 96 / 25.4;

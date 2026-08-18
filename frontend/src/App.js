@@ -38,6 +38,8 @@ import ProfilePage from './pages/ProfilePage';
 import DocumentationRoute from './components/DocumentationRoute';
 import TicketsPage from './pages/TicketsPage';
 
+import LandingPage from './pages/LandingPage';
+
 // Forces a full remount when navigating between different PO IDs (new vs edit)
 function BuyerPOEditorPageKeyed() {
   const { id } = useParams();
@@ -53,12 +55,13 @@ function ProtectedLayout() {
 }
 
 const router = createBrowserRouter([
+  { path: '/', element: <LandingPage /> },
   { path: '/login', element: <Login /> },
   { path: '/documentation', element: <DocumentationRoute /> },
   {
     element: <ProtectedLayout />,
     children: [
-      { index: true, element: <Dashboard /> },
+      { path: 'dashboard', element: <Dashboard /> },
       { path: 'customers', element: <Customers /> },
       { path: 'orders/pi/:id/view', element: <PIViewPage /> },
       { path: 'orders', element: <Orders /> },
@@ -98,7 +101,7 @@ const router = createBrowserRouter([
           </PrivateRoute>
         ),
       },
-      { path: '*', element: <Navigate to="/" replace /> },
+      { path: '*', element: <Navigate to="/dashboard" replace /> },
     ],
   },
 ]);

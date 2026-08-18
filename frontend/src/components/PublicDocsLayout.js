@@ -5,16 +5,15 @@ import {
   Button,
   Container,
   Toolbar,
-  Typography,
 } from '@mui/material';
 import { Login, OpenInNew } from '@mui/icons-material';
-import { alpha, useTheme } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
 import { Link as RouterLink } from 'react-router-dom';
 import { slate } from '../theme/appTheme';
+import BrandLogo from './BrandLogo';
 
 /** Public shell for shareable documentation — no login required. */
 export default function PublicDocsLayout({ children, isAuthenticated = false }) {
-  const theme = useTheme();
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -40,30 +39,7 @@ export default function PublicDocsLayout({ children, isAuthenticated = false }) 
               color: 'inherit',
             }}
           >
-            <Box
-              sx={{
-                width: 38,
-                height: 38,
-                borderRadius: '10px',
-                display: 'grid',
-                placeItems: 'center',
-                fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-                fontWeight: 700,
-                color: '#fff',
-                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                boxShadow: `0 2px 8px ${alpha(theme.palette.primary.main, 0.3)}`,
-              }}
-            >
-              F
-            </Box>
-            <Box>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800, lineHeight: 1.2, letterSpacing: '-0.02em' }}>
-                FabriFlow Documentation
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                FabriFlow · Garment production guides
-              </Typography>
-            </Box>
+            <BrandLogo variant="lockup" tone="light" size={36} showTagline tagline="Documentation" />
           </Box>
 
           <Box sx={{ flexGrow: 1 }} />

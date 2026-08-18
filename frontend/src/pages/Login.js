@@ -25,11 +25,9 @@ import HandshakeIcon from '@mui/icons-material/Handshake';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { navChrome, slate, warm } from '../theme/appTheme';
+import BrandLogo from '../components/BrandLogo';
 
-const BRAND_NAME = 'FabriFlow';
-/** Short mark used in the logo tile */
-const BRAND_MARK = 'F';
-const BRAND_TAGLINE = 'From order to production—one connected operation.';
+const BRAND_NAME = 'WeaveCore';
 
 const highlightConfig = (theme) => [
   {
@@ -78,7 +76,7 @@ const Login = () => {
     const result = await login(username, password);
 
     if (result.success) {
-      navigate('/');
+      navigate('/dashboard');
     } else {
       setError(result.error);
     }
@@ -147,54 +145,14 @@ const Login = () => {
         />
 
         <Box sx={{ position: 'relative', zIndex: 1 }}>
-          <Stack direction="row" spacing={1.75} alignItems="center" sx={{ mb: 5 }}>
-            <Box
-              sx={{
-                width: 48,
-                height: 48,
-                borderRadius: '14px',
-                display: 'grid',
-                placeItems: 'center',
-                fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
-                fontWeight: 800,
-                fontSize: '1.15rem',
-                letterSpacing: -0.5,
-                color: '#fff',
-                background: `linear-gradient(145deg, ${alpha(theme.palette.primary.light, 0.35)} 0%, ${alpha('#fff', 0.1)} 100%)`,
-                border: `1px solid ${alpha('#fff', 0.25)}`,
-                boxShadow: `0 8px 24px ${alpha('#000', 0.2)}`,
-              }}
-            >
-              {BRAND_MARK}
-            </Box>
-            <Box>
-              <Typography
-                component="h1"
-                variant="h5"
-                sx={{
-                  fontWeight: 800,
-                  letterSpacing: '-0.03em',
-                  lineHeight: 1.15,
-                  color: '#fff',
-                  textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-                }}
-              >
-                {BRAND_NAME}
-              </Typography>
-              <Typography
-                sx={{
-                  mt: 0.25,
-                  color: alpha('#fff', 0.9),
-                  fontWeight: 600,
-                  fontSize: '0.8rem',
-                  lineHeight: 1.35,
-                  textShadow: '0 1px 2px rgba(0,0,0,0.35)',
-                  maxWidth: 360,
-                }}
-              >
-                {BRAND_TAGLINE}
-              </Typography>
-            </Box>
+          <Stack sx={{ mb: 5 }}>
+            <BrandLogo
+              variant="lockup"
+              tone="dark"
+              size={48}
+              showTagline
+              tagline="One connected operation"
+            />
           </Stack>
 
           <Typography
@@ -295,32 +253,7 @@ const Login = () => {
       >
         <Box sx={{ width: '100%', maxWidth: 420 }}>
           <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 2.5 }}>
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <Box
-                sx={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: '12px',
-                  display: 'grid',
-                  placeItems: 'center',
-                  fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
-                  fontWeight: 800,
-                  color: '#fff',
-                  background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                  boxShadow: `0 6px 20px ${alpha(theme.palette.primary.main, 0.4)}`,
-                }}
-              >
-                {BRAND_MARK}
-              </Box>
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
-                  {BRAND_NAME}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, lineHeight: 1.3, display: 'block' }}>
-                  {BRAND_TAGLINE}
-                </Typography>
-              </Box>
-            </Stack>
+            <BrandLogo variant="lockup" tone="light" size={40} />
           </Box>
 
           <Paper
