@@ -8,13 +8,13 @@
 #   cd /var/www/gms && ./scripts/deploy-on-server.sh
 #
 # Optional:
-#   DEPLOY_HOST=root@ip DEPLOY_PATH=/var/www/gms API_PUBLIC_URL=https://jbi.fabriflow.in/api ./scripts/deploy.sh
+#   DEPLOY_HOST=root@ip DEPLOY_PATH=/var/www/gms API_PUBLIC_URL=https://www.weavecore.in/api ./scripts/deploy.sh
 #
 set -euo pipefail
 
 DEPLOY_HOST="${DEPLOY_HOST:-root@159.65.146.167}"
 DEPLOY_PATH="${DEPLOY_PATH:-/var/www/gms}"
-API_PUBLIC_URL="${API_PUBLIC_URL:-https://jbi.fabriflow.in/api}"
+API_PUBLIC_URL="${API_PUBLIC_URL:-https://www.weavecore.in/api}"
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 DSS="${SCRIPT_DIR}/deploy-on-server.sh"

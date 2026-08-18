@@ -1,8 +1,10 @@
 import React from 'react';
 import { Box, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import markSrc from '../assets/weavecore-mark.png';
 import { slate } from '../theme/appTheme';
+
+/** Served from frontend/public/brand — avoids CRA /static/media vs Django /static clash. */
+const markSrc = `${process.env.PUBLIC_URL || ''}/brand/weavecore-mark.png`;
 
 export const WEAVECORE_MARK = markSrc;
 

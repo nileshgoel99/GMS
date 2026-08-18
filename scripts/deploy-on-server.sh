@@ -4,8 +4,8 @@
 # Or:
 #   bash scripts/deploy-on-server.sh
 #
-# Optional (defaults are fine for jbi.fabriflow.in):
-#   DEPLOY_PATH=/var/www/gms REACT_API_URL=https://jbi.fabriflow.in/api ./scripts/deploy-on-server.sh
+# Optional (defaults are fine for www.weavecore.in):
+#   DEPLOY_PATH=/var/www/gms REACT_API_URL=https://www.weavecore.in/api ./scripts/deploy-on-server.sh
 #
 set -euo pipefail
 
@@ -17,9 +17,9 @@ if [[ -z "${DEPLOY_PATH:-}" ]]; then
     DEPLOY_PATH="/var/www/gms"
   fi
 fi
-REACT_API_URL="${REACT_API_URL:-${REACT_API:-https://jbi.fabriflow.in/api}}"
+REACT_API_URL="${REACT_API_URL:-${REACT_API:-https://www.weavecore.in/api}}"
 
-echo "==> FabriFlow deploy (on-server, no SSH)"
+echo "==> WeaveCore deploy (on-server, no SSH)"
 echo "    DEPLOY_PATH=${DEPLOY_PATH}"
 echo "    REACT_APP_API_URL=${REACT_API_URL}"
 

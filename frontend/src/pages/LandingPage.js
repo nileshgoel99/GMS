@@ -305,7 +305,7 @@ export default function LandingPage() {
         <Stack direction="row" spacing={2} alignItems="center">
           <Button
             component="a"
-            href="https://jbi.fabriflow.in/documentation"
+            href="https://www.weavecore.in/documentation"
             target="_blank"
             rel="noopener noreferrer"
             sx={{
@@ -545,7 +545,7 @@ export default function LandingPage() {
                       border: `1px solid ${slate[100]}`
                     }}>
                       <Typography sx={{ fontSize: '0.7rem', color: slate[400], fontWeight: 600, letterSpacing: '0.02em' }}>
-                        app.weavecore.in/cutting/R-4029
+                        www.weavecore.in/cutting/R-4029
                       </Typography>
                     </Box>
                     <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: slate[100] }} />
@@ -943,7 +943,7 @@ export default function LandingPage() {
                 variant="outlined"
                 size="large"
                 component="a"
-                href="https://jbi.fabriflow.in/documentation"
+                href="https://www.weavecore.in/documentation"
                 target="_blank"
                 rel="noopener noreferrer"
                 endIcon={<OpenInNew />}
