@@ -76,7 +76,7 @@ function groupLines(lines) {
       if (existing) existing.qty += qty;
       else grp.sizes.push({ size, qty });
     });
-    grp.quantity += parseInt(line.quantity) || 0;
+    grp.quantity += parseFloat(line.quantity) || 0;
   });
   return Array.from(map.values()).map((g) => ({
     ...g,

@@ -19,6 +19,7 @@ import {
   Autocomplete,
   Checkbox,
   FormControlLabel,
+  Switch,
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import {
@@ -86,8 +87,10 @@ const emptyLine = () => ({
   fabric: '',
   color: '',
   customer_ref: '',
+  is_fabric: false,
   size_level_codes: false,
   size_breakdown: emptySizeRows(),
+  quantity: '',
   uom: 'PCS',
   unit_price: '',
   discount: '',
@@ -134,8 +137,21 @@ const formatCustomerAddress = (cust) => {
   ].filter(Boolean).join('\n');
 };
 
-const lineQty = (line) =>
-  (line.size_breakdown || []).reduce((s, r) => s + (parseInt(r.qty) || 0), 0);
+const isFabricLine = (line) => Boolean(line?.is_fabric);
+
+const garmentSizeQty = (line) =>
+  (line.size_breakdown || []).reduce((s, r) => s + (parseFloat(r.qty) || 0), 0);
+
+const lineQty = (line) => {
+  if (isFabricLine(line)) {
+    const n = parseFloat(line.quantity);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return garmentSizeQty(line);
+};
+
+const lineUom = (line) =>
+  isFabricLine(line) ? (line.uom || 'MTRS') : (line.uom || 'PCS');
 
 const lineAmt = (line) => {
   const qty   = lineQty(line);
@@ -145,7 +161,10 @@ const lineAmt = (line) => {
   return qty * price * (1 - disc / 100);
 };
 
-const fmtNum   = (n) => (n == null || n === '' ? '—' : Number(n).toLocaleString());
+const fmtNum = (n) =>
+  n == null || n === ''
+    ? '—'
+    : Number(n).toLocaleString(undefined, { maximumFractionDigits: 3 });
 const fmtMoney = (n, ccy = 'USD') =>
   n == null ? '—' : `${ccy} ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -380,10 +399,17 @@ const darkInputSx = {
     bgcolor: alpha('#fff', 0.08),
     borderRadius: 1,
     '& fieldset': { borderColor: alpha('#fff', 0.15) },
-    '&:hover fieldset': { borderColor: alpha('#fff', 0.35) },
+    '&:hover': {
+      bgcolor: alpha('#fff', 0.12),
+      '& fieldset': { borderColor: alpha('#fff', 0.35) },
+    },
     '&.Mui-focused': {
       bgcolor: alpha('#fff', 0.14),
+      boxShadow: 'none',
       '& fieldset': { borderColor: alpha('#fff', 0.5) },
+    },
+    '&.Mui-disabled': {
+      bgcolor: alpha('#fff', 0.08),
     },
   },
   '& .MuiInputBase-input': {
@@ -392,9 +418,12 @@ const darkInputSx = {
     fontSize: '0.85rem',
     py: 0.5,
     px: 1,
-    // Override browser autofill white background
     WebkitTextFillColor: '#fff',
     caretColor: '#fff',
+    '&:hover, &:focus, &:disabled, &.Mui-disabled': {
+      color: '#fff',
+      WebkitTextFillColor: '#fff',
+    },
   },
   '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': { display: 'none' },
   '& input[type=number]': { MozAppearance: 'textfield' },
@@ -429,6 +458,27 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
 
   const qty = lineQty(line);
   const amt = lineAmt(line);
+  const fabric = isFabricLine(line);
+  const uomLabel = lineUom(line);
+
+  const toggleFabric = (checked) => {
+    if (checked) {
+      const fromSizes = garmentSizeQty(line);
+      onChange({
+        is_fabric: true,
+        uom: 'MTRS',
+        quantity:
+          line.quantity !== '' && line.quantity != null
+            ? line.quantity
+            : (fromSizes > 0 ? String(fromSizes) : ''),
+      });
+    } else {
+      onChange({
+        is_fabric: false,
+        uom: line.uom === 'MTRS' ? 'PCS' : (line.uom || 'PCS'),
+      });
+    }
+  };
 
   const cellInputProps = {
     style: { textAlign: 'center', fontWeight: 700, fontSize: '0.9rem', padding: '6px 4px' },
@@ -476,6 +526,23 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
         >
           LINE {idx + 1}
         </Box>
+        <Tooltip title="Treat this line as a fabric order: total qty in metres, no size breakdown">
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={fabric}
+                onChange={(e) => toggleFabric(e.target.checked)}
+              />
+            }
+            label={
+              <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.02em', color: fabric ? theme.palette.primary.main : slate[500], whiteSpace: 'nowrap' }}>
+                Fabric order
+              </Typography>
+            }
+            sx={{ ml: 0, mr: 0.5, '& .MuiFormControlLabel-label': { ml: 0.25 } }}
+          />
+        </Tooltip>
         <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1.5, overflow: 'hidden' }}>
           {line.item_code && (
             <Typography
@@ -524,7 +591,7 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
             <Box sx={{ textAlign: 'right' }}>
               <Typography variant="caption" sx={{ color: slate[400], fontWeight: 700, textTransform: 'uppercase', display: 'block', lineHeight: 1 }}>Qty</Typography>
               <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: slate[700], fontVariantNumeric: 'tabular-nums' }}>
-                {fmtNum(qty)}
+                {fmtNum(qty)} {uomLabel}
               </Typography>
             </Box>
           )}
@@ -554,11 +621,12 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
       </Box>
 
       {/* ── Card body: item fields | size breakdown ─── */}
-      <Box sx={{ p: { xs: 2, sm: 2.5 } }}>
-        <Grid container spacing={2.5} alignItems="flex-start">
-          {/* Left: item details column */}
-          <Grid item xs={12} md={5}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+      <Box sx={{ p: { xs: 2, sm: fabric ? 2 : 2.5 } }}>
+        <Grid container spacing={fabric ? 1.75 : 2.5} alignItems="flex-start">
+          {/* Item details: stacked for garments, one row for fabric */}
+          <Grid item xs={12} md={fabric ? 12 : 5}>
+            <Grid container spacing={1.75}>
+              <Grid item xs={12} sm={fabric ? 6 : 12} md={fabric ? 3 : 12}>
               <Autocomplete
                 freeSolo
                 options={itemCatalogue}
@@ -613,6 +681,8 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
                   />
                 )}
               />
+              </Grid>
+              <Grid item xs={12} sm={fabric ? 6 : 12} md={fabric ? 3 : 12}>
               <TextField
                 size="small"
                 fullWidth
@@ -623,6 +693,8 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
                 placeholder='e.g. TROUSERS "RABAT"'
                 sx={fieldSx}
               />
+              </Grid>
+              <Grid item xs={12} sm={fabric ? 6 : 12} md={fabric ? 2 : 12}>
               <TextField
                 size="small"
                 fullWidth
@@ -639,6 +711,8 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
                 }}
                 sx={fieldSx}
               />
+              </Grid>
+              <Grid item xs={12} sm={fabric ? 6 : 12} md={fabric ? 4 : 12}>
               <TextField
                 size="small"
                 fullWidth
@@ -646,15 +720,13 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
                 value={line.fabric}
                 onChange={(e) => onChange({ fabric: e.target.value })}
                 placeholder="e.g. 65% polyester / 35% cotton 245gr./sqm"
-                multiline
-                minRows={1}
-                maxRows={3}
                 sx={fieldSx}
               />
-            </Box>
+              </Grid>
+            </Grid>
           </Grid>
 
-          {/* Right: size breakdown */}
+          {!fabric && (
           <Grid item xs={12} md={7}>
             <Box
               sx={{
@@ -860,12 +932,13 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
               </Box>
             </Box>
           </Grid>
+          )}
         </Grid>
 
         {/* ── Calculation strip ─── */}
         <Box
           sx={{
-            mt: 2.5,
+            mt: fabric ? 1.75 : 2.5,
             borderRadius: 2,
             bgcolor: slate[900],
             px: 2.5,
@@ -876,12 +949,24 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
             gap: { xs: 1.5, sm: 0 },
           }}
         >
-          {/* Qty (read-only from sizes) */}
+          {/* Qty (from sizes or fabric total) */}
           <Box sx={{ minWidth: 80, borderRight: `1px solid ${alpha('#fff', 0.1)}`, pr: 2, mr: 2 }}>
             <Typography sx={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: alpha('#fff', 0.45), mb: 0.3 }}>Total Qty</Typography>
-            <Typography sx={{ fontWeight: 900, fontSize: '1.1rem', color: qty > 0 ? '#fff' : alpha('#fff', 0.25), fontVariantNumeric: 'tabular-nums' }}>
-              {qty > 0 ? fmtNum(qty) : '—'}
-            </Typography>
+            {fabric ? (
+              <TextField
+                size="small"
+                type="number"
+                value={line.quantity}
+                onChange={(e) => onChange({ quantity: e.target.value })}
+                placeholder="0"
+                inputProps={{ min: 0, step: '0.001' }}
+                sx={darkInputSx}
+              />
+            ) : (
+              <Typography sx={{ fontWeight: 900, fontSize: '1.1rem', color: qty > 0 ? '#fff' : alpha('#fff', 0.25), fontVariantNumeric: 'tabular-nums' }}>
+                {qty > 0 ? fmtNum(qty) : '—'}
+              </Typography>
+            )}
           </Box>
 
           {/* UOM */}
@@ -889,9 +974,13 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
             <Typography sx={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: alpha('#fff', 0.45), mb: 0.3 }}>UOM</Typography>
             <TextField
               size="small"
-              value={line.uom}
+              value={fabric ? 'MTRS' : line.uom}
               onChange={(e) => onChange({ uom: e.target.value })}
-              sx={darkInputSx}
+              disabled={fabric}
+              sx={{
+                ...darkInputSx,
+                ...(fabric ? { '& .MuiOutlinedInput-root': { ...darkInputSx['& .MuiOutlinedInput-root'], opacity: 0.85 } } : {}),
+              }}
             />
           </Box>
 
@@ -976,6 +1065,9 @@ function SummaryBar({ lines, currency }) {
   const theme = useTheme();
   const totalQty = lines.reduce((s, l) => s + lineQty(l), 0);
   const totalAmt = lines.reduce((s, l) => s + (lineAmt(l) ?? 0), 0);
+  const fabricCount = lines.filter(isFabricLine).length;
+  const garmentCount = lines.length - fabricCount;
+  const qtyUnit = fabricCount && !garmentCount ? 'mtrs' : (!fabricCount ? 'pcs' : 'qty');
 
   return (
     <Box
@@ -1007,7 +1099,7 @@ function SummaryBar({ lines, currency }) {
           <Typography sx={{ fontWeight: 900, fontSize: '2rem', color: '#f8fafc', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
             {fmtNum(totalQty)}
           </Typography>
-          <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: '#64748b' }}>pcs</Typography>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: '#64748b' }}>{qtyUnit}</Typography>
         </Box>
       </Box>
 
@@ -1148,17 +1240,24 @@ export default function BuyerPOEditorPage() {
         });
         setPoDocument(po.po_document || null);
         setLines(
-          (po.lines || []).map((l) => ({
+          (po.lines || []).map((l) => {
+            const sizes = l.size_breakdown || [];
+            const isFabric = Boolean(l.is_fabric) || (
+              !sizes.length && String(l.uom || '').toUpperCase() === 'MTRS'
+            );
+            return {
             _key: l.id,
             item_code:      l.item_code || '',
             item_name:      l.item_name || '',
             fabric:         l.fabric || '',
             color:          l.color || '',
             customer_ref:   l.customer_ref || '',
+            is_fabric:      isFabric,
+            quantity:       l.quantity != null && l.quantity !== '' ? String(l.quantity) : '',
             size_breakdown: padSizeRows(
-              l.size_breakdown?.length
+              sizes.length
                 ? normalizeSizeBreakdownEntries(
-                    l.size_breakdown.map((s) => ({
+                    sizes.map((s) => ({
                       size: s.size,
                       qty: s.qty != null ? String(s.qty) : '',
                       product_code: s.product_code || '',
@@ -1170,13 +1269,14 @@ export default function BuyerPOEditorPage() {
                   }))
                 : [],
             ),
-            size_level_codes: (l.size_breakdown || []).some((s) => Boolean(s.product_code)),
-            uom:           l.uom || 'PCS',
+            size_level_codes: sizes.some((s) => Boolean(s.product_code)),
+            uom:           isFabric ? (l.uom || 'MTRS') : (l.uom || 'PCS'),
             unit_price:    l.unit_price != null ? String(l.unit_price) : '',
             discount:      l.discount != null ? String(l.discount) : '',
             delivery_date: l.delivery_date || '',
             notes:         l.notes || '',
-          })),
+          };
+          }),
         );
       } catch (e) {
         console.error(e);
@@ -1235,30 +1335,37 @@ export default function BuyerPOEditorPage() {
       ship_to_name:      formData.add_ship_to ? (formData.ship_to_name || '') : '',
       ship_to_address:   formData.add_ship_to ? (formData.ship_to_address || '') : '',
       ex_factory_date:   formData.ex_factory_date || null,
-      lines: lines.map((l) => ({
+      lines: lines.map((l) => {
+        const fabric = isFabricLine(l);
+        return {
         item_code:      l.item_code,
         item_name:      l.item_name,
         fabric:         l.fabric,
         color:          l.color,
         customer_ref:   l.customer_ref,
-        size_breakdown: normalizeSizeBreakdownEntries(
-          l.size_breakdown.filter((r) => r.size),
-        ).map((r) => {
-          if (!l.size_level_codes) {
-            return { size: r.size, qty: r.qty };
-          }
-          return {
-            size: r.size,
-            qty: r.qty,
-            ...(r.product_code ? { product_code: r.product_code } : {}),
-          };
-        }),
-        uom:           l.uom || 'PCS',
+        is_fabric:      fabric,
+        size_breakdown: fabric
+          ? []
+          : normalizeSizeBreakdownEntries(
+              l.size_breakdown.filter((r) => r.size),
+            ).map((r) => {
+              if (!l.size_level_codes) {
+                return { size: r.size, qty: r.qty };
+              }
+              return {
+                size: r.size,
+                qty: r.qty,
+                ...(r.product_code ? { product_code: r.product_code } : {}),
+              };
+            }),
+        quantity:      fabric ? (parseFloat(l.quantity) || 0) : undefined,
+        uom:           fabric ? 'MTRS' : (l.uom || 'PCS'),
         unit_price:    l.unit_price !== '' ? parseFloat(l.unit_price) : null,
         discount:      l.discount !== '' ? parseFloat(l.discount) : null,
         delivery_date: l.delivery_date || null,
         notes:         l.notes,
-      })),
+      };
+      }),
     };
     delete payload.add_ship_to;
 

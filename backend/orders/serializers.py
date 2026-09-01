@@ -845,13 +845,19 @@ class BuyerPOLineSerializer(serializers.ModelSerializer):
         model = BuyerPOLine
         fields = [
             'id', 'line_number', 'item_code', 'item_name', 'fabric', 'color',
-            'customer_ref', 'agreement_no', 'size_breakdown', 'quantity',
+            'customer_ref', 'agreement_no', 'is_fabric', 'size_breakdown', 'quantity',
             'uom', 'unit_price', 'discount', 'delivery_date', 'line_amount', 'notes',
         ]
         read_only_fields = ('id',)
 
     def validate_size_breakdown(self, value):
         return normalize_size_breakdown_list(value)
+
+    def validate(self, attrs):
+        if attrs.get('is_fabric'):
+            attrs['size_breakdown'] = []
+            attrs['uom'] = (attrs.get('uom') or 'MTRS').strip() or 'MTRS'
+        return attrs
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -944,11 +950,22 @@ class BuyerPOSerializer(serializers.ModelSerializer):
         po.lines.all().delete()
         for i, line_data in enumerate(lines_data, start=1):
             line_data.pop('id', None)
-            line_data['size_breakdown'] = normalize_size_breakdown_list(line_data.get('size_breakdown'))
-            sizes = line_data.get('size_breakdown') or []
-            if sizes:
-                line_data['quantity'] = sum(s.get('qty', 0) for s in sizes)
-            qty = line_data.get('quantity', 0)
+            is_fabric = bool(line_data.get('is_fabric'))
+            line_data['is_fabric'] = is_fabric
+            if is_fabric:
+                line_data['size_breakdown'] = []
+                line_data['uom'] = (line_data.get('uom') or 'MTRS').strip() or 'MTRS'
+                raw_qty = line_data.get('quantity') or 0
+                line_data['quantity'] = Decimal(str(raw_qty or 0))
+            else:
+                line_data['size_breakdown'] = normalize_size_breakdown_list(line_data.get('size_breakdown'))
+                sizes = line_data.get('size_breakdown') or []
+                if sizes:
+                    line_data['quantity'] = sum(int(s.get('qty') or 0) for s in sizes)
+                else:
+                    line_data['quantity'] = Decimal(str(line_data.get('quantity') or 0))
+                line_data['uom'] = (line_data.get('uom') or 'PCS').strip() or 'PCS'
+            qty = Decimal(str(line_data.get('quantity') or 0))
             price = line_data.get('unit_price')
             disc = line_data.get('discount')
             if price is not None and qty:

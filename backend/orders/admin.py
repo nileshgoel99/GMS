@@ -66,7 +66,7 @@ class ProformaInvoiceAdmin(admin.ModelAdmin):
 class BuyerPOLineInline(admin.TabularInline):
     model = BuyerPOLine
     extra = 0
-    fields = ['line_number', 'item_code', 'item_name', 'fabric', 'color', 'customer_ref', 'quantity', 'unit_price', 'delivery_date', 'line_amount']
+    fields = ['line_number', 'item_code', 'item_name', 'is_fabric', 'fabric', 'color', 'customer_ref', 'quantity', 'uom', 'unit_price', 'discount', 'delivery_date', 'line_amount']
 
 
 @admin.register(BuyerPO)

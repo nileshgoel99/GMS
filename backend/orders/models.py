@@ -351,7 +351,7 @@ class BuyerPO(models.Model):
 
     ex_factory_date = models.DateField(null=True, blank=True)
 
-    total_qty = models.PositiveIntegerField(default=0)
+    total_qty = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     total_value = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RECEIVED')
@@ -389,7 +389,7 @@ class BuyerPO(models.Model):
 
 
 class BuyerPOLine(models.Model):
-    """One garment style / colour on a buyer PO."""
+    """One garment style / colour, or a fabric-only line, on a buyer PO."""
 
     po = models.ForeignKey(BuyerPO, on_delete=models.CASCADE, related_name='lines')
     line_number = models.PositiveIntegerField(default=1)
@@ -402,13 +402,22 @@ class BuyerPOLine(models.Model):
     customer_ref = models.CharField(max_length=200, blank=True, default='', help_text='OdL No / buyer line ref')
     agreement_no = models.CharField(max_length=200, blank=True, default='')
 
+    is_fabric = models.BooleanField(
+        default=False,
+        help_text='Fabric-only line: total qty in metres, no size breakdown',
+    )
     size_breakdown = models.JSONField(
         default=list,
         blank=True,
         help_text='[{"size": "S", "qty": 350}, ...] — flexible sizes per party',
     )
-    quantity = models.PositiveIntegerField(default=0, help_text='Total pieces (auto-sum from sizes or manual)')
-    uom = models.CharField(max_length=20, default='PCS', blank=True, help_text='Unit of measure, e.g. PCS, DZ')
+    quantity = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        default=0,
+        help_text='Total pieces (auto-sum from sizes) or metres for fabric lines',
+    )
+    uom = models.CharField(max_length=20, default='PCS', blank=True, help_text='Unit of measure, e.g. PCS, DZ, MTRS')
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     discount = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text='Discount % (0–100)')
     delivery_date = models.DateField(null=True, blank=True)

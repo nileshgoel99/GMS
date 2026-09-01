@@ -241,6 +241,9 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                       </Typography>
                     )}
                     <Typography sx={{ fontWeight: 700, fontSize: '0.92rem', color: slate[800] }}>{line.item_name}</Typography>
+                    {line.is_fabric && (
+                      <Chip label="Fabric order" size="small" sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, bgcolor: alpha('#0f766e', 0.1), color: '#0f766e' }} />
+                    )}
                     {line.color && <Chip label={line.color} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.72rem', fontWeight: 700 }} />}
                     <Box sx={{ flex: 1 }} />
                     {line.unit_price && (
@@ -259,11 +262,11 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                   {/* Line body */}
                   <Box sx={{ px: 2, py: 1.5 }}>
                     {line.fabric && (
-                      <Grid container spacing={2} sx={{ mb: line.size_breakdown?.length ? 1.5 : 0 }}>
+                      <Grid container spacing={2} sx={{ mb: (line.size_breakdown?.length || line.is_fabric) ? 1.5 : 0 }}>
                         <Grid item xs={12} sm={6}><F label="Fabric" value={line.fabric} /></Grid>
                       </Grid>
                     )}
-                    {(line.size_breakdown || []).length > 0 && (() => {
+                    {(line.size_breakdown || []).length > 0 ? (() => {
                       const sizes = sortSizeBreakdownEntries(line.size_breakdown);
                       const hasCodes = sizes.some((r) => r.product_code);
                       return (
@@ -300,7 +303,11 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                         </Table>
                       </Box>
                       );
-                    })()}
+                    })() : (Number(line.quantity) > 0 || line.is_fabric) ? (
+                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: slate[700] }}>
+                        {fmtNum(line.quantity)} {line.uom || (line.is_fabric ? 'MTRS' : 'PCS')}
+                      </Typography>
+                    ) : null}
                   </Box>
                 </Paper>
               ))}
@@ -312,7 +319,7 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                   <Typography sx={{ fontWeight: 900, fontSize: '1.25rem', color: '#f1f5f9' }}>{(po.lines || []).length}</Typography>
                 </Box>
                 <Box sx={{ textAlign: 'right' }}>
-                  <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4), mb: 0.3 }}>Total Pcs</Typography>
+                  <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4), mb: 0.3 }}>Total Qty</Typography>
                   <Typography sx={{ fontWeight: 900, fontSize: '1.25rem', color: '#f1f5f9', fontVariantNumeric: 'tabular-nums' }}>{fmtNum(po.total_qty)}</Typography>
                 </Box>
                 <Box sx={{ textAlign: 'right' }}>
