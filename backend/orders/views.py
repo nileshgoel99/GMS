@@ -326,7 +326,8 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
                 updated_existing = True
                 po.pi = pi
                 po.pi_ref = pi_ref
-                po.save(update_fields=['pi', 'pi_ref'])
+                po.pi_stale = False
+                po.save(update_fields=['pi', 'pi_ref', 'pi_stale'])
                 return Response({
                     'id': pi.id,
                     'pi_number': pi.pi_number,
@@ -345,7 +346,8 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
         pi = serializer.save(created_by=request.user)
         po.pi = pi
         po.pi_ref = pi_ref
-        po.save(update_fields=['pi', 'pi_ref'])
+        po.pi_stale = False
+        po.save(update_fields=['pi', 'pi_ref', 'pi_stale'])
         return Response({
             'id': pi.id,
             'pi_number': pi.pi_number,

@@ -30,6 +30,7 @@ import { dataGridSx, slate, warm } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import { ordersAPI } from '../services/api';
 import { sortSizeBreakdownEntries } from '../utils/normalizeGarmentSize';
+import PoEditedPiNotice from '../components/PoEditedPiNotice';
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = [
@@ -361,7 +362,13 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 2, bgcolor: '#fff', borderTop: `1px solid ${slate[100]}`, gap: 1 }}>
+      {po?.pi && po?.pi_stale && (
+        <Box sx={{ px: 3, pt: 1.5, pb: 0, bgcolor: '#fff', borderTop: `1px solid ${slate[100]}` }}>
+          <PoEditedPiNotice show />
+        </Box>
+      )}
+
+      <DialogActions sx={{ px: 3, py: 2, bgcolor: '#fff', borderTop: po?.pi && po?.pi_stale ? 'none' : `1px solid ${slate[100]}`, gap: 1 }}>
         <Button onClick={onClose} sx={{ color: slate[500], fontWeight: 700 }}>Close</Button>
         <Box sx={{ flex: 1 }} />
         <Button variant="outlined" onClick={onEdit} sx={{ fontWeight: 700, borderRadius: 1.5 }}>
@@ -661,7 +668,7 @@ export default function BuyerPOs() {
       renderCell: (p) => {
         if (p.row.pi_id) {
           return cell('center',
-            <Tooltip title="View proforma invoice">
+            <Tooltip title={p.row.pi_stale ? 'PO was edited. Regenerate the PI to apply the changes.' : 'View proforma invoice'}>
               <Box
                 sx={{
                   display: 'inline-flex',
@@ -671,13 +678,13 @@ export default function BuyerPOs() {
                   px: 1.25,
                   py: 0.65,
                   borderRadius: 1.5,
-                  bgcolor: alpha('#0f766e', 0.07),
-                  border: `1px solid ${alpha('#0f766e', 0.22)}`,
+                  bgcolor: p.row.pi_stale ? alpha('#b45309', 0.08) : alpha('#0f766e', 0.07),
+                  border: `1px solid ${p.row.pi_stale ? alpha('#b45309', 0.28) : alpha('#0f766e', 0.22)}`,
                   cursor: 'pointer',
                   transition: 'background-color 0.15s ease, border-color 0.15s ease',
                   '&:hover': {
-                    bgcolor: alpha('#0f766e', 0.11),
-                    borderColor: alpha('#0f766e', 0.38),
+                    bgcolor: p.row.pi_stale ? alpha('#b45309', 0.14) : alpha('#0f766e', 0.11),
+                    borderColor: p.row.pi_stale ? alpha('#b45309', 0.45) : alpha('#0f766e', 0.38),
                   },
                 }}
                 onClick={(e) => {
@@ -686,18 +693,18 @@ export default function BuyerPOs() {
                 }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <CheckCircleOutline sx={{ fontSize: 15, color: '#0f766e' }} />
+                  <CheckCircleOutline sx={{ fontSize: 15, color: p.row.pi_stale ? '#b45309' : '#0f766e' }} />
                   <Typography
                     sx={{
                       fontSize: '0.62rem',
                       fontWeight: 800,
                       letterSpacing: '0.1em',
                       textTransform: 'uppercase',
-                      color: '#0f766e',
+                      color: p.row.pi_stale ? '#b45309' : '#0f766e',
                       lineHeight: 1,
                     }}
                   >
-                    PI raised
+                    {p.row.pi_stale ? 'PO edited' : 'PI raised'}
                   </Typography>
                 </Box>
                 <Typography

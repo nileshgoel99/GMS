@@ -879,7 +879,7 @@ class BuyerPOListSerializer(serializers.ModelSerializer):
             'ship_to_customer', 'ship_to_customer_name', 'ship_to_name', 'ship_to_address',
             'currency', 'status',
             'ex_factory_date', 'total_qty', 'total_value', 'lines_count',
-            'po_document', 'pi_ref', 'pi_id', 'created_at',
+            'po_document', 'pi_ref', 'pi_id', 'pi_stale', 'created_at',
         ]
 
     def get_customer_name(self, obj):
@@ -913,8 +913,9 @@ class BuyerPOSerializer(serializers.ModelSerializer):
             'po_document', 'pi_ref', 'indent_count',
             'inco_terms', 'port_of_loading', 'port_of_discharge',
             'lines', 'created_by', 'created_by_name', 'created_at', 'updated_at',
+            'pi_stale',
         ]
-        read_only_fields = ('id', 'created_by', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'created_by', 'created_at', 'updated_at', 'pi_stale')
 
     def get_customer_name(self, obj):
         return obj.customer.company_legal_name if obj.customer else None
@@ -990,8 +991,12 @@ class BuyerPOSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         lines_data = validated_data.pop('lines', None)
+        skip_stale_fields = {'pi', 'pi_ref'}
+        content_changed = bool(set(validated_data.keys()) - skip_stale_fields) or lines_data is not None
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        if instance.pi_id and content_changed:
+            instance.pi_stale = True
         instance.save()
         if lines_data is not None:
             self._save_lines(instance, lines_data)

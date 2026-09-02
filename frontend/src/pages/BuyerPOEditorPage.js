@@ -42,6 +42,7 @@ import { ordersAPI, customersAPI } from '../services/api';
 import { normalizeGarmentSize, normalizeSizeBreakdownEntries, sortSizeBreakdownEntries } from '../utils/normalizeGarmentSize';
 import { slate, warm, spectrum } from '../theme/appTheme';
 import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
+import PoEditedPiNotice from '../components/PoEditedPiNotice';
 
 // ── Status config ────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = [
@@ -124,6 +125,7 @@ const emptyForm = () => ({
   port_of_discharge: '',
   pi_ref: '',
   pi: null,
+  pi_stale: false,
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1237,6 +1239,7 @@ export default function BuyerPOEditorPage() {
           port_of_discharge: po.port_of_discharge || '',
           pi_ref:          po.pi_ref || '',
           pi:              po.pi || null,
+          pi_stale:        Boolean(po.pi_stale),
         });
         setPoDocument(po.po_document || null);
         setLines(
@@ -1507,7 +1510,9 @@ export default function BuyerPOEditorPage() {
             )}
             {!isCreate && (
               formData.pi ? (
-                <>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.75 }}>
+                  <PoEditedPiNotice show={Boolean(formData.pi_stale)} />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <Button
                     variant="outlined"
                     startIcon={<ReceiptLong />}
@@ -1532,7 +1537,8 @@ export default function BuyerPOEditorPage() {
                   >
                     Create Indent
                   </Button>
-                </>
+                  </Box>
+                </Box>
               ) : (
                 <Button
                   variant="outlined"
@@ -2090,7 +2096,9 @@ export default function BuyerPOEditorPage() {
           {saving ? 'Saving…' : isCreate ? 'Create PO' : 'Save Changes'}
         </Button>
         {!isCreate && formData.pi ? (
-          <>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, maxWidth: 560 }}>
+            <PoEditedPiNotice show={Boolean(formData.pi_stale)} sx={{ width: '100%' }} />
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <Button
               variant="contained"
               size="large"
@@ -2133,7 +2141,8 @@ export default function BuyerPOEditorPage() {
             >
               Create Indent
             </Button>
-          </>
+            </Box>
+          </Box>
         ) : (
           <Button
             variant="contained"

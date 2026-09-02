@@ -374,6 +374,10 @@ class BuyerPO(models.Model):
         related_name='buyer_pos',
         help_text='Our internal PI linked to this buyer PO',
     )
+    pi_stale = models.BooleanField(
+        default=False,
+        help_text='True when this PO changed after the linked PI was generated',
+    )
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_buyer_pos')
     created_at = models.DateTimeField(auto_now_add=True)

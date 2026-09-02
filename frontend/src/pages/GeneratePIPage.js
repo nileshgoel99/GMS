@@ -14,6 +14,7 @@ import PIPrintSheet from '../components/orders/PIPrintSheet';
 import { bindPiPrintPageFooters, installPiPrintPageFooters } from '../utils/piPrintPageFooters';
 import { companyContactLines } from '../utils/formatCompanyPhone';
 import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
+import PoEditedPiNotice from '../components/PoEditedPiNotice';
 
 // ── Number to words ───────────────────────────────────────────────────────────
 const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
@@ -825,6 +826,7 @@ export default function GeneratePIPage() {
           {po?.indent_count > 0 ? ' (linked indents will also be removed)' : ''}.
         </Alert>
       )}
+      <PoEditedPiNotice show={Boolean(isRegenerate && po?.pi_stale)} sx={{ mb: 2 }} />
 
       <Grid container spacing={3}>
         {/* ── Edit form ── */}
