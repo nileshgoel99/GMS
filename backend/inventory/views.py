@@ -8,6 +8,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
 from django.db.models import F, Q
 
+from accounts.permissions import IsAdminRole, ModulePermission
 from orders.models import TrimMaster
 from orders.serializers import TrimMasterSerializer
 from procurement.stock_receive import (
@@ -16,6 +17,7 @@ from procurement.stock_receive import (
     _unique_item_code,
 )
 
+from .audit import diff_snapshots, record_item_audit, snapshot_item
 from .models import InventoryItem, InventoryLog
 from .serializers import (
     InventoryItemSerializer,
@@ -89,7 +91,7 @@ def _resolve_or_create_item_for_trim(*, trim, property_values=None, user=None):
 
 
 class InventoryItemViewSet(viewsets.ModelViewSet):
-    queryset = InventoryItem.objects.all().select_related('created_by', 'trim')
+    queryset = InventoryItem.objects.all().select_related('created_by', 'trim').prefetch_related('audits__performed_by', 'logs')
     serializer_class = InventoryItemSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['category', 'is_active', 'color', 'size']
@@ -109,6 +111,12 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
             return OpeningStockSerializer
         return InventoryItemSerializer
 
+    def get_permissions(self):
+        perms = [ModulePermission()]
+        if self.action in ('create', 'update', 'partial_update', 'destroy'):
+            perms.append(IsAdminRole())
+        return perms
+
     def get_serializer_context(self):
         context = super().get_serializer_context()
         if self.action == 'list':
@@ -120,6 +128,27 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user, current_stock=Decimal('0'))
+
+    def perform_update(self, serializer):
+        before = snapshot_item(serializer.instance)
+        item = serializer.save()
+        changes = diff_snapshots(before, snapshot_item(item))
+        if changes:
+            record_item_audit(item=item, action='UPDATE', user=self.request.user, changes=changes)
+
+    def destroy(self, request, *args, **kwargs):
+        item = self.get_object()
+        if not item.is_active:
+            return Response({'detail': 'This item is already removed.'}, status=status.HTTP_400_BAD_REQUEST)
+        record_item_audit(
+            item=item,
+            action='DELETE',
+            user=request.user,
+            changes=snapshot_item(item),
+        )
+        item.is_active = False
+        item.save(update_fields=['is_active', 'updated_at'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=['get'])
     def low_stock(self, request):
@@ -271,6 +300,12 @@ class InventoryLogViewSet(viewsets.ModelViewSet):
     filterset_fields = ['transaction_type', 'item', 'reference_type', 'reference_number']
     search_fields = ['item__item_code', 'item__name', 'reference_number', 'vendor_supplier']
     ordering_fields = ['created_at']
+
+    def get_permissions(self):
+        perms = [ModulePermission()]
+        if self.action in ('create', 'update', 'partial_update', 'destroy'):
+            perms.append(IsAdminRole())
+        return perms
 
     def perform_create(self, serializer):
         item = serializer.validated_data['item']

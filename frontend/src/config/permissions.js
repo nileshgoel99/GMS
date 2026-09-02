@@ -80,10 +80,12 @@ const IMPLIED_MODULES = {
   trims: ['indents'],
 };
 
+export const isAdminUser = (user) => Boolean(user?.is_admin || user?.role === 'ADMIN');
+
 export const hasModuleAccess = (user, module) => {
   if (!module) return true;
   if (!user) return false;
-  if (user.is_admin || user.role === 'ADMIN') return true;
+  if (isAdminUser(user)) return true;
   const mods = user.modules;
   if (mods?.includes('*')) return true;
   if (mods?.includes(module)) return true;

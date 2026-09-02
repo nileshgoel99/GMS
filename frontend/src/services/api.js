@@ -167,6 +167,7 @@ export const inventoryAPI = {
   getById: (id) => api.get(`/inventory/items/${id}/`),
   create: (data) => api.post('/inventory/items/', data),
   update: (id, data) => api.put(`/inventory/items/${id}/`, data),
+  patch: (id, data) => api.patch(`/inventory/items/${id}/`, data),
   delete: (id) => api.delete(`/inventory/items/${id}/`),
   getLowStock: () => api.get('/inventory/items/low_stock/'),
   getSummary: (id) => api.get(`/inventory/items/${id}/summary/`),

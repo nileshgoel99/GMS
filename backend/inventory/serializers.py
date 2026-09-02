@@ -4,13 +4,25 @@ from datetime import date
 from django.db.models import Sum
 from rest_framework import serializers
 
-from .models import InventoryItem, InventoryLog
+from .models import InventoryItem, InventoryItemAudit, InventoryLog
 from .utils import (
     aggregate_pi_and_suppliers,
     get_stock_sources_for_item,
     item_display_name,
     item_property_lines,
 )
+
+
+class InventoryItemAuditSerializer(serializers.ModelSerializer):
+    performed_by_name = serializers.CharField(source='performed_by.username', read_only=True)
+
+    class Meta:
+        model = InventoryItemAudit
+        fields = [
+            'id', 'item', 'item_code', 'item_name', 'action',
+            'changes', 'performed_by', 'performed_by_name', 'performed_at',
+        ]
+        read_only_fields = fields
 
 
 class InventoryLogSerializer(serializers.ModelSerializer):
@@ -185,6 +197,7 @@ class InventorySummarySerializer(serializers.ModelSerializer):
     last_receipt_date = serializers.SerializerMethodField()
     last_release_date = serializers.SerializerMethodField()
     all_logs = serializers.SerializerMethodField()
+    audits = serializers.SerializerMethodField()
 
     class Meta:
         model = InventoryItem
@@ -195,6 +208,14 @@ class InventorySummarySerializer(serializers.ModelSerializer):
             'item_name',
             'property_lines',
             'category',
+            'color',
+            'size',
+            'finish',
+            'material',
+            'unit_cost',
+            'description',
+            'reorder_level',
+            'is_active',
             'current_stock',
             'unit',
             'pi_refs',
@@ -207,6 +228,7 @@ class InventorySummarySerializer(serializers.ModelSerializer):
             'last_receipt_date',
             'last_release_date',
             'all_logs',
+            'audits',
         ]
 
     def get_item_name(self, obj):
@@ -253,3 +275,9 @@ class InventorySummarySerializer(serializers.ModelSerializer):
     def get_all_logs(self, obj):
         logs = obj.logs.all()
         return InventoryLogSerializer(logs, many=True).data
+
+    def get_audits(self, obj):
+        return InventoryItemAuditSerializer(
+            obj.audits.select_related('performed_by').all()[:50],
+            many=True,
+        ).data

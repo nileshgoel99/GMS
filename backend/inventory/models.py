@@ -115,3 +115,44 @@ class InventoryLog(models.Model):
 
     def __str__(self):
         return f"{self.item.item_code} - {self.transaction_type} - {self.quantity}"
+
+
+class InventoryItemAudit(models.Model):
+    """Who changed or deleted an inventory item, and what changed."""
+
+    ACTION_CHOICES = [
+        ('UPDATE', 'Updated'),
+        ('DELETE', 'Deleted'),
+    ]
+
+    item = models.ForeignKey(
+        InventoryItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audits',
+    )
+    item_code = models.CharField(max_length=50, db_index=True)
+    item_name = models.CharField(max_length=200, blank=True, default='')
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    changes = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Field diffs: {field: {old, new}} or a snapshot on delete',
+    )
+    performed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='inventory_item_audits',
+    )
+    performed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-performed_at']
+        verbose_name = 'Inventory item audit'
+        verbose_name_plural = 'Inventory item audits'
+
+    def __str__(self):
+        who = self.performed_by.username if self.performed_by_id else 'unknown'
+        return f"{self.item_code} {self.action} by {who} at {self.performed_at}"

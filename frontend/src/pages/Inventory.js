@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  MenuItem,
   Grid,
   Chip,
   Table,
@@ -65,6 +66,8 @@ import {
   Unarchive,
   AddBox,
   Add,
+  Edit,
+  DeleteOutline,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import PageHeader from '../components/PageHeader';
@@ -74,6 +77,8 @@ import { extractTrimProperties, getItemDisplayName } from '../utils/extractTrimP
 import { slate, sectionPaperSxByIndex } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import { inventoryAPI, ordersAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { isAdminUser } from '../config/permissions';
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -218,6 +223,37 @@ const CATEGORY_CARD_ORDER = [
   'POLYBAG',
   'OTHER',
 ];
+
+const UNIT_OPTIONS = ['PCS', 'MTR', 'KG', 'ROLL', 'BOX', 'SET'];
+
+const emptyItemEdit = () => ({
+  item_code: '',
+  name: '',
+  category: 'OTHER',
+  color: '',
+  size: '',
+  unit: 'PCS',
+  reorder_level: '',
+  unit_cost: '',
+  description: '',
+});
+
+const formatAuditWhen = (value) => {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return formatDateDisplay(value);
+  return `${formatDateDisplay(value)} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+};
+
+const formatAuditChange = (field, change) => {
+  const label = field.replace(/_/g, ' ');
+  if (change && typeof change === 'object' && ('old' in change || 'new' in change)) {
+    const oldVal = change.old == null || change.old === '' ? '—' : String(change.old);
+    const newVal = change.new == null || change.new === '' ? '—' : String(change.new);
+    return `${label}: ${oldVal} → ${newVal}`;
+  }
+  return `${label}: ${change == null || change === '' ? '—' : String(change)}`;
+};
 
 const SummaryStatCard = ({ meta, count, onClick }) => {
   const { label, sub, color, Icon } = meta;
@@ -420,6 +456,8 @@ const INVENTORY_TABLE_COLS = {
 };
 
 const Inventory = () => {
+  const { user } = useAuth();
+  const canManageItems = isAdminUser(user);
   const [items, setItems] = useState([]);
   const [lowStockItems, setLowStockItems] = useState([]);
   const [stats, setStats] = useState(null);
@@ -449,6 +487,11 @@ const Inventory = () => {
   const [propertyValues, setPropertyValues] = useState({});
   const [trimModalOpen, setTrimModalOpen] = useState(false);
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' });
+  const [editItem, setEditItem] = useState(null);
+  const [editForm, setEditForm] = useState(emptyItemEdit);
+  const [editLoading, setEditLoading] = useState(false);
+  const [deleteItem, setDeleteItem] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const searchRef = useRef(null);
 
   const fetchAll = useCallback(async () => {
@@ -680,6 +723,97 @@ const Inventory = () => {
   const closeDetail = () => {
     setDetailItem(null);
     setSummary(null);
+  };
+
+  const fillEditForm = (src) => {
+    setEditForm({
+      item_code: src.item_code || '',
+      name: src.name || '',
+      category: src.category || 'OTHER',
+      color: src.color || '',
+      size: src.size || '',
+      unit: src.unit || 'PCS',
+      reorder_level: src.reorder_level != null ? String(src.reorder_level) : '',
+      unit_cost: src.unit_cost != null ? String(src.unit_cost) : '',
+      description: src.description || '',
+    });
+  };
+
+  const openEditItem = async (item, e) => {
+    e?.stopPropagation();
+    setEditItem(item);
+    fillEditForm(summary?.id === item.id ? summary : item);
+    try {
+      const res = await inventoryAPI.getById(item.id);
+      fillEditForm(res.data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const closeEditItem = () => {
+    setEditItem(null);
+    setEditForm(emptyItemEdit());
+  };
+
+  const handleSaveItem = async () => {
+    if (!editItem) return;
+    if (!editForm.item_code.trim() || !editForm.name.trim()) {
+      setSnack({ open: true, message: 'Item code and name are required', severity: 'warning' });
+      return;
+    }
+    setEditLoading(true);
+    const savedId = editItem.id;
+    try {
+      await inventoryAPI.patch(savedId, {
+        item_code: editForm.item_code.trim(),
+        name: editForm.name.trim(),
+        category: editForm.category,
+        color: editForm.color.trim() || null,
+        size: editForm.size.trim() || null,
+        unit: editForm.unit,
+        reorder_level: editForm.reorder_level === '' ? 0 : editForm.reorder_level,
+        unit_cost: editForm.unit_cost === '' ? null : editForm.unit_cost,
+        description: editForm.description.trim() || null,
+      });
+      setSnack({ open: true, message: 'Inventory item updated', severity: 'success' });
+      closeEditItem();
+      await fetchAll();
+      if (detailItem?.id === savedId) {
+        await openDetail({ id: savedId, ...editForm });
+      }
+    } catch (error) {
+      const data = error.response?.data;
+      const msg = data?.detail
+        || data?.item_code?.[0]
+        || (typeof data === 'object' ? JSON.stringify(data) : null)
+        || 'Update failed';
+      setSnack({ open: true, message: msg, severity: 'error' });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const openDeleteItem = (item, e) => {
+    e?.stopPropagation();
+    setDeleteItem(item);
+  };
+
+  const handleDeleteItem = async () => {
+    if (!deleteItem) return;
+    setDeleteLoading(true);
+    try {
+      await inventoryAPI.delete(deleteItem.id);
+      setSnack({ open: true, message: 'Inventory item removed', severity: 'success' });
+      setDeleteItem(null);
+      if (detailItem?.id === deleteItem.id) closeDetail();
+      await fetchAll();
+    } catch (error) {
+      const msg = error.response?.data?.detail || 'Delete failed';
+      setSnack({ open: true, message: msg, severity: 'error' });
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const openRelease = (item, e) => {
@@ -1386,6 +1520,28 @@ const Inventory = () => {
                                 </IconButton>
                               </span>
                             </Tooltip>
+                            {canManageItems && (
+                              <>
+                                <Tooltip title="Edit item">
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => openEditItem(row, e)}
+                                    sx={{ color: slate[500], '&:hover': { color: accent, bgcolor: alpha(accent, 0.08) } }}
+                                  >
+                                    <Edit fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Delete item">
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => openDeleteItem(row, e)}
+                                    sx={{ color: slate[400], '&:hover': { color: 'error.main', bgcolor: alpha('#ef4444', 0.08) } }}
+                                  >
+                                    <DeleteOutline fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </>
+                            )}
                             <Tooltip title="View details">
                               <IconButton
                                 size="small"
@@ -2008,6 +2164,42 @@ const Inventory = () => {
                 </>
               )}
 
+              {canManageItems && (summary.audits || []).length > 0 && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="subtitle2" gutterBottom>
+                    Change history
+                  </Typography>
+                  <Paper variant="outlined" sx={{ maxHeight: 220, overflow: 'auto', mb: 2 }}>
+                    {summary.audits.map((audit) => (
+                      <Box
+                        key={audit.id}
+                        sx={{
+                          px: 2,
+                          py: 1.15,
+                          borderBottom: `1px solid ${slate[100]}`,
+                        }}
+                      >
+                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: slate[800] }}>
+                          {audit.action === 'DELETE' ? 'Deleted' : 'Updated'}
+                          {' · '}
+                          {audit.performed_by_name || 'unknown'}
+                          {' · '}
+                          <Box component="span" sx={{ fontWeight: 500, color: slate[500] }}>
+                            {formatAuditWhen(audit.performed_at)}
+                          </Box>
+                        </Typography>
+                        {audit.action === 'UPDATE' && audit.changes && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35 }}>
+                            {Object.entries(audit.changes).map(([field, change]) => formatAuditChange(field, change)).join(' · ')}
+                          </Typography>
+                        )}
+                      </Box>
+                    ))}
+                  </Paper>
+                </>
+              )}
+
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle2" gutterBottom>
                 Transaction history
@@ -2050,6 +2242,16 @@ const Inventory = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDetail}>Close</Button>
+          {canManageItems && detailItem && (
+            <>
+              <Button startIcon={<Edit />} onClick={() => openEditItem(detailItem)}>
+                Edit
+              </Button>
+              <Button color="error" startIcon={<DeleteOutline />} onClick={() => openDeleteItem(detailItem)}>
+                Delete
+              </Button>
+            </>
+          )}
           {detailItem && (
             <Button
               variant="outlined"
@@ -2068,6 +2270,124 @@ const Inventory = () => {
               Release stock
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(editItem)} onClose={closeEditItem} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit inventory item</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ pt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="Item code"
+                value={editForm.item_code}
+                onChange={(e) => setEditForm((f) => ({ ...f, item_code: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="Name"
+                value={editForm.name}
+                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                select
+                label="Category"
+                value={editForm.category}
+                onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
+              >
+                {CATEGORY_CARD_ORDER.map((key) => (
+                  <MenuItem key={key} value={key}>{CATEGORY_CARD_META[key]?.label || key}</MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                select
+                label="Unit"
+                value={editForm.unit}
+                onChange={(e) => setEditForm((f) => ({ ...f, unit: e.target.value }))}
+              >
+                {UNIT_OPTIONS.map((u) => (
+                  <MenuItem key={u} value={u}>{u}</MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Colour"
+                value={editForm.color}
+                onChange={(e) => setEditForm((f) => ({ ...f, color: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Size"
+                value={editForm.size}
+                onChange={(e) => setEditForm((f) => ({ ...f, size: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Reorder level"
+                value={editForm.reorder_level}
+                onChange={(e) => setEditForm((f) => ({ ...f, reorder_level: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Unit cost"
+                value={editForm.unit_cost}
+                onChange={(e) => setEditForm((f) => ({ ...f, unit_cost: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="Description"
+                value={editForm.description}
+                onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeEditItem} disabled={editLoading}>Cancel</Button>
+          <Button variant="contained" onClick={handleSaveItem} disabled={editLoading}>
+            {editLoading ? 'Saving…' : 'Save changes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteItem)} onClose={() => !deleteLoading && setDeleteItem(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete inventory item</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ pt: 1 }}>
+            Remove <strong>{deleteItem?.item_name || deleteItem?.name || deleteItem?.item_code}</strong> from inventory?
+            Stock history is kept. This can only be done by an admin.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteItem(null)} disabled={deleteLoading}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={handleDeleteItem} disabled={deleteLoading}>
+            {deleteLoading ? 'Removing…' : 'Delete'}
+          </Button>
         </DialogActions>
       </Dialog>
 
