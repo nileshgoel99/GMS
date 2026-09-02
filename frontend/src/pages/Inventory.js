@@ -451,9 +451,17 @@ const SpecPills = ({ item, limit = 4 }) => {
 };
 
 const INVENTORY_TABLE_COLS = {
-  xs: 'minmax(0, 1fr) auto',
-  md: 'minmax(180px, 1.35fr) minmax(200px, 1.9fr) minmax(110px, 0.95fr) 108px 104px 108px',
+  xs: 'minmax(0, 1fr) auto auto',
+  md: 'minmax(150px, 1.15fr) minmax(140px, 1.4fr) minmax(90px, 0.7fr) 76px 92px 204px',
 };
+
+const inventoryActionBtnSx = (color, hoverBg) => ({
+  width: 30,
+  height: 30,
+  color,
+  '&:hover': { color, bgcolor: hoverBg },
+  '&.Mui-disabled': { color: slate[300] },
+});
 
 const Inventory = () => {
   const { user } = useAuth();
@@ -1471,37 +1479,36 @@ const Inventory = () => {
                           </Box>
 
                           {/* Status */}
-                          <Box sx={{ display: { xs: 'none', md: 'flex' }, justifyContent: 'flex-end' }}>
+                          <Box sx={{ display: { xs: 'none', md: 'flex' }, justifyContent: 'flex-end', minWidth: 0, pr: 0.5 }}>
                             <StockStatusBadge tone={tone.key} />
                           </Box>
 
                           {/* Actions */}
                           <Stack
                             direction="row"
-                            spacing={0.15}
+                            spacing={0}
                             justifyContent="flex-end"
                             alignItems="center"
+                            flexWrap="nowrap"
+                            sx={{ minWidth: 0, flexShrink: 0 }}
                             onClick={(e) => e.stopPropagation()}
                           >
                             <Tooltip title="Stock history">
                               <IconButton
                                 size="small"
                                 onClick={() => openDetail(row)}
-                                sx={{ color: slate[500], '&:hover': { color: accent, bgcolor: alpha(accent, 0.08) } }}
+                                sx={inventoryActionBtnSx(slate[500], alpha(accent, 0.08))}
                               >
-                                <History fontSize="small" />
+                                <History sx={{ fontSize: 18 }} />
                               </IconButton>
                             </Tooltip>
                             <Tooltip title="Add opening stock">
                               <IconButton
                                 size="small"
                                 onClick={(e) => openOpeningStock(row, e)}
-                                sx={{
-                                  color: '#0f766e',
-                                  '&:hover': { bgcolor: alpha('#0f766e', 0.1) },
-                                }}
+                                sx={inventoryActionBtnSx('#0f766e', alpha('#0f766e', 0.1))}
                               >
-                                <AddBox fontSize="small" />
+                                <AddBox sx={{ fontSize: 18 }} />
                               </IconButton>
                             </Tooltip>
                             <Tooltip title="Release to production">
@@ -1510,13 +1517,9 @@ const Inventory = () => {
                                   size="small"
                                   disabled={(parseFloat(row.current_stock) || 0) <= 0}
                                   onClick={(e) => openRelease(row, e)}
-                                  sx={{
-                                    color: accent,
-                                    '&:hover': { bgcolor: alpha(accent, 0.1) },
-                                    '&.Mui-disabled': { color: slate[300] },
-                                  }}
+                                  sx={inventoryActionBtnSx(accent, alpha(accent, 0.1))}
                                 >
-                                  <Unarchive fontSize="small" />
+                                  <Unarchive sx={{ fontSize: 18 }} />
                                 </IconButton>
                               </span>
                             </Tooltip>
@@ -1526,18 +1529,23 @@ const Inventory = () => {
                                   <IconButton
                                     size="small"
                                     onClick={(e) => openEditItem(row, e)}
-                                    sx={{ color: slate[500], '&:hover': { color: accent, bgcolor: alpha(accent, 0.08) } }}
+                                    sx={inventoryActionBtnSx(slate[500], alpha(accent, 0.08))}
                                   >
-                                    <Edit fontSize="small" />
+                                    <Edit sx={{ fontSize: 18 }} />
                                   </IconButton>
                                 </Tooltip>
                                 <Tooltip title="Delete item">
                                   <IconButton
                                     size="small"
                                     onClick={(e) => openDeleteItem(row, e)}
-                                    sx={{ color: slate[400], '&:hover': { color: 'error.main', bgcolor: alpha('#ef4444', 0.08) } }}
+                                    sx={{
+                                      width: 30,
+                                      height: 30,
+                                      color: slate[400],
+                                      '&:hover': { color: 'error.main', bgcolor: alpha('#ef4444', 0.08) },
+                                    }}
                                   >
-                                    <DeleteOutline fontSize="small" />
+                                    <DeleteOutline sx={{ fontSize: 18 }} />
                                   </IconButton>
                                 </Tooltip>
                               </>
@@ -1546,9 +1554,9 @@ const Inventory = () => {
                               <IconButton
                                 size="small"
                                 onClick={() => openDetail(row)}
-                                sx={{ color: slate[400], '&:hover': { color: accent, bgcolor: alpha(accent, 0.08) } }}
+                                sx={inventoryActionBtnSx(slate[400], alpha(accent, 0.08))}
                               >
-                                <ChevronRight fontSize="small" />
+                                <ChevronRight sx={{ fontSize: 18 }} />
                               </IconButton>
                             </Tooltip>
                           </Stack>
