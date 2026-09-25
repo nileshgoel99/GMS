@@ -168,7 +168,13 @@ function PIDocument({ pi, company }) {
   ].filter(Boolean).join(', ');
 
   const totalQty = (pi.lines || []).reduce((s, l) => s + (l.quantity_pcs || 0), 0);
-  const totalAmt = computePiTotal(pi);
+  const subtotalAmt = (pi.lines || []).reduce((sum, line) => {
+    const direct = parseFloat(line.line_value_usd);
+    if (!Number.isNaN(direct)) return sum + direct;
+    return sum + (parseFloat(line.unit_price_usd || 0) * (line.quantity_pcs || 0));
+  }, 0);
+  const overallDisc = Math.min(Math.max(parseFloat(pi.overall_discount) || 0, 0), 100);
+  const totalAmt = overallDisc > 0 ? subtotalAmt * (1 - overallDisc / 100) : computePiTotal(pi);
   const currency = getPiCurrency(pi);
   const footer = getPiFooter(pi, company);
   const contact = companyContactLines(company);
@@ -352,8 +358,22 @@ function PIDocument({ pi, company }) {
             <Box component="td" colSpan={3} sx={{ border: '1px solid #000', px: '8px', py: '8px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit' }}>TOTAL:-</Box>
             <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '8px', fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{totalQty}</Box>
             <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '8px', fontFamily: 'inherit' }} />
-            <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '8px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{totalAmt.toFixed(3)}</Box>
+            <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '8px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{(overallDisc > 0 ? subtotalAmt : totalAmt).toFixed(3)}</Box>
           </Box>
+          {overallDisc > 0 && (
+            <>
+              <Box component="tr">
+                <Box component="td" colSpan={3} sx={{ border: '1px solid #000', px: '8px', py: '8px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit' }}>LESS OVERALL DISCOUNT {overallDisc}%:-</Box>
+                <Box component="td" colSpan={2} sx={{ border: '1px solid #000', px: '8px', py: '8px', fontFamily: 'inherit' }} />
+                <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '8px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>−{(subtotalAmt * overallDisc / 100).toFixed(3)}</Box>
+              </Box>
+              <Box component="tr" sx={{ bgcolor: '#f0f0f0' }}>
+                <Box component="td" colSpan={3} sx={{ border: '1px solid #000', px: '8px', py: '8px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit' }}>NET TOTAL:-</Box>
+                <Box component="td" colSpan={2} sx={{ border: '1px solid #000', px: '8px', py: '8px', fontFamily: 'inherit' }} />
+                <Box component="td" sx={{ border: '1px solid #000', px: '8px', py: '8px', fontWeight: 700, textAlign: 'right', fontFamily: 'inherit', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{totalAmt.toFixed(3)}</Box>
+              </Box>
+            </>
+          )}
         </Box>
       </Box>
 
@@ -527,7 +547,13 @@ export default function PIViewPage() {
   };
 
   const totalQty = (pi?.lines || []).reduce((s, l) => s + (l.quantity_pcs || 0), 0);
-  const totalAmt = computePiTotal(pi);
+  const overallDisc = Math.min(Math.max(parseFloat(pi?.overall_discount) || 0, 0), 100);
+  const subtotalAmt = (pi?.lines || []).reduce((sum, line) => {
+    const direct = parseFloat(line.line_value_usd);
+    if (!Number.isNaN(direct)) return sum + direct;
+    return sum + (parseFloat(line.unit_price_usd || 0) * (line.quantity_pcs || 0));
+  }, 0);
+  const totalAmt = overallDisc > 0 ? subtotalAmt * (1 - overallDisc / 100) : computePiTotal(pi);
   const currency = getPiCurrency(pi);
 
   if (loading) return (

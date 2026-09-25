@@ -8,6 +8,7 @@ venv/
 **/node_modules/
 ~$*
 backups/
+security-review/
 certs/
 **/*.crt
 **/*.pem

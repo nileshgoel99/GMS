@@ -33,6 +33,13 @@ class ProformaInvoice(models.Model):
     garment_type = models.CharField(max_length=500, blank=True, default='', help_text='Summary of line items for lists/reports')
     quantity = models.PositiveIntegerField(default=0, validators=[MinValueValidator(0)], help_text='Total pieces across PI lines')
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    overall_discount = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Overall discount % applied after line values (0–100)',
+    )
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
@@ -352,6 +359,13 @@ class BuyerPO(models.Model):
     ex_factory_date = models.DateField(null=True, blank=True)
 
     total_qty = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    overall_discount = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Overall discount % applied after line discounts (0–100)',
+    )
     total_value = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RECEIVED')

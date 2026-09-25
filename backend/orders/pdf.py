@@ -327,6 +327,31 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
             Paragraph(f'<b>{total_val:.2f}</b>', small),
         ]
     )
+    payable = total_val
+    disc = pi.overall_discount
+    if disc:
+        discount_amt = (total_val * Decimal(disc) / Decimal('100')).quantize(Decimal('0.01'))
+        payable = (total_val - discount_amt).quantize(Decimal('0.01'))
+        table_data.append(
+            [
+                '',
+                '',
+                Paragraph(f'<b>LESS OVERALL DISCOUNT {disc}%</b>', small),
+                '',
+                '',
+                Paragraph(f'<b>-{discount_amt:.2f}</b>', small),
+            ]
+        )
+        table_data.append(
+            [
+                '',
+                '',
+                Paragraph('<b>NET TOTAL</b>', small),
+                '',
+                '',
+                Paragraph(f'<b>{payable:.2f}</b>', small),
+            ]
+        )
 
     tbl = Table(table_data, colWidths=[0.9 * cm, 3.1 * cm, 7.2 * cm, 1.5 * cm, 2 * cm, 2.2 * cm])
     tbl.setStyle(
@@ -351,7 +376,7 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
     story.append(tbl)
     story.append(Spacer(1, 0.3 * cm))
 
-    words = usd_amount_to_words(total_val if total_val > 0 else None)
+    words = usd_amount_to_words(payable if payable > 0 else None)
     story.append(
         Table(
             [[Paragraph(f'<b>Amount in words (USD):</b> {_esc(words)}', body)]],

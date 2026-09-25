@@ -314,7 +314,7 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
               ))}
 
               {/* ── Order totals ── */}
-              <Box sx={{ mt: 2, bgcolor: slate[900], borderRadius: 2, px: 3, py: 2, display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
+              <Box sx={{ mt: 2, bgcolor: slate[900], borderRadius: 2, px: 3, py: 2, display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
                 <Box sx={{ textAlign: 'right' }}>
                   <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4), mb: 0.3 }}>Styles</Typography>
                   <Typography sx={{ fontWeight: 900, fontSize: '1.25rem', color: '#f1f5f9' }}>{(po.lines || []).length}</Typography>
@@ -323,6 +323,14 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                   <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4), mb: 0.3 }}>Total Qty</Typography>
                   <Typography sx={{ fontWeight: 900, fontSize: '1.25rem', color: '#f1f5f9', fontVariantNumeric: 'tabular-nums' }}>{fmtNum(po.total_qty)}</Typography>
                 </Box>
+                {Number(po.overall_discount) > 0 && (
+                  <Box sx={{ textAlign: 'right' }}>
+                    <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4), mb: 0.3 }}>Overall Discount</Typography>
+                    <Typography sx={{ fontWeight: 800, fontSize: '1.15rem', color: '#fbbf24', fontVariantNumeric: 'tabular-nums' }}>
+                      {Number(po.overall_discount)}%
+                    </Typography>
+                  </Box>
+                )}
                 <Box sx={{ textAlign: 'right' }}>
                   <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4), mb: 0.3 }}>Order Value</Typography>
                   <Typography sx={{ fontWeight: 900, fontSize: '1.5rem', color: theme.palette.primary.light, fontVariantNumeric: 'tabular-nums' }}>
