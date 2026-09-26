@@ -315,6 +315,7 @@ class BuyerPOViewSet(viewsets.ModelViewSet):
             'intermediary_bank_details':   inter_bank,
             'date_of_dispatch_display':    dispatch_display,
             'overall_discount':            data.get('overall_discount', po.overall_discount),
+            'overall_discount_amount':     data.get('overall_discount_amount', po.overall_discount_amount),
         }
 
         if po.pi_id and update_existing:

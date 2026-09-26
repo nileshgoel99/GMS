@@ -124,6 +124,7 @@ const emptyForm = () => ({
   port_of_loading: '',
   port_of_discharge: '',
   overall_discount: '',
+  overall_discount_amount: '',
   pi_ref: '',
   pi: null,
   pi_stale: false,
@@ -1064,13 +1065,28 @@ function PoLineCard({ line, idx, onChange, onRemove, canRemove, theme, itemCatal
 }
 
 // ── Summary footer bar ────────────────────────────────────────────────────────
-function SummaryBar({ lines, currency, overallDiscount, onOverallDiscount }) {
+const discountFieldSx = (theme) => ({
+  width: 118,
+  '& .MuiOutlinedInput-root': {
+    color: '#f8fafc',
+    bgcolor: alpha('#fff', 0.06),
+    '& fieldset': { borderColor: alpha('#fff', 0.18) },
+    '&:hover fieldset': { borderColor: alpha('#fff', 0.35) },
+    '&.Mui-focused fieldset': { borderColor: theme.palette.primary.light },
+  },
+  '& input': { textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' },
+});
+
+function SummaryBar({ lines, currency, overallDiscount, overallDiscountAmount, onOverallDiscount, onOverallDiscountAmount }) {
   const theme = useTheme();
   const totalQty = lines.reduce((s, l) => s + lineQty(l), 0);
   const subtotal = lines.reduce((s, l) => s + (lineAmt(l) ?? 0), 0);
   const discPct = Math.min(Math.max(parseFloat(overallDiscount) || 0, 0), 100);
-  const discountAmt = subtotal * discPct / 100;
-  const totalAmt = subtotal - discountAmt;
+  const percentOff = subtotal * discPct / 100;
+  const afterPercent = subtotal - percentOff;
+  const flatOff = Math.min(Math.max(parseFloat(overallDiscountAmount) || 0, 0), afterPercent);
+  const totalAmt = afterPercent - flatOff;
+  const hasDiscount = discPct > 0 || flatOff > 0;
   const fabricCount = lines.filter(isFabricLine).length;
   const garmentCount = lines.length - fabricCount;
   const qtyUnit = fabricCount && !garmentCount ? 'mtrs' : (!fabricCount ? 'pcs' : 'qty');
@@ -1111,34 +1127,38 @@ function SummaryBar({ lines, currency, overallDiscount, onOverallDiscount }) {
       </Box>
 
       {/* Overall discount */}
-      <Box sx={{ flex: '2 1 220px', bgcolor: '#1e293b', p: 2.5, display: 'flex', flexDirection: 'column', alignItems: 'center', borderRight: `1px solid ${alpha('#fff', 0.06)}` }}>
+      <Box sx={{ flex: '3 1 280px', bgcolor: '#1e293b', p: 2.5, display: 'flex', flexDirection: 'column', alignItems: 'center', borderRight: `1px solid ${alpha('#fff', 0.06)}` }}>
         <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', mb: 0.75 }}>
           Overall Discount
         </Typography>
-        <TextField
-          size="small"
-          type="number"
-          value={overallDiscount}
-          onChange={(e) => onOverallDiscount(e.target.value)}
-          placeholder="0"
-          inputProps={{ min: 0, max: 100, step: '0.01' }}
-          InputProps={{
-            endAdornment: <InputAdornment position="end"><Typography sx={{ color: alpha('#fff', 0.55), fontSize: '0.85rem', fontWeight: 700 }}>%</Typography></InputAdornment>,
-          }}
-          sx={{
-            width: 120,
-            '& .MuiOutlinedInput-root': {
-              color: '#f8fafc',
-              bgcolor: alpha('#fff', 0.06),
-              '& fieldset': { borderColor: alpha('#fff', 0.18) },
-              '&:hover fieldset': { borderColor: alpha('#fff', 0.35) },
-              '&.Mui-focused fieldset': { borderColor: theme.palette.primary.light },
-            },
-            '& input': { textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' },
-          }}
-        />
-        <Typography sx={{ mt: 0.75, fontSize: '0.72rem', color: '#94a3b8', fontVariantNumeric: 'tabular-nums' }}>
-          {discPct > 0 ? `− ${fmtMoney(discountAmt, ccy)}` : 'After line discounts'}
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <TextField
+            size="small"
+            type="number"
+            value={overallDiscount}
+            onChange={(e) => onOverallDiscount(e.target.value)}
+            placeholder="0"
+            inputProps={{ min: 0, max: 100, step: '0.01' }}
+            InputProps={{
+              endAdornment: <InputAdornment position="end"><Typography sx={{ color: alpha('#fff', 0.55), fontSize: '0.85rem', fontWeight: 700 }}>%</Typography></InputAdornment>,
+            }}
+            sx={discountFieldSx(theme)}
+          />
+          <TextField
+            size="small"
+            type="number"
+            value={overallDiscountAmount}
+            onChange={(e) => onOverallDiscountAmount(e.target.value)}
+            placeholder="0.00"
+            inputProps={{ min: 0, step: '0.01' }}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><Typography sx={{ color: alpha('#fff', 0.55), fontSize: '0.75rem', fontWeight: 700 }}>{ccy}</Typography></InputAdornment>,
+            }}
+            sx={discountFieldSx(theme)}
+          />
+        </Box>
+        <Typography sx={{ mt: 0.75, fontSize: '0.72rem', color: '#94a3b8', fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
+          {hasDiscount ? `− ${fmtMoney(percentOff + flatOff, ccy)}` : 'Percent, amount, or both'}
         </Typography>
       </Box>
 
@@ -1147,7 +1167,7 @@ function SummaryBar({ lines, currency, overallDiscount, onOverallDiscount }) {
         <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', mb: 0.75 }}>
           Order Value
         </Typography>
-        {discPct > 0 && (
+        {hasDiscount && (
           <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8', textDecoration: 'line-through', fontVariantNumeric: 'tabular-nums', mb: 0.4 }}>
             {fmtMoney(subtotal, ccy)}
           </Typography>
@@ -1280,6 +1300,7 @@ export default function BuyerPOEditorPage() {
           port_of_loading: po.port_of_loading || '',
           port_of_discharge: po.port_of_discharge || '',
           overall_discount: po.overall_discount != null && po.overall_discount !== '' ? String(po.overall_discount) : '',
+          overall_discount_amount: po.overall_discount_amount != null && po.overall_discount_amount !== '' ? String(po.overall_discount_amount) : '',
           pi_ref:          po.pi_ref || '',
           pi:              po.pi || null,
           pi_stale:        Boolean(po.pi_stale),
@@ -1375,7 +1396,11 @@ export default function BuyerPOEditorPage() {
     if (lines.some((l) => !l.item_name.trim())) return alert('Every line needs an Item Name.');
     const overallDisc = formData.overall_discount === '' ? 0 : parseFloat(formData.overall_discount);
     if (Number.isNaN(overallDisc) || overallDisc < 0 || overallDisc > 100) {
-      return alert('Overall discount must be between 0 and 100.');
+      return alert('Overall discount percent must be between 0 and 100.');
+    }
+    const overallAmt = formData.overall_discount_amount === '' ? 0 : parseFloat(formData.overall_discount_amount);
+    if (Number.isNaN(overallAmt) || overallAmt < 0) {
+      return alert('Overall discount amount cannot be negative.');
     }
 
     const payload = {
@@ -1386,6 +1411,7 @@ export default function BuyerPOEditorPage() {
       ship_to_address:   formData.add_ship_to ? (formData.ship_to_address || '') : '',
       ex_factory_date:   formData.ex_factory_date || null,
       overall_discount:  formData.overall_discount !== '' ? parseFloat(formData.overall_discount) : null,
+      overall_discount_amount: formData.overall_discount_amount !== '' ? parseFloat(formData.overall_discount_amount) : null,
       lines: lines.map((l) => {
         const fabric = isFabricLine(l);
         return {
@@ -1929,7 +1955,9 @@ export default function BuyerPOEditorPage() {
             lines={lines}
             currency={formData.currency}
             overallDiscount={formData.overall_discount}
+            overallDiscountAmount={formData.overall_discount_amount}
             onOverallDiscount={(val) => setField('overall_discount', val)}
+            onOverallDiscountAmount={(val) => setField('overall_discount_amount', val)}
           />
         </Box>
       </Collapse>

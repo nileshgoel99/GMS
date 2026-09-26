@@ -113,7 +113,33 @@ def net_after_percent(amount, discount):
     return (gross * (Decimal('1') - disc / Decimal('100'))).quantize(Decimal('0.01'))
 
 
-def _rollup_header_from_lines(lines, overall_discount=None):
+def clean_money_discount(value):
+    """Return a non-negative money discount, or None when unset / zero."""
+    if value in (None, ''):
+        return None
+    try:
+        amt = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        raise serializers.ValidationError('Discount amount must be a number.')
+    if amt < 0:
+        raise serializers.ValidationError('Discount amount cannot be negative.')
+    if amt == 0:
+        return None
+    return amt.quantize(Decimal('0.01'))
+
+
+def net_after_discounts(amount, percent=None, flat=None):
+    """Apply a percent discount, then a fixed amount, never below zero."""
+    if amount is None:
+        return None
+    net = net_after_percent(amount, percent)
+    flat_amt = clean_money_discount(flat) if flat not in (None, '') else None
+    if not flat_amt:
+        return net
+    return max(Decimal('0.00'), (net - flat_amt).quantize(Decimal('0.01')))
+
+
+def _rollup_header_from_lines(lines, overall_discount=None, overall_discount_amount=None):
     total_qty = sum(int(r.get('quantity_pcs', 0) or 0) for r in lines)
     total_amount = Decimal('0')
     for row in lines:
@@ -132,7 +158,7 @@ def _rollup_header_from_lines(lines, overall_discount=None):
     return {
         'quantity': total_qty,
         'garment_type': garment_type,
-        'total_amount': net_after_percent(total_amount, overall_discount) if total_amount else None,
+        'total_amount': net_after_discounts(total_amount, overall_discount, overall_discount_amount) if total_amount else None,
     }
 
 
@@ -150,7 +176,7 @@ def _sync_pi_totals(pi):
         if line.line_value_usd is not None:
             total_amount += Decimal(line.line_value_usd)
     pi.quantity = total_qty
-    pi.total_amount = net_after_percent(total_amount, pi.overall_discount) if total_amount else None
+    pi.total_amount = net_after_discounts(total_amount, pi.overall_discount, pi.overall_discount_amount) if total_amount else None
     pi.save(update_fields=['quantity', 'total_amount'])
     return pi
 
@@ -180,7 +206,11 @@ def update_pi_preserving_lines(pi, header_fields, lines_data):
         fields.update(_sync_client_fields_from_customer(cust))
 
     normalized = _normalize_lines_payload(lines_data or [])
-    fields.update(_rollup_header_from_lines(normalized, fields.get('overall_discount', pi.overall_discount)))
+    fields.update(_rollup_header_from_lines(
+        normalized,
+        fields.get('overall_discount', pi.overall_discount),
+        fields.get('overall_discount_amount', pi.overall_discount_amount),
+    ))
 
     for attr, value in fields.items():
         if attr == 'lines':
@@ -289,12 +319,19 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
     def validate_overall_discount(self, value):
         return clean_percent_discount(value)
 
+    def validate_overall_discount_amount(self, value):
+        return clean_money_discount(value)
+
     def create(self, validated_data):
         lines_data = validated_data.pop('lines')
         cust = validated_data.get('customer')
         validated_data.update(_sync_client_fields_from_customer(cust))
         normalized = _normalize_lines_payload(lines_data)
-        validated_data.update(_rollup_header_from_lines(normalized, validated_data.get('overall_discount')))
+        validated_data.update(_rollup_header_from_lines(
+            normalized,
+            validated_data.get('overall_discount'),
+            validated_data.get('overall_discount_amount'),
+        ))
         pi = ProformaInvoice.objects.create(**validated_data)
         for row in normalized:
             ProformaInvoiceLine.objects.create(
@@ -323,7 +360,8 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
         if lines_data is not None:
             normalized = _normalize_lines_payload(lines_data)
             discount = validated_data.get('overall_discount', instance.overall_discount)
-            validated_data.update(_rollup_header_from_lines(normalized, discount))
+            discount_amount = validated_data.get('overall_discount_amount', instance.overall_discount_amount)
+            validated_data.update(_rollup_header_from_lines(normalized, discount, discount_amount))
             instance.lines.all().delete()
             for row in normalized:
                 ProformaInvoiceLine.objects.create(
@@ -907,7 +945,7 @@ class BuyerPOListSerializer(serializers.ModelSerializer):
             'customer', 'customer_name',
             'ship_to_customer', 'ship_to_customer_name', 'ship_to_name', 'ship_to_address',
             'currency', 'status',
-            'ex_factory_date', 'total_qty', 'overall_discount', 'total_value', 'lines_count',
+            'ex_factory_date', 'total_qty', 'overall_discount', 'overall_discount_amount', 'total_value', 'lines_count',
             'po_document', 'pi_ref', 'pi_id', 'pi_stale', 'created_at',
         ]
 
@@ -938,7 +976,7 @@ class BuyerPOSerializer(serializers.ModelSerializer):
             'supplier_code', 'currency',
             'delivery_terms', 'payment_terms', 'delivery_method',
             'freight_terms', 'packaging_terms', 'ex_factory_date',
-            'total_qty', 'overall_discount', 'total_value', 'status', 'notes', 'pi',
+            'total_qty', 'overall_discount', 'overall_discount_amount', 'total_value', 'status', 'notes', 'pi',
             'po_document', 'pi_ref', 'indent_count',
             'inco_terms', 'port_of_loading', 'port_of_discharge',
             'lines', 'created_by', 'created_by_name', 'created_at', 'updated_at',
@@ -948,6 +986,9 @@ class BuyerPOSerializer(serializers.ModelSerializer):
 
     def validate_overall_discount(self, value):
         return clean_percent_discount(value)
+
+    def validate_overall_discount_amount(self, value):
+        return clean_money_discount(value)
 
     def get_customer_name(self, obj):
         return obj.customer.company_legal_name if obj.customer else None
@@ -1011,7 +1052,9 @@ class BuyerPOSerializer(serializers.ModelSerializer):
     def _update_totals(self, po):
         agg = po.lines.aggregate(total_qty=Sum('quantity'), total_value=Sum('line_amount'))
         po.total_qty = agg['total_qty'] or 0
-        po.total_value = net_after_percent(agg['total_value'] or 0, po.overall_discount)
+        po.total_value = net_after_discounts(
+            agg['total_value'] or 0, po.overall_discount, po.overall_discount_amount,
+        )
         po.save(update_fields=['total_qty', 'total_value'])
 
     def create(self, validated_data):
@@ -1032,7 +1075,7 @@ class BuyerPOSerializer(serializers.ModelSerializer):
         instance.save()
         if lines_data is not None:
             self._save_lines(instance, lines_data)
-        if lines_data is not None or 'overall_discount' in validated_data:
+        if lines_data is not None or 'overall_discount' in validated_data or 'overall_discount_amount' in validated_data:
             self._update_totals(instance)
         return instance
 

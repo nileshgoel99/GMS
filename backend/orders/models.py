@@ -40,6 +40,13 @@ class ProformaInvoice(models.Model):
         blank=True,
         help_text='Overall discount % applied after line values (0–100)',
     )
+    overall_discount_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Fixed overall discount amount, applied after the percent discount',
+    )
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
@@ -365,6 +372,13 @@ class BuyerPO(models.Model):
         null=True,
         blank=True,
         help_text='Overall discount % applied after line discounts (0–100)',
+    )
+    overall_discount_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Fixed overall discount amount, applied after the percent discount',
     )
     total_value = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
 

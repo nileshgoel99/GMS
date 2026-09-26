@@ -329,9 +329,12 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
     )
     payable = total_val
     disc = pi.overall_discount
+    flat = pi.overall_discount_amount
+    showed_discount = False
     if disc:
-        discount_amt = (total_val * Decimal(disc) / Decimal('100')).quantize(Decimal('0.01'))
-        payable = (total_val - discount_amt).quantize(Decimal('0.01'))
+        discount_amt = (payable * Decimal(disc) / Decimal('100')).quantize(Decimal('0.01'))
+        payable = (payable - discount_amt).quantize(Decimal('0.01'))
+        showed_discount = True
         table_data.append(
             [
                 '',
@@ -342,6 +345,21 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
                 Paragraph(f'<b>-{discount_amt:.2f}</b>', small),
             ]
         )
+    if flat:
+        flat_amt = min(Decimal(flat), payable).quantize(Decimal('0.01'))
+        payable = (payable - flat_amt).quantize(Decimal('0.01'))
+        showed_discount = True
+        table_data.append(
+            [
+                '',
+                '',
+                Paragraph('<b>LESS DISCOUNT AMOUNT</b>', small),
+                '',
+                '',
+                Paragraph(f'<b>-{flat_amt:.2f}</b>', small),
+            ]
+        )
+    if showed_discount:
         table_data.append(
             [
                 '',

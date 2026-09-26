@@ -323,11 +323,14 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                   <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4), mb: 0.3 }}>Total Qty</Typography>
                   <Typography sx={{ fontWeight: 900, fontSize: '1.25rem', color: '#f1f5f9', fontVariantNumeric: 'tabular-nums' }}>{fmtNum(po.total_qty)}</Typography>
                 </Box>
-                {Number(po.overall_discount) > 0 && (
+                {(Number(po.overall_discount) > 0 || Number(po.overall_discount_amount) > 0) && (
                   <Box sx={{ textAlign: 'right' }}>
                     <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4), mb: 0.3 }}>Overall Discount</Typography>
                     <Typography sx={{ fontWeight: 800, fontSize: '1.15rem', color: '#fbbf24', fontVariantNumeric: 'tabular-nums' }}>
-                      {Number(po.overall_discount)}%
+                      {[
+                        Number(po.overall_discount) > 0 ? `${Number(po.overall_discount)}%` : null,
+                        Number(po.overall_discount_amount) > 0 ? fmtMoney(po.overall_discount_amount, po.currency) : null,
+                      ].filter(Boolean).join(' + ')}
                     </Typography>
                   </Box>
                 )}
