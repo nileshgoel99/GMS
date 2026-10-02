@@ -697,6 +697,7 @@ const emptyForm = () => ({
   ship_to: '',
   pi: null,
   pi_number: '',
+  reference_pi_ids: [],
   buyer_po: null,
   reference_number: '',
   order_date: new Date().toISOString().split('T')[0],
@@ -1251,6 +1252,9 @@ export default function SupplierPOEditorPage() {
             ship_to: d.ship_to || resolveShipTo(co),
             pi: d.pi,
             pi_number: d.pi_number || '',
+            reference_pi_ids: (d.reference_pis_detail || []).map((p) => p.id).length
+              ? (d.reference_pis_detail || []).map((p) => p.id)
+              : (d.pi ? [d.pi] : []),
             buyer_po: d.buyer_po,
             reference_number: d.reference_number || '',
             order_date: d.order_date,
@@ -1381,75 +1385,45 @@ export default function SupplierPOEditorPage() {
     return buyerPoList.find((b) => b.pi_id === pi.id) || null;
   };
 
-  const resolvePiForBuyerPo = (buyerPo) => {
-    if (!buyerPo) return null;
-    if (buyerPo.pi_id) {
-      return piList.find((p) => p.id === buyerPo.pi_id) || null;
-    }
-    return piList.find((p) => p.linked_po_id === buyerPo.id) || null;
-  };
+  const selectedPis = useMemo(
+    () => form.reference_pi_ids
+      .map((id) => piList.find((p) => p.id === id))
+      .filter(Boolean),
+    [form.reference_pi_ids, piList],
+  );
 
-  /** Pick existing PI (optional FK) or type a free-text PI number (no new PI created). */
-  const setPiReference = (value) => {
-    if (!value) {
-      setForm((f) => ({ ...f, pi: null, pi_number: '' }));
-      return;
-    }
-    if (typeof value === 'string') {
-      const typed = value.trim();
-      const match = piList.find(
-        (p) => String(p.pi_number || '').trim().toLowerCase() === typed.toLowerCase(),
-      );
-      if (match) {
-        setPiReference(match);
-        return;
+  const linkedBuyerPos = useMemo(() => {
+    const seen = new Set();
+    const linked = [];
+    selectedPis.forEach((pi) => {
+      const match = resolveBuyerPoForPi(pi);
+      if (match && !seen.has(match.id)) {
+        seen.add(match.id);
+        linked.push(match);
       }
-      setForm((f) => ({ ...f, pi: null, pi_number: typed }));
-      return;
-    }
-    const linked = resolveBuyerPoForPi(value);
+    });
+    return linked;
+  }, [selectedPis, buyerPoList]);
+
+  const setReferencePis = (pis) => {
+    const list = pis || [];
+    const ids = list.map((p) => p.id);
+    const buyerPos = [];
+    const seen = new Set();
+    list.forEach((pi) => {
+      const match = resolveBuyerPoForPi(pi);
+      if (match && !seen.has(match.id)) {
+        seen.add(match.id);
+        buyerPos.push(match);
+      }
+    });
     setForm((f) => ({
       ...f,
-      pi: value.id,
-      pi_number: value.pi_number || '',
-      ...(linked
-        ? {
-            buyer_po: linked.id,
-            reference_number: f.reference_number || linked.po_number || '',
-          }
-        : {}),
-    }));
-  };
-
-  /** Pick existing Buyer PO (optional FK) or type a free-text PO number (no new Buyer PO created). */
-  const setBuyerPoReference = (value) => {
-    if (!value) {
-      setForm((f) => ({ ...f, buyer_po: null, reference_number: '' }));
-      return;
-    }
-    if (typeof value === 'string') {
-      const typed = value.trim();
-      const match = buyerPoList.find(
-        (b) => String(b.po_number || '').trim().toLowerCase() === typed.toLowerCase(),
-      );
-      if (match) {
-        setBuyerPoReference(match);
-        return;
-      }
-      setForm((f) => ({ ...f, buyer_po: null, reference_number: typed }));
-      return;
-    }
-    const linked = resolvePiForBuyerPo(value);
-    setForm((f) => ({
-      ...f,
-      buyer_po: value.id,
-      reference_number: value.po_number || '',
-      ...(linked
-        ? {
-            pi: linked.id,
-            pi_number: f.pi_number || linked.pi_number || '',
-          }
-        : {}),
+      reference_pi_ids: ids,
+      pi: ids[0] || null,
+      pi_number: list.map((p) => p.pi_number).filter(Boolean).join(', '),
+      buyer_po: buyerPos[0]?.id || null,
+      reference_number: buyerPos.map((b) => b.po_number).filter(Boolean).join(', '),
     }));
   };
 
@@ -1694,8 +1668,11 @@ export default function SupplierPOEditorPage() {
         po_number: poNumber,
         tax_mode: effectiveTaxMode,
         supplier: form.supplier,
-        pi: form.pi,
-        buyer_po: form.buyer_po,
+        pi: form.reference_pi_ids[0] || form.pi || null,
+        buyer_po: linkedBuyerPos[0]?.id || null,
+        reference_pi_ids: form.reference_pi_ids,
+        pi_number: selectedPis.map((p) => p.pi_number).filter(Boolean).join(', '),
+        reference_number: linkedBuyerPos.map((b) => b.po_number).filter(Boolean).join(', '),
         cgst_percent: parseFloat(form.cgst_percent) || 0,
         sgst_percent: parseFloat(form.sgst_percent) || 0,
         igst_percent: parseFloat(form.igst_percent) || 0,
@@ -1880,75 +1857,44 @@ export default function SupplierPOEditorPage() {
           </Grid>
         </Grid>
 
-        {/* References — free text numbers; selecting a saved PI/Buyer PO only optionally links */}
+        {/* References — user picks PIs; buyer POs follow automatically */}
         <OrderSectionTitle>References</OrderSectionTitle>
         <Grid container spacing={1.5} sx={{ mb: 2 }}>
           <Grid item xs={12} sm={6} md={6}>
             <Autocomplete
-              freeSolo
+              multiple
               options={piList}
-              getOptionLabel={(o) => {
-                if (typeof o === 'string') return o;
-                if (!o) return '';
-                return o.client_name
-                  ? `${o.pi_number} — ${o.client_name}`
-                  : (o.pi_number || '');
-              }}
-              value={
-                form.pi
-                  ? (piList.find((p) => p.id === form.pi) || form.pi_number || null)
-                  : (form.pi_number || null)
-              }
-              onChange={(_, v) => setPiReference(v)}
-              onInputChange={(_, value, reason) => {
-                if (reason === 'input') {
-                  setForm((f) => ({ ...f, pi: null, pi_number: value }));
-                }
-              }}
+              disableCloseOnSelect
+              getOptionLabel={(o) => (
+                o?.client_name ? `${o.pi_number} — ${o.client_name}` : (o?.pi_number || '')
+              )}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              value={selectedPis}
+              onChange={(_, v) => setReferencePis(v)}
               renderInput={(params) => (
                 <TextField
                   {...params}
                   size="small"
                   fullWidth
                   label="Reference PI"
-                  helperText="Type any PI number, or pick an existing one"
+                  helperText="Select one or more PIs"
                   sx={sxInput}
                 />
               )}
             />
           </Grid>
           <Grid item xs={12} sm={6} md={6}>
-            <Autocomplete
-              freeSolo
-              options={buyerPoList}
-              getOptionLabel={(o) => {
-                if (typeof o === 'string') return o;
-                if (!o) return '';
-                return o.buyer_name
-                  ? `${o.po_number} — ${o.buyer_name}`
-                  : (o.po_number || '');
-              }}
-              value={
-                form.buyer_po
-                  ? (buyerPoList.find((b) => b.id === form.buyer_po) || form.reference_number || null)
-                  : (form.reference_number || null)
-              }
-              onChange={(_, v) => setBuyerPoReference(v)}
-              onInputChange={(_, value, reason) => {
-                if (reason === 'input') {
-                  setForm((f) => ({ ...f, buyer_po: null, reference_number: value }));
-                }
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  fullWidth
-                  label="Reference Buyer PO"
-                  helperText="Type any Buyer PO number, or pick an existing one"
-                  sx={sxInput}
-                />
-              )}
+            <TextField
+              fullWidth
+              size="small"
+              label="Buyer PO"
+              value={linkedBuyerPos.map((b) => (
+                b.buyer_name ? `${b.po_number} — ${b.buyer_name}` : b.po_number
+              )).join(', ')}
+              placeholder="Filled from the selected PI"
+              InputProps={{ readOnly: true }}
+              helperText="Filled automatically from the selected PI"
+              sx={sxInput}
             />
           </Grid>
         </Grid>

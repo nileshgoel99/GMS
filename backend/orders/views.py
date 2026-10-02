@@ -84,6 +84,67 @@ class TrimMasterViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'category']
     ordering_fields = ['category', 'name', 'created_at']
 
+    @action(detail=True, methods=['get'], url_path='order-history')
+    def order_history(self, request, pk=None):
+        """Supplier POs that include this trim, with received and pending qty."""
+        from procurement.models import PurchaseOrderItem
+
+        trim = self.get_object()
+        lines = (
+            PurchaseOrderItem.objects
+            .filter(trim=trim)
+            .select_related('po', 'po__supplier')
+            .prefetch_related('po__reference_pis', 'po__reference_buyer_pos')
+            .order_by('-po__order_date', '-po__id', 'serial_no')
+        )
+        orders = []
+        for line in lines:
+            po = line.po
+            ordered = line.quantity_ordered or Decimal('0')
+            received = line.quantity_received or Decimal('0')
+            pending = ordered - received
+            if pending < 0:
+                pending = Decimal('0')
+            supplier = po.supplier
+            pi_numbers = [p.pi_number for p in po.reference_pis.all() if p.pi_number]
+            if not pi_numbers and po.pi_number:
+                pi_numbers = [po.pi_number]
+            buyer_pos = [
+                {'id': b.id, 'po_number': b.po_number, 'buyer_name': b.buyer_name}
+                for b in po.reference_buyer_pos.all()
+            ]
+            if not buyer_pos and po.buyer_po_id:
+                buyer_pos = [{
+                    'id': po.buyer_po_id,
+                    'po_number': po.reference_number or '',
+                    'buyer_name': '',
+                }]
+            orders.append({
+                'line_id': line.id,
+                'particulars': line.particulars or trim.name,
+                'unit': line.unit or 'PCS',
+                'quantity_ordered': str(ordered),
+                'quantity_received': str(received),
+                'quantity_pending': str(pending),
+                'po_id': po.id,
+                'po_number': po.po_number,
+                'order_date': po.order_date.isoformat() if po.order_date else None,
+                'status': po.status,
+                'expected_delivery_date': po.expected_delivery_date.isoformat() if po.expected_delivery_date else None,
+                'supplier_id': supplier.id if supplier else None,
+                'supplier_name': po.vendor_name or (supplier.name if supplier else ''),
+                'supplier_phone': po.vendor_phone or (supplier.phone if supplier else ''),
+                'supplier_email': po.vendor_email or (supplier.email if supplier else ''),
+                'supplier_address': po.vendor_address or '',
+                'pi_numbers': pi_numbers,
+                'buyer_pos': buyer_pos,
+            })
+        return Response({
+            'trim_id': trim.id,
+            'trim_name': trim.name,
+            'orders': orders,
+        })
+
 
 class IndentViewSet(viewsets.ModelViewSet):
     queryset = Indent.objects.all().select_related('pi', 'created_by').prefetch_related(
@@ -102,6 +163,104 @@ class IndentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['get'], url_path='trim-orders')
+    def trim_orders(self, request, pk=None):
+        """Supplier orders for this indent's trims, limited to its PI."""
+        from django.db.models import Q
+        from procurement.models import PurchaseOrderItem
+
+        indent = self.get_object()
+        trim_lines = list(indent.trim_lines.all())
+        pi_id = indent.pi_id
+        if not pi_id or not trim_lines:
+            return Response({'lines': {}})
+
+        trim_ids = [line.trim_id for line in trim_lines if line.trim_id]
+        names = [line.trim_name.strip() for line in trim_lines if (line.trim_name or '').strip()]
+        po_lines = (
+            PurchaseOrderItem.objects
+            .filter(Q(po__pi_id=pi_id) | Q(po__reference_pis__id=pi_id))
+            .filter(Q(trim_id__in=trim_ids) | Q(trim__name__in=names) | Q(particulars__in=names))
+            .select_related('po', 'po__supplier', 'trim')
+            .prefetch_related('po__reference_pis', 'po__reference_buyer_pos')
+            .distinct()
+            .order_by('-po__order_date', '-po__id')
+        )
+
+        def pack(line):
+            po = line.po
+            ordered = line.quantity_ordered or Decimal('0')
+            received = line.quantity_received or Decimal('0')
+            pending = max(Decimal('0'), ordered - received)
+            supplier = po.supplier
+            pi_numbers = [p.pi_number for p in po.reference_pis.all() if p.pi_number]
+            if not pi_numbers and po.pi_number:
+                pi_numbers = [po.pi_number]
+            buyer_pos = [
+                {'id': b.id, 'po_number': b.po_number, 'buyer_name': b.buyer_name}
+                for b in po.reference_buyer_pos.all()
+            ]
+            return {
+                'line_id': line.id,
+                'particulars': line.particulars or (line.trim.name if line.trim_id else ''),
+                'unit': line.unit or 'PCS',
+                'quantity_ordered': str(ordered),
+                'quantity_received': str(received),
+                'quantity_pending': str(pending),
+                'po_id': po.id,
+                'po_number': po.po_number,
+                'order_date': po.order_date.isoformat() if po.order_date else None,
+                'status': po.status,
+                'supplier_name': po.vendor_name or (supplier.name if supplier else ''),
+                'supplier_phone': po.vendor_phone or (supplier.phone if supplier else ''),
+                'supplier_email': po.vendor_email or (supplier.email if supplier else ''),
+                'supplier_address': po.vendor_address or '',
+                'pi_numbers': pi_numbers,
+                'buyer_pos': buyer_pos,
+                'trim_id': line.trim_id,
+                'trim_name': line.trim.name if line.trim_id else '',
+            }
+
+        packed = [pack(line) for line in po_lines]
+        by_trim = {}
+        by_name = {}
+        for row in packed:
+            if row['trim_id']:
+                by_trim.setdefault(row['trim_id'], []).append(row)
+            key = (row['trim_name'] or row['particulars'] or '').strip().lower()
+            if key:
+                by_name.setdefault(key, []).append(row)
+
+        def summary(orders):
+            if not orders:
+                return 'NOT_ORDERED'
+            received = sum(Decimal(o['quantity_received']) for o in orders)
+            pending = sum(Decimal(o['quantity_pending']) for o in orders)
+            if received <= 0:
+                return 'ORDERED'
+            if pending <= 0:
+                return 'RECEIVED'
+            return 'PARTIAL'
+
+        lines_out = {}
+        for line in trim_lines:
+            if line.trim_id and line.trim_id in by_trim:
+                orders = by_trim[line.trim_id]
+            else:
+                orders = by_name.get((line.trim_name or '').strip().lower(), [])
+            seen = set()
+            unique = []
+            for order in orders:
+                if order['line_id'] in seen:
+                    continue
+                seen.add(order['line_id'])
+                unique.append(order)
+            lines_out[str(line.id)] = {
+                'status': summary(unique),
+                'orders': unique,
+            }
+        return Response({'lines': lines_out})
 
     @action(detail=False, methods=['get'], url_path='next-number')
     def next_number(self, request):

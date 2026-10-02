@@ -74,11 +74,35 @@ def _sync_reference_strings(validated_data, instance=None):
 
 
 def _display_pi_number(obj):
+    numbers = [p.pi_number for p in obj.reference_pis.all() if p.pi_number]
+    if numbers:
+        return ', '.join(numbers)
     return (obj.pi_number or '').strip() or (obj.pi.pi_number if obj.pi_id else '')
 
 
 def _display_buyer_po_number(obj):
+    numbers = [b.po_number for b in obj.reference_buyer_pos.all() if b.po_number]
+    if numbers:
+        return ', '.join(numbers)
     return (obj.reference_number or '').strip() or (obj.buyer_po.po_number if obj.buyer_po_id else '')
+
+
+def _apply_reference_pis(po, pi_ids):
+    """Link selected PIs and the buyer POs that belong to them."""
+    from orders.models import BuyerPO, ProformaInvoice
+
+    by_id = {p.id: p for p in ProformaInvoice.objects.filter(pk__in=pi_ids or [])}
+    ordered = [by_id[i] for i in (pi_ids or []) if i in by_id]
+    po.reference_pis.set(ordered)
+    buyer_pos = list(
+        BuyerPO.objects.filter(pi_id__in=[p.id for p in ordered]).order_by('po_number', 'id')
+    )
+    po.reference_buyer_pos.set(buyer_pos)
+    po.pi = ordered[0] if ordered else None
+    po.buyer_po = buyer_pos[0] if buyer_pos else None
+    po.pi_number = ', '.join(p.pi_number for p in ordered if p.pi_number)
+    po.reference_number = ', '.join(b.po_number for b in buyer_pos if b.po_number)
+    po.save(update_fields=['pi', 'buyer_po', 'pi_number', 'reference_number', 'updated_at'])
 
 
 class PurchaseOrderItemSerializer(serializers.ModelSerializer):
@@ -103,6 +127,11 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     buyer_po_number = serializers.SerializerMethodField()
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     payment_due_date = serializers.SerializerMethodField()
+    reference_pi_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, write_only=True,
+    )
+    reference_pis_detail = serializers.SerializerMethodField()
+    reference_buyer_pos_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = PurchaseOrder
@@ -110,10 +139,23 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
         read_only_fields = (
             'created_by', 'created_at', 'updated_at',
             'subtotal', 'cgst_amount', 'sgst_amount', 'igst_amount', 'round_off', 'total_amount',
+            'reference_pis', 'reference_buyer_pos', 'buyer_po',
         )
 
     def get_buyer_po_number(self, obj):
         return _display_buyer_po_number(obj)
+
+    def get_reference_pis_detail(self, obj):
+        return [
+            {'id': p.id, 'pi_number': p.pi_number, 'client_name': p.client_name}
+            for p in obj.reference_pis.all()
+        ]
+
+    def get_reference_buyer_pos_detail(self, obj):
+        return [
+            {'id': b.id, 'po_number': b.po_number, 'buyer_name': b.buyer_name}
+            for b in obj.reference_buyer_pos.all()
+        ]
 
     def get_payment_due_date(self, obj):
         due = compute_payment_due_date(obj)
@@ -127,6 +169,10 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
+        pi_ids = validated_data.pop('reference_pi_ids', None)
+        if pi_ids is not None:
+            validated_data.pop('buyer_po', None)
+            validated_data.pop('pi', None)
         validated_data = _sync_supplier_fields(validated_data)
         validated_data = _sync_reference_strings(validated_data)
         if not (validated_data.get('po_number') or '').strip():
@@ -139,11 +185,17 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             if not item_data.get('serial_no'):
                 item_data['serial_no'] = idx
             PurchaseOrderItem.objects.create(po=po, **item_data)
+        if pi_ids is not None:
+            _apply_reference_pis(po, pi_ids)
         po.recalculate_totals()
         return po
 
     def update(self, instance, validated_data):
         items_data = validated_data.pop('items', None)
+        pi_ids = validated_data.pop('reference_pi_ids', None)
+        if pi_ids is not None:
+            validated_data.pop('buyer_po', None)
+            validated_data.pop('pi', None)
         validated_data = _sync_supplier_fields(validated_data)
         validated_data = _sync_reference_strings(validated_data, instance)
 
@@ -162,6 +214,8 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
                     item_data['serial_no'] = idx
                 PurchaseOrderItem.objects.create(po=instance, **item_data)
 
+        if pi_ids is not None:
+            _apply_reference_pis(instance, pi_ids)
         instance.recalculate_totals()
         return instance
 

@@ -32,11 +32,24 @@ class PurchaseOrder(models.Model):
     pi = models.ForeignKey(
         ProformaInvoice, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='purchase_orders',
+        help_text='First selected reference PI (kept for older screens)',
+    )
+    reference_pis = models.ManyToManyField(
+        ProformaInvoice,
+        blank=True,
+        related_name='referenced_supplier_pos',
+        help_text='All proforma invoices this supplier PO is raised against',
     )
     buyer_po = models.ForeignKey(
         BuyerPO, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='supplier_purchase_orders',
-        help_text='Buyer PO this supplier order references (optional link)',
+        help_text='First buyer PO linked from the selected PIs',
+    )
+    reference_buyer_pos = models.ManyToManyField(
+        BuyerPO,
+        blank=True,
+        related_name='referenced_supplier_pos',
+        help_text='Buyer POs auto-linked from the selected reference PIs',
     )
     pi_number = models.CharField(
         max_length=80, blank=True, default='',

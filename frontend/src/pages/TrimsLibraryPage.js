@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Button, Typography, TextField, IconButton, Chip, Tooltip,
 } from '@mui/material';
-import { Add, Edit, Delete, LibraryBooks } from '@mui/icons-material';
+import { Add, Edit, Delete, LibraryBooks, History } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { DataGrid } from '@mui/x-data-grid';
 import PageHeader from '../components/PageHeader';
@@ -17,6 +17,7 @@ import {
   sortIndentTrimLines,
 } from '../components/trims/trimConstants';
 import AddTrimModal from '../components/trims/AddTrimModal';
+import TrimOrderHistoryModal from '../components/trims/TrimOrderHistoryModal';
 
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 
@@ -25,6 +26,7 @@ export default function TrimsLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [historyTrim, setHistoryTrim] = useState(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const initialLoadDone = useRef(false);
@@ -220,9 +222,14 @@ export default function TrimsLibraryPage() {
       renderCell: (p) => cell('center', <Chip label={p.value} size="small" variant="outlined" sx={{ height: 28, fontSize: '0.72rem', fontWeight: 750 }} />),
     },
     {
-      field: 'actions', headerName: 'Actions', width: 120, sortable: false, align: 'center', headerAlign: 'center',
+      field: 'actions', headerName: 'Actions', width: 156, sortable: false, align: 'center', headerAlign: 'center',
       renderCell: (p) => cell('center',
         <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title="Order history">
+            <IconButton size="small" onClick={() => setHistoryTrim(p.row)} sx={{ color: '#0f766e' }}>
+              <History fontSize="small" />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Edit trim"><IconButton size="small" color="primary" onClick={() => openEdit(p.row)}><Edit fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Delete"><IconButton size="small" color="error" onClick={() => handleDelete(p.row.id)}><Delete fontSize="small" /></IconButton></Tooltip>
         </Box>
@@ -297,6 +304,11 @@ export default function TrimsLibraryPage() {
         editing={editing}
         onClose={closeModal}
         onSaved={handleSaved}
+      />
+      <TrimOrderHistoryModal
+        open={Boolean(historyTrim)}
+        trim={historyTrim}
+        onClose={() => setHistoryTrim(null)}
       />
     </Box>
   );

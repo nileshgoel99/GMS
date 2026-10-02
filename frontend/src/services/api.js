@@ -142,6 +142,7 @@ export const ordersAPI = {
 
   // Trims Library
   getTrimsMaster: (params) => api.get('/orders/trims-master/', { params }),
+  getTrimOrderHistory: (id) => api.get(`/orders/trims-master/${id}/order-history/`),
   createTrim: (data) => api.post('/orders/trims-master/', data),
   updateTrim: (id, data) => api.patch(`/orders/trims-master/${id}/`, data),
   deleteTrim: (id) => api.delete(`/orders/trims-master/${id}/`),
@@ -149,6 +150,7 @@ export const ordersAPI = {
   // Indents
   getIndents: (params) => api.get('/orders/indents/', { params }),
   getIndent: (id) => api.get(`/orders/indents/${id}/`),
+  getIndentTrimOrders: (id) => api.get(`/orders/indents/${id}/trim-orders/`),
   createIndent: (data) => api.post('/orders/indents/', data),
   updateIndent: (id, data) => api.patch(`/orders/indents/${id}/`, data),
   deleteIndent: (id) => api.delete(`/orders/indents/${id}/`),

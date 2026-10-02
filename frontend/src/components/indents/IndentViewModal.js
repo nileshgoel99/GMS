@@ -10,6 +10,7 @@ import { ordersAPI } from '../../services/api';
 import { slate } from '../../theme/appTheme';
 import { formatDateDisplay } from '../../utils/formatDate';
 import { formatTrimVariantDisplay, sortIndentTrimLines } from '../trims/trimConstants';
+import TrimOrderHistoryModal from '../trims/TrimOrderHistoryModal';
 
 const STATUS_COLOR = { DRAFT: 'default', CONFIRMED: 'success' };
 
@@ -80,6 +81,8 @@ export default function IndentViewModal({ open, indentId, onClose }) {
   const [loading, setLoading] = useState(false);
   const [indent, setIndent] = useState(null);
   const [trimsMap, setTrimsMap] = useState({});
+  const [trimOrders, setTrimOrders] = useState({});
+  const [history, setHistory] = useState(null);
 
   useEffect(() => {
     if (!open || !indentId) {
@@ -92,6 +95,12 @@ export default function IndentViewModal({ open, indentId, onClose }) {
         const indentRes = await ordersAPI.getIndent(indentId);
         const data = indentRes.data;
         setIndent(data);
+        try {
+          const ordersRes = await ordersAPI.getIndentTrimOrders(indentId);
+          setTrimOrders(ordersRes.data?.lines || {});
+        } catch {
+          setTrimOrders({});
+        }
         const trims = [...(data.linked_trims || [])];
         try {
           const trimsRes = await ordersAPI.getIndentTrimsLibrary();
@@ -269,7 +278,8 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                         { h: 'Cons./pc', a: 'left', w: '10%' },
                         { h: 'Unit', a: 'left', w: '8%' },
                         { h: 'Total', a: 'left', w: '12%' },
-                        { h: 'Tot. Unit', a: 'left', w: '10%' },
+                        { h: 'Tot. Unit', a: 'left', w: '8%' },
+                        { h: 'Order status', a: 'left', w: '12%' },
                       ].map((col) => (
                         <TableCell key={col.h} sx={{ ...viewHeadSx, textAlign: col.a, width: col.w }}>{col.h}</TableCell>
                       ))}
@@ -283,7 +293,7 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                       if (!trimRows.length) {
                         return (
                           <TableRow>
-                            <TableCell colSpan={7} sx={{ ...viewCellSx('left'), color: 'text.disabled' }}>No trim rows</TableCell>
+                            <TableCell colSpan={8} sx={{ ...viewCellSx('left'), color: 'text.disabled' }}>No trim rows</TableCell>
                           </TableRow>
                         );
                       }
@@ -328,6 +338,15 @@ export default function IndentViewModal({ open, indentId, onClose }) {
                               <TableCell sx={{ ...viewCellSx('left'), fontWeight: 600 }}>{val(row.total_unit || row.unit)}</TableCell>
                             </>
                           )}
+                          <TableCell sx={viewCellSx('left')}>
+                            <OrderStatusCell
+                              info={trimOrders[String(row.id)]}
+                              onOpen={() => setHistory({
+                                name: row.trim_name,
+                                orders: trimOrders[String(row.id)]?.orders || [],
+                              })}
+                            />
+                          </TableCell>
                         </TableRow>
                       ));
                     })()}
@@ -349,6 +368,36 @@ export default function IndentViewModal({ open, indentId, onClose }) {
       <DialogActions sx={{ px: 2.5, py: 2 }}>
         <Button onClick={onClose} sx={{ fontWeight: 700, textTransform: 'none' }}>Close</Button>
       </DialogActions>
+      <TrimOrderHistoryModal
+        open={Boolean(history)}
+        trim={history ? { name: history.name } : null}
+        orders={history?.orders || []}
+        onClose={() => setHistory(null)}
+      />
     </Dialog>
+  );
+}
+
+const ORDER_STATUS = {
+  NOT_ORDERED: { label: 'Not ordered', color: 'default' },
+  ORDERED: { label: 'Ordered', color: 'info' },
+  PARTIAL: { label: 'Part arrived', color: 'warning' },
+  RECEIVED: { label: 'Received', color: 'success' },
+};
+
+function OrderStatusCell({ info, onOpen }) {
+  const status = info?.status || 'NOT_ORDERED';
+  const meta = ORDER_STATUS[status] || ORDER_STATUS.NOT_ORDERED;
+  if (status === 'NOT_ORDERED') {
+    return <Chip size="small" label={meta.label} sx={{ height: 22, fontWeight: 700 }} />;
+  }
+  return (
+    <Chip
+      size="small"
+      label={meta.label}
+      color={meta.color}
+      onClick={onOpen}
+      sx={{ height: 22, fontWeight: 700, cursor: 'pointer' }}
+    />
   );
 }

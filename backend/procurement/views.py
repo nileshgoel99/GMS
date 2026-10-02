@@ -39,7 +39,9 @@ def _pos_with_pending_receipt():
 
 
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
-    queryset = PurchaseOrder.objects.all().select_related('pi', 'created_by').prefetch_related('items')
+    queryset = PurchaseOrder.objects.all().select_related(
+        'pi', 'buyer_po', 'created_by',
+    ).prefetch_related('items', 'reference_pis', 'reference_buyer_pos')
     serializer_class = PurchaseOrderSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'vendor_name', 'order_date', 'pi']
