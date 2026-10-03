@@ -276,7 +276,8 @@ const buildPiTrimDisplay = (line, trimMaster) => {
 const formatPiTrimOptionLabel = (line, trimMaster) => {
   const name = line?.trim_name || trimMaster?.name || 'Trim';
   const props = formatPiTrimProperties(line, trimMaster);
-  return props ? `${name} — ${props}` : name;
+  const pi = line?._piNumber ? `PI ${line._piNumber}` : '';
+  return [props ? `${name} — ${props}` : name, pi].filter(Boolean).join(' · ');
 };
 
 function PiTrimOptionContent({ line, trimMaster }) {
@@ -298,9 +299,9 @@ function PiTrimOptionContent({ line, trimMaster }) {
           {display.consumption}
         </Typography>
       )}
-      {line._indentNumber && (
+      {(line._piNumber || line._indentNumber) && (
         <Typography sx={{ fontSize: '0.62rem', color: slate[400], mt: 0.35 }}>
-          {line._indentNumber}
+          {[line._piNumber ? `PI ${line._piNumber}` : '', line._indentNumber].filter(Boolean).join(' · ')}
         </Typography>
       )}
     </Box>
@@ -349,7 +350,8 @@ const buildPiFabricDisplay = (line) => {
 const formatPiFabricOptionLabel = (line) => {
   const name = line?.material || 'Fabric';
   const props = formatPiFabricProperties(line);
-  return props ? `${name} — ${props}` : name;
+  const pi = line?._piNumber ? `PI ${line._piNumber}` : '';
+  return [props ? `${name} — ${props}` : name, pi].filter(Boolean).join(' · ');
 };
 
 function PiFabricOptionContent({ line }) {
@@ -371,9 +373,9 @@ function PiFabricOptionContent({ line }) {
           {display.consumption}
         </Typography>
       )}
-      {line._indentNumber && (
+      {(line._piNumber || line._indentNumber) && (
         <Typography sx={{ fontSize: '0.62rem', color: slate[400], mt: 0.35 }}>
-          {line._indentNumber}
+          {[line._piNumber ? `PI ${line._piNumber}` : '', line._indentNumber].filter(Boolean).join(' · ')}
         </Typography>
       )}
     </Box>
@@ -954,6 +956,7 @@ export default function SupplierPOEditorPage() {
   const [form, setForm] = useState(emptyForm());
   const [suppliers, setSuppliers] = useState([]);
   const [trims, setTrims] = useState([]);
+  const piLoadSeq = useRef(0);
   const [piList, setPiList] = useState([]);
   const [buyerPoList, setBuyerPoList] = useState([]);
   const [company, setCompany] = useState(null);
@@ -1015,76 +1018,86 @@ export default function SupplierPOEditorPage() {
     return m;
   }, [trims]);
 
-  const loadPiTrims = useCallback(async (piId) => {
-    if (!piId) {
+  const loadPiTrims = useCallback(async (piIds) => {
+    const ids = [...new Set((piIds || []).filter(Boolean))];
+    const requestId = ++piLoadSeq.current;
+    if (!ids.length) {
       setPiTrimOptions([]);
       setPiTotalPcs(0);
       return;
     }
     setPiTrimsLoading(true);
     try {
-      const [indentsRes, piRes] = await Promise.all([
-        ordersAPI.getIndents({ pi: piId }),
-        ordersAPI.getById(piId),
-      ]);
-      const indents = asList(indentsRes.data);
-      const piLines = piRes.data?.lines || [];
-      const totalPcs = piLines.reduce((s, l) => s + (Number(l.quantity_pcs) || 0), 0);
-      setPiTotalPcs(totalPcs);
-
-      if (!indents.length) {
-        setPiTrimOptions([]);
-        return;
-      }
-
-      const detailRes = await Promise.all(indents.map((ind) => ordersAPI.getIndent(ind.id)));
       const trimMasterById = {};
       trims.forEach((t) => { trimMasterById[t.id] = t; });
 
-      // Trim and fabric lines are collected into separate passes (rather than interleaved
-      // per-indent) so each kind stays contiguous in the options list — required for the
-      // Autocomplete's groupBy to render "From PI indent — Trim" / "— Fabric" as two
-      // distinct sections instead of repeating headers.
+      const perPi = await Promise.all(ids.map(async (piId) => {
+        const [indentsRes, piRes] = await Promise.all([
+          ordersAPI.getIndents({ pi: piId, page_size: 200 }),
+          ordersAPI.getById(piId),
+        ]);
+        const indents = asList(indentsRes.data);
+        const piNumber = piRes.data?.pi_number || '';
+        const totalPcs = (piRes.data?.lines || []).reduce((s, l) => s + (Number(l.quantity_pcs) || 0), 0);
+        const detailRes = indents.length
+          ? await Promise.all(indents.map((ind) => ordersAPI.getIndent(ind.id)))
+          : [];
+        return { piId, piNumber, totalPcs, detailRes };
+      }));
+
+      if (requestId !== piLoadSeq.current) return;
+
+      // Trim and fabric lines are collected into separate passes so each kind stays
+      // contiguous — required for groupBy to render one "From PI indent" section each.
       const trimEntries = [];
       const fabricEntries = [];
-      detailRes.forEach((res) => {
-        const indent = res.data;
-        (indent.trim_lines || []).forEach((tl, idx) => {
-          const trimMaster = tl.trim ? trimMasterById[tl.trim] : null;
-          trimEntries.push({
-            ...tl,
-            _kind: 'trim',
-            _optionKey: `pi-trim-${indent.id}-${tl.id || idx}`,
-            _indentNumber: indent.indent_number,
-            _label: tl.trim_name || 'Trim',
-            _trimMaster: trimMaster,
-            _piTotalPcs: totalPcs,
+      let combinedPcs = 0;
+      perPi.forEach(({ piId, piNumber, totalPcs, detailRes }) => {
+        combinedPcs += totalPcs;
+        detailRes.forEach((res) => {
+          const indent = res.data;
+          (indent.trim_lines || []).forEach((tl, idx) => {
+            const trimMaster = tl.trim ? trimMasterById[tl.trim] : null;
+            trimEntries.push({
+              ...tl,
+              _kind: 'trim',
+              _optionKey: `pi-trim-${piId}-${indent.id}-${tl.id || idx}`,
+              _indentNumber: indent.indent_number,
+              _piNumber: piNumber,
+              _label: tl.trim_name || 'Trim',
+              _trimMaster: trimMaster,
+              _piTotalPcs: totalPcs,
+            });
           });
-        });
-        (indent.fabric_lines || []).forEach((fl, idx) => {
-          fabricEntries.push({
-            ...fl,
-            _kind: 'fabric',
-            _optionKey: `pi-fabric-${indent.id}-${fl.id || idx}`,
-            _indentNumber: indent.indent_number,
-            _label: fl.material || 'Fabric',
-            _piTotalPcs: totalPcs,
+          (indent.fabric_lines || []).forEach((fl, idx) => {
+            fabricEntries.push({
+              ...fl,
+              _kind: 'fabric',
+              _optionKey: `pi-fabric-${piId}-${indent.id}-${fl.id || idx}`,
+              _indentNumber: indent.indent_number,
+              _piNumber: piNumber,
+              _label: fl.material || 'Fabric',
+              _piTotalPcs: totalPcs,
+            });
           });
         });
       });
       setPiTrimOptions([...trimEntries, ...fabricEntries]);
+      setPiTotalPcs(combinedPcs);
     } catch (e) {
+      if (requestId !== piLoadSeq.current) return;
       console.error(e);
       setPiTrimOptions([]);
       setPiTotalPcs(0);
     } finally {
-      setPiTrimsLoading(false);
+      if (requestId === piLoadSeq.current) setPiTrimsLoading(false);
     }
   }, [trims]);
 
+  const referencePiKey = form.reference_pi_ids.join(',');
   useEffect(() => {
-    loadPiTrims(form.pi);
-  }, [form.pi, loadPiTrims]);
+    loadPiTrims(referencePiKey ? referencePiKey.split(',').map((id) => Number(id)) : []);
+  }, [referencePiKey, loadPiTrims]);
 
   // Mode filter applies only when raising a new PO. Editing keeps the full picker so
   // existing fabric/trim lines remain selectable.
