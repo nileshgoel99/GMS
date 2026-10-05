@@ -189,6 +189,15 @@ const mapPrefillTrimLine = (r) => {
   };
 };
 
+const itemNameKey = (name) => {
+  const text = String(name || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return text.split(' ').filter(Boolean).map((token) => {
+    if (token.length > 4 && token.endsWith('ES') && !token.endsWith('SS')) return token.slice(0, -2);
+    if (token.length > 3 && token.endsWith('S') && !token.endsWith('SS')) return token.slice(0, -1);
+    return token;
+  }).join(' ');
+};
+
 /** Trim-name Autocomplete filter — appends a "Create '<typed name>'" option when there's no match. */
 const filterTrimNameOptions = (options, { inputValue }) => {
   const input = inputValue.trim();
@@ -1653,7 +1662,7 @@ export default function IndentEditorPage() {
   const totalQty = useMemo(() => Object.values(colorQty).reduce((s, v) => s + v, 0), [colorQty]);
   const selectedItemName = useMemo(() => {
     const names = [...new Set(selectedPiLines.map((l) => (l.item_name || '').trim()).filter(Boolean))];
-    const keys = [...new Set(names.map((name) => name.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()))];
+    const keys = [...new Set(names.map(itemNameKey).filter(Boolean))];
     return keys.length === 1 ? names[0] : '';
   }, [selectedPiLines]);
 

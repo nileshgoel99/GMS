@@ -148,10 +148,20 @@ class TrimMasterViewSet(viewsets.ModelViewSet):
         })
 
 
+def _fold_plural_token(token):
+    """Treat VEST/VESTS and TROUSER/TROUSERS as the same word."""
+    if len(token) > 4 and token.endswith('ES') and not token.endswith('SS'):
+        return token[:-2]
+    if len(token) > 3 and token.endswith('S') and not token.endswith('SS'):
+        return token[:-1]
+    return token
+
+
 def _normalize_item_name(name):
-    """Case, spacing, and punctuation-insensitive key for a PI line item name."""
+    """Case, spacing, punctuation, and simple plural insensitive key for a PI line item name."""
     text = re.sub(r'[^A-Z0-9]+', ' ', str(name or '').upper())
-    return re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'\s+', ' ', text).strip()
+    return ' '.join(_fold_plural_token(token) for token in text.split())
 
 
 def _template_trim_rows(rows):
