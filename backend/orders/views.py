@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from decimal import Decimal
 
@@ -10,7 +11,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import ProformaInvoice, TrimMaster, Indent, ItemIndentTemplate, BuyerPO, SalesEntry
+from .models import ProformaInvoice, ProformaInvoiceLine, TrimMaster, Indent, ItemIndentTemplate, BuyerPO, SalesEntry
 from .pdf import build_pi_pdf_bytes
 from .serializers import (
     ProformaInvoiceSerializer,
@@ -20,6 +21,7 @@ from .serializers import (
     IndentListSerializer,
     IndentPiOptionSerializer,
     IndentPiContextSerializer,
+    IndentTrimLineSerializer,
     ItemIndentTemplateSerializer,
     BuyerPOSerializer,
     BuyerPOListSerializer,
@@ -144,6 +146,32 @@ class TrimMasterViewSet(viewsets.ModelViewSet):
             'trim_name': trim.name,
             'orders': orders,
         })
+
+
+def _normalize_item_name(name):
+    """Case, spacing, and punctuation-insensitive key for a PI line item name."""
+    text = re.sub(r'[^A-Z0-9]+', ' ', str(name or '').upper())
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def _indent_line_name_keys(indent):
+    """Normalized item names this indent was raised for."""
+    lines = list(indent.pi.lines.all())
+    selected = set()
+    for raw in indent.selected_pi_line_ids or []:
+        try:
+            selected.add(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if selected:
+        chosen = [line for line in lines if line.id in selected]
+        if chosen:
+            lines = chosen
+    return {
+        _normalize_item_name(line.item_name)
+        for line in lines
+        if (line.item_name or '').strip()
+    }
 
 
 class IndentViewSet(viewsets.ModelViewSet):
@@ -276,6 +304,82 @@ class IndentViewSet(viewsets.ModelViewSet):
         existing = Indent.objects.filter(indent_number__startswith=pattern).count()
         seq = existing + 1
         return Response({'indent_number': f"IND/{fy_label}/{seq:03d}", 'fy_label': fy_label, 'seq': seq})
+
+    @action(detail=False, methods=['get'], url_path='trim-prefill')
+    def trim_prefill(self, request):
+        """Trim rows from the latest earlier indent with the same line item name."""
+        item_name = request.query_params.get('item_name', '').strip()
+        if not item_name:
+            return Response({'detail': 'item_name query param required.'}, status=status.HTTP_400_BAD_REQUEST)
+        target = _normalize_item_name(item_name)
+        if not target:
+            return Response({'found': False, 'trim_lines': []})
+
+        exclude_id = request.query_params.get('exclude', '').strip()
+        all_names = (
+            ProformaInvoiceLine.objects
+            .exclude(item_name='')
+            .values_list('item_name', flat=True)
+            .distinct()
+        )
+        matched_names = [name for name in all_names if _normalize_item_name(name) == target]
+        if not matched_names:
+            return Response({'found': False, 'item_name': item_name, 'trim_lines': []})
+
+        indents = (
+            Indent.objects
+            .filter(pi__lines__item_name__in=matched_names)
+            .distinct()
+            .order_by('-indent_date', '-id')
+            .prefetch_related('trim_lines__supplier', 'pi__lines')
+        )
+        if exclude_id.isdigit():
+            indents = indents.exclude(pk=int(exclude_id))
+
+        chosen = None
+        source_item_name = ''
+        for indent in indents:
+            keys = _indent_line_name_keys(indent)
+            if target not in keys:
+                continue
+            named = [line for line in indent.trim_lines.all() if (line.trim_name or '').strip()]
+            if not named:
+                continue
+            if chosen is None:
+                chosen = indent
+                source_item_name = next(
+                    (
+                        line.item_name
+                        for line in indent.pi.lines.all()
+                        if _normalize_item_name(line.item_name) == target
+                    ),
+                    item_name,
+                )
+            if keys == {target}:
+                chosen = indent
+                source_item_name = next(
+                    (
+                        line.item_name
+                        for line in indent.pi.lines.all()
+                        if _normalize_item_name(line.item_name) == target
+                    ),
+                    source_item_name or item_name,
+                )
+                break
+
+        if chosen is None:
+            return Response({'found': False, 'item_name': item_name, 'trim_lines': []})
+
+        trim_lines = [line for line in chosen.trim_lines.all() if (line.trim_name or '').strip()]
+        return Response({
+            'found': True,
+            'item_name': item_name,
+            'source_item_name': source_item_name,
+            'source_indent_id': chosen.id,
+            'source_indent_number': chosen.indent_number,
+            'source_indent_date': chosen.indent_date.isoformat() if chosen.indent_date else None,
+            'trim_lines': IndentTrimLineSerializer(trim_lines, many=True).data,
+        })
 
     @action(detail=False, methods=['get'], url_path='template')
     def template(self, request):

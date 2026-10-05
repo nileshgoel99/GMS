@@ -156,6 +156,9 @@ export const ordersAPI = {
   deleteIndent: (id) => api.delete(`/orders/indents/${id}/`),
   getNextIndentNumber: () => api.get('/orders/indents/next-number/'),
   getIndentTemplate: (itemName) => api.get('/orders/indents/template/', { params: { item_name: itemName } }),
+  getIndentTrimPrefill: (itemName, excludeId) => api.get('/orders/indents/trim-prefill/', {
+    params: { item_name: itemName, ...(excludeId ? { exclude: excludeId } : {}) },
+  }),
   getIndentPiOptions: (params) => api.get('/orders/indents/pi-options/', { params }),
   getIndentPiContext: (piId) => api.get('/orders/indents/pi-context/', { params: { pi: piId } }),
   getIndentTrimsLibrary: (params) => api.get('/orders/indents/trims-library/', { params }),

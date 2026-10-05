@@ -173,6 +173,22 @@ const mapApiTrimLine = (r) => ({
   total_manual: true,
 });
 
+/** Earlier-indent trim copy: drop the old row id and let totals follow this PI's qty. */
+const mapPrefillTrimLine = (r) => {
+  const row = mapApiTrimLine(r);
+  delete row.id;
+  return {
+    ...row,
+    total_manual: false,
+    total_consumption: '',
+    parts: (row.parts || []).map((part) => ({
+      ...part,
+      total_manual: false,
+      total_consumption: '',
+    })),
+  };
+};
+
 /** Trim-name Autocomplete filter — appends a "Create '<typed name>'" option when there's no match. */
 const filterTrimNameOptions = (options, { inputValue }) => {
   const input = inputValue.trim();
@@ -1566,6 +1582,9 @@ export default function IndentEditorPage() {
   const [trimLines,    setTrimLines]   = useState([emptyTrim()]);
   const [selectedLineIds, setSelectedLineIds] = useState([]);
   const [autoFilled,   setAutoFilled]  = useState(false);
+  const [trimPrefillNote, setTrimPrefillNote] = useState('');
+  const trimsEditedRef = useRef(false);
+  const trimPrefillSeq = useRef(0);
   const [trimModalOpen, setTrimModalOpen] = useState(false);
   const [trimModalTargetRow, setTrimModalTargetRow] = useState(null);
   const [trimModalInitialName, setTrimModalInitialName] = useState('');
@@ -1603,6 +1622,12 @@ export default function IndentEditorPage() {
     setApprovedBy('');
     setNotes('');
     setAutoFilled(false);
+    setTrimPrefillNote('');
+    trimsEditedRef.current = false;
+  };
+
+  const markTrimsEdited = () => {
+    trimsEditedRef.current = true;
   };
 
   const resetNewIndentForm = () => {
@@ -1627,6 +1652,14 @@ export default function IndentEditorPage() {
 
   const colorQty = useMemo(() => buildColorQty(activeLines), [activeLines]);
   const totalQty = useMemo(() => Object.values(colorQty).reduce((s, v) => s + v, 0), [colorQty]);
+  const selectedItemName = useMemo(() => {
+    const names = [...new Set(selectedPiLines.map((l) => (l.item_name || '').trim()).filter(Boolean))];
+    return names.length === 1 ? names[0] : '';
+  }, [selectedPiLines]);
+
+  // '' = nothing selected, null = several item names, otherwise the one item name.
+  const trimPrefillKey = !selectedPiLines.length ? '' : (selectedItemName || null);
+
   const sizeTable = useMemo(() => buildSizeTable(selectedPiLines), [selectedPiLines]);
   const sizeBreakdownSummary = useMemo(() => {
     if (!sizeTable.rows.length) return '';
@@ -1682,6 +1715,7 @@ export default function IndentEditorPage() {
   };
 
   const commitAddProperty = async (rowIndex) => {
+    markTrimsEdited();
     const name = normalizeTrimPropertyName(newPropName);
     if (!name) {
       alert('Enter a property type name (e.g. Width, Pantone).');
@@ -1855,6 +1889,7 @@ export default function IndentEditorPage() {
               ? sortIndentTrimLines(data.trim_lines.map(mapApiTrimLine))
               : [emptyTrim()],
           );
+          trimsEditedRef.current = (data.trim_lines || []).some((r) => (r.trim_name || '').trim());
           setSelectedLineIds(data.selected_pi_line_ids?.length ? data.selected_pi_line_ids : []);
 
           const piData = piFromIndentData(data);
@@ -1903,7 +1938,52 @@ export default function IndentEditorPage() {
   const loadItemTemplate = async () => {
     if (!activeLines.length) return;
     await tryAutoFillForLines(activeLines);
+    trimsEditedRef.current = true;
   };
+
+  useEffect(() => {
+    if (loading) return undefined;
+    if (trimsEditedRef.current) return undefined;
+    if (trimPrefillKey === null) return undefined;
+    if (!trimPrefillKey) {
+      setTrimLines([emptyTrim()]);
+      setTrimPrefillNote('');
+      setAutoFilled(false);
+      return undefined;
+    }
+
+    const requestId = ++trimPrefillSeq.current;
+    const itemName = trimPrefillKey;
+    (async () => {
+      try {
+        const res = await ordersAPI.getIndentTrimPrefill(itemName, isNew ? undefined : id);
+        if (requestId !== trimPrefillSeq.current || trimsEditedRef.current) return;
+        const data = res.data || {};
+        const lines = data.trim_lines || [];
+        if (!data.found || !lines.length) {
+          setTrimLines([emptyTrim()]);
+          setTrimPrefillNote('');
+          setAutoFilled(false);
+          return;
+        }
+        setTrimLines(sortIndentTrimLines(lines.map(mapPrefillTrimLine)));
+        const sourceName = data.source_item_name && data.source_item_name !== itemName
+          ? `${data.source_item_name} · `
+          : '';
+        const when = data.source_indent_date ? formatDateDisplay(data.source_indent_date) : '';
+        setTrimPrefillNote(
+          `Trims filled from ${data.source_indent_number || 'an earlier indent'}`
+          + (when ? ` (${when})` : '')
+          + ` · ${sourceName}${itemName}`,
+        );
+        setAutoFilled(true);
+      } catch (e) {
+        if (requestId !== trimPrefillSeq.current) return;
+        console.error(e);
+      }
+    })();
+    return undefined;
+  }, [trimPrefillKey, loading, isNew, id]);
 
   const loadFullPi = async (piSummary) => {
     if (!piSummary?.id) return null;
@@ -1962,6 +2042,7 @@ export default function IndentEditorPage() {
 
   // ── Trim row helpers ───────────────────────────────────────────────────────
   const setTrimField = (i, field, value) => {
+    markTrimsEdited();
     setTrimLines((prev) => {
       const next = [...prev];
       const nextValue = field === 'size_variant' ? normalizeGarmentSize(value) : value;
@@ -1986,12 +2067,13 @@ export default function IndentEditorPage() {
     });
   };
 
-  const addTrimRow = () => setTrimLines((p) => [...p, emptyTrim()]);
-  const insertTrimRowAfter = (i) => setTrimLines((p) => [...p.slice(0, i + 1), emptyTrim(), ...p.slice(i + 1)]);
-  const removeTrimRow = (i) => setTrimLines((p) => p.filter((_, idx) => idx !== i));
+  const addTrimRow = () => { markTrimsEdited(); setTrimLines((p) => [...p, emptyTrim()]); };
+  const insertTrimRowAfter = (i) => { markTrimsEdited(); setTrimLines((p) => [...p.slice(0, i + 1), emptyTrim(), ...p.slice(i + 1)]); };
+  const removeTrimRow = (i) => { markTrimsEdited(); setTrimLines((p) => p.filter((_, idx) => idx !== i)); };
 
   /** Toggle multi-part consumption (e.g. Velcro Hook & Loop) for a trim row. */
   const toggleTrimParts = (i, enabled) => {
+    markTrimsEdited();
     setTrimLines((prev) => {
       const next = [...prev];
       const row = next[i];
@@ -2006,6 +2088,7 @@ export default function IndentEditorPage() {
   };
 
   const addTrimPart = (i) => {
+    markTrimsEdited();
     setTrimLines((prev) => {
       const next = [...prev];
       const row = next[i];
@@ -2016,6 +2099,7 @@ export default function IndentEditorPage() {
   };
 
   const removeTrimPart = (i, partIdx) => {
+    markTrimsEdited();
     setTrimLines((prev) => {
       const next = [...prev];
       const row = next[i];
@@ -2026,6 +2110,7 @@ export default function IndentEditorPage() {
   };
 
   const setTrimPartField = (i, partIdx, field, value) => {
+    markTrimsEdited();
     setTrimLines((prev) => {
       const next = [...prev];
       const row = next[i];
@@ -2051,6 +2136,7 @@ export default function IndentEditorPage() {
   };
 
   const selectTrimFromLibrary = (i, trim) => {
+    markTrimsEdited();
     setTrimLines((prev) => {
       const next = [...prev];
       let row = {
@@ -2073,6 +2159,7 @@ export default function IndentEditorPage() {
   };
 
   const setTrimPropertyValue = (i, propName, value) => {
+    markTrimsEdited();
     setTrimLines((prev) => {
       const next = [...prev];
       const nextValue = isGarmentSizeTrimProperty(propName) ? normalizeGarmentSize(value) : value;
@@ -2104,6 +2191,7 @@ export default function IndentEditorPage() {
   };
 
   const handleTrimCreated = (newTrim) => {
+    markTrimsEdited();
     setTrimsList((prev) => [...prev, newTrim].sort((a, b) => a.name.localeCompare(b.name)));
     if (trimModalTargetRow != null) {
       selectTrimFromLibrary(trimModalTargetRow, newTrim);
@@ -2355,7 +2443,7 @@ export default function IndentEditorPage() {
               Load saved BOM for this item
             </Button>
             <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
-              Optional — fills fabric &amp; trims from the last saved indent for this item name.
+              Selecting lines of one item fills its trims from the latest earlier indent with that name. This button also loads fabric.
             </Typography>
           </Box>
         )}
@@ -2775,6 +2863,11 @@ export default function IndentEditorPage() {
             <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 2 }}>
               <Box sx={{ flex: 1, minWidth: 160 }}>
                 <Typography sx={{ fontWeight: 800, fontSize: '0.95rem' }}>Trims & Accessories</Typography>
+                {trimPrefillNote && (
+                  <Typography sx={{ fontSize: '0.72rem', color: '#92400e', fontWeight: 600, mt: 0.35 }}>
+                    {trimPrefillNote}
+                  </Typography>
+                )}
               </Box>
               {canManageTrimsLibrary && (
               <Button size="small" variant="outlined" startIcon={<LibraryAdd />} onClick={() => openTrimModal(null)}
@@ -3085,22 +3178,23 @@ export default function IndentEditorPage() {
                               compact
                               suppliers={suppliers}
                               value={row.supplier || null}
-                              onChange={(id) => {
-                                const s = id ? suppliers.find((x) => x.id === id) : null;
+                              onChange={(supplierId) => {
+                                markTrimsEdited();
+                                const s = supplierId ? suppliers.find((x) => x.id === supplierId) : null;
                                 const hint = (row.trim_name || row.category || '').trim();
                                 setTrimLines((prev) => {
                                   const next = [...prev];
                                   next[i] = {
                                     ...next[i],
-                                    supplier: id,
+                                    supplier: supplierId,
                                     supplier_name: s?.name || '',
                                     supplier_country: s?.country || '',
                                   };
                                   return next;
                                 });
-                                if (id && hint) {
+                                if (supplierId && hint) {
                                   setSuppliers((prev) => prev.map((sup) => {
-                                    if (sup.id !== id) return sup;
+                                    if (sup.id !== supplierId) return sup;
                                     const existing = Array.isArray(sup.supplies_in) ? sup.supplies_in : [];
                                     if (existing.some((x) => String(x).toLowerCase() === hint.toLowerCase())) {
                                       return sup;
