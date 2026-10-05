@@ -1640,8 +1640,7 @@ export default function IndentEditorPage() {
   };
 
   const activeLines = useMemo(() => {
-    if (!pi?.lines) return [];
-    if (!selectedLineIds.length) return pi.lines;
+    if (!pi?.lines || !selectedLineIds.length) return [];
     return pi.lines.filter((l) => selectedLineIds.includes(l.id));
   }, [pi, selectedLineIds]);
 
@@ -1654,7 +1653,8 @@ export default function IndentEditorPage() {
   const totalQty = useMemo(() => Object.values(colorQty).reduce((s, v) => s + v, 0), [colorQty]);
   const selectedItemName = useMemo(() => {
     const names = [...new Set(selectedPiLines.map((l) => (l.item_name || '').trim()).filter(Boolean))];
-    return names.length === 1 ? names[0] : '';
+    const keys = [...new Set(names.map((name) => name.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()))];
+    return keys.length === 1 ? names[0] : '';
   }, [selectedPiLines]);
 
   // '' = nothing selected, null = several item names, otherwise the one item name.
@@ -1854,7 +1854,7 @@ export default function IndentEditorPage() {
           if (piIdFromUrl) {
             const piData = await loadIndentPiContext(piIdFromUrl);
             setPi(piData);
-            setSelectedLineIds((piData.lines || []).map((l) => l.id));
+            setSelectedLineIds([]);
           }
           const numRes = await ordersAPI.getNextIndentNumber();
           setIndentNumber(numRes.data.indent_number);
@@ -1999,8 +1999,7 @@ export default function IndentEditorPage() {
     }
     const piData = await loadFullPi(piSummary);
     setPi(piData);
-    const lineIds = (piData?.lines || []).map((l) => l.id);
-    setSelectedLineIds(lineIds);
+    setSelectedLineIds([]);
   };
 
   const toggleLine = (lineId) => {
@@ -2443,7 +2442,7 @@ export default function IndentEditorPage() {
               Load saved BOM for this item
             </Button>
             <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
-              Selecting lines of one item fills its trims from the latest earlier indent with that name. This button also loads fabric.
+              Line items start unselected. Tick one item and its trims fill from the latest earlier indent with that name. This button also loads fabric.
             </Typography>
           </Box>
         )}

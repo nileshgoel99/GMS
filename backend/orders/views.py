@@ -154,6 +154,26 @@ def _normalize_item_name(name):
     return re.sub(r'\s+', ' ', text).strip()
 
 
+def _template_trim_rows(rows):
+    """Shape saved item-BOM trim JSON like an indent trim line."""
+    from suppliers.models import Supplier
+
+    raw_rows = [row for row in (rows or []) if (row.get('trim_name') or '').strip()]
+    supplier_ids = {row.get('supplier') for row in raw_rows if row.get('supplier')}
+    suppliers = {
+        supplier.id: supplier
+        for supplier in Supplier.objects.filter(id__in=supplier_ids)
+    } if supplier_ids else {}
+    payload = []
+    for row in raw_rows:
+        item = dict(row)
+        supplier = suppliers.get(item.get('supplier'))
+        item['supplier_name'] = supplier.name if supplier else ''
+        item['supplier_country'] = getattr(supplier, 'country', '') if supplier else ''
+        payload.append(item)
+    return payload
+
+
 def _indent_line_name_keys(indent):
     """Normalized item names this indent was raised for."""
     lines = list(indent.pi.lines.all())
@@ -323,62 +343,81 @@ class IndentViewSet(viewsets.ModelViewSet):
             .distinct()
         )
         matched_names = [name for name in all_names if _normalize_item_name(name) == target]
-        if not matched_names:
-            return Response({'found': False, 'item_name': item_name, 'trim_lines': []})
-
-        indents = (
-            Indent.objects
-            .filter(pi__lines__item_name__in=matched_names)
-            .distinct()
-            .order_by('-indent_date', '-id')
-            .prefetch_related('trim_lines__supplier', 'pi__lines')
-        )
-        if exclude_id.isdigit():
-            indents = indents.exclude(pk=int(exclude_id))
 
         chosen = None
         source_item_name = ''
-        for indent in indents:
-            keys = _indent_line_name_keys(indent)
-            if target not in keys:
-                continue
-            named = [line for line in indent.trim_lines.all() if (line.trim_name or '').strip()]
-            if not named:
-                continue
-            if chosen is None:
-                chosen = indent
-                source_item_name = next(
-                    (
-                        line.item_name
-                        for line in indent.pi.lines.all()
-                        if _normalize_item_name(line.item_name) == target
-                    ),
-                    item_name,
-                )
-            if keys == {target}:
-                chosen = indent
-                source_item_name = next(
-                    (
-                        line.item_name
-                        for line in indent.pi.lines.all()
-                        if _normalize_item_name(line.item_name) == target
-                    ),
-                    source_item_name or item_name,
-                )
-                break
+        if matched_names:
+            indents = (
+                Indent.objects
+                .filter(pi__lines__item_name__in=matched_names)
+                .distinct()
+                .order_by('-indent_date', '-id')
+                .prefetch_related('trim_lines__supplier', 'pi__lines')
+            )
+            if exclude_id.isdigit():
+                indents = indents.exclude(pk=int(exclude_id))
 
-        if chosen is None:
+            for indent in indents:
+                keys = _indent_line_name_keys(indent)
+                if target not in keys:
+                    continue
+                named = [line for line in indent.trim_lines.all() if (line.trim_name or '').strip()]
+                if not named:
+                    continue
+                if chosen is None:
+                    chosen = indent
+                    source_item_name = next(
+                        (
+                            line.item_name
+                            for line in indent.pi.lines.all()
+                            if _normalize_item_name(line.item_name) == target
+                        ),
+                        item_name,
+                    )
+                if keys == {target}:
+                    chosen = indent
+                    source_item_name = next(
+                        (
+                            line.item_name
+                            for line in indent.pi.lines.all()
+                            if _normalize_item_name(line.item_name) == target
+                        ),
+                        source_item_name or item_name,
+                    )
+                    break
+
+        if chosen is not None:
+            trim_lines = [line for line in chosen.trim_lines.all() if (line.trim_name or '').strip()]
+            return Response({
+                'found': True,
+                'item_name': item_name,
+                'source_item_name': source_item_name,
+                'source_indent_id': chosen.id,
+                'source_indent_number': chosen.indent_number,
+                'source_indent_date': chosen.indent_date.isoformat() if chosen.indent_date else None,
+                'trim_lines': IndentTrimLineSerializer(trim_lines, many=True).data,
+            })
+
+        # Last saved BOM for this style, including when the indent no longer
+        # has that line selected.
+        template = None
+        for candidate in ItemIndentTemplate.objects.order_by('-updated_at'):
+            if _normalize_item_name(candidate.item_name) != target:
+                continue
+            if any((row.get('trim_name') or '').strip() for row in (candidate.trim_lines or [])):
+                template = candidate
+                break
+        if template is None:
             return Response({'found': False, 'item_name': item_name, 'trim_lines': []})
 
-        trim_lines = [line for line in chosen.trim_lines.all() if (line.trim_name or '').strip()]
         return Response({
             'found': True,
             'item_name': item_name,
-            'source_item_name': source_item_name,
-            'source_indent_id': chosen.id,
-            'source_indent_number': chosen.indent_number,
-            'source_indent_date': chosen.indent_date.isoformat() if chosen.indent_date else None,
-            'trim_lines': IndentTrimLineSerializer(trim_lines, many=True).data,
+            'source_item_name': template.item_name,
+            'source_indent_id': None,
+            'source_indent_number': 'saved item BOM',
+            'source_indent_date': template.updated_at.date().isoformat() if template.updated_at else None,
+            'trim_lines': _template_trim_rows(template.trim_lines),
         })
 
     @action(detail=False, methods=['get'], url_path='template')
