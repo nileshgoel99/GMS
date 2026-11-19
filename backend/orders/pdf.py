@@ -8,7 +8,15 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.platypus import Image as RLImage, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    Image as RLImage,
+    KeepTogether,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 from .numwords import usd_amount_to_words
 
@@ -174,6 +182,7 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
         spaceAfter=4,
         textColor=TEAL_DARK,
         fontName='Helvetica-Bold',
+        keepWithNext=1,
     )
     body = ParagraphStyle('Body', parent=styles['Normal'], fontSize=9, leading=12, textColor=SLATE)
     small = ParagraphStyle('Small', parent=styles['Normal'], fontSize=8, leading=10, textColor=SLATE_MUTED)
@@ -371,7 +380,13 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
             ]
         )
 
-    tbl = Table(table_data, colWidths=[0.9 * cm, 3.1 * cm, 7.2 * cm, 1.5 * cm, 2 * cm, 2.2 * cm])
+    tbl = Table(
+        table_data,
+        colWidths=[0.9 * cm, 3.1 * cm, 7.2 * cm, 1.5 * cm, 2 * cm, 2.2 * cm],
+        repeatRows=1,
+        splitByRow=1,
+        splitInRow=0,
+    )
     tbl.setStyle(
         TableStyle(
             [
@@ -415,13 +430,6 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
 
     our_b = (pi.our_bank_details or '').strip() or DEFAULT_OUR_BANK
     inter_b = (pi.intermediary_bank_details or '').strip() or DEFAULT_INTERMEDIARY
-    story.append(Paragraph('<b>OUR BANK</b>', h2))
-    story.append(Paragraph(_esc(our_b), body))
-    story.append(Spacer(1, 0.12 * cm))
-    story.append(Paragraph('<b>INTERMEDIARY BANK</b>', h2))
-    story.append(Paragraph(_esc(inter_b), body))
-    story.append(Spacer(1, 0.45 * cm))
-
     seller = (pi.seller_signatory_for or 'CID TRADING LTD').strip()
     buyer = (pi.buyer_signatory_for or 'J B INTERNATIONAL').strip()
     ret = (pi.return_email_instruction or 'shivangi.jain@jbinternational.co.in').strip()
@@ -450,14 +458,20 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
             ]
         )
     )
-    story.append(sig_tbl)
-    story.append(Spacer(1, 0.3 * cm))
-    story.append(
+    story.append(KeepTogether([
+        Paragraph('<b>OUR BANK</b>', h2),
+        Paragraph(_esc(our_b), body),
+        Spacer(1, 0.12 * cm),
+        Paragraph('<b>INTERMEDIARY BANK</b>', h2),
+        Paragraph(_esc(inter_b), body),
+        Spacer(1, 0.45 * cm),
+        sig_tbl,
+        Spacer(1, 0.3 * cm),
         Paragraph(
             f'PLS. SEAL &amp; SIGN ON THE ABOVE AND RETURN US BY E-MAIL ID: <b>{_esc(ret)}</b>',
             small,
-        )
-    )
+        ),
+    ]))
 
     on_page = _make_page_canvas(company)
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)

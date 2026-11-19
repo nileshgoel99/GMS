@@ -9,6 +9,7 @@ import { formatDateDMY } from '../utils/formatDate';
 import PIDocumentFooter from '../components/orders/PIDocumentFooter';
 import PIPrintSheet from '../components/orders/PIPrintSheet';
 import { bindPiPrintPageFooters, installPiPrintPageFooters } from '../utils/piPrintPageFooters';
+import { piPrintCss } from '../utils/documentPrint';
 import { companyContactLines } from '../utils/formatCompanyPhone';
 import { useUnsavedDraft, useMarkSavedWhenReady, confirmDiscardUnsaved } from '../hooks/useUnsavedChanges';
 
@@ -73,89 +74,7 @@ function getPiFooter(pi, company) {
   };
 }
 
-const PRINT_STYLE = `
-@media screen {
-  .pi-print-sheet-foot { display: none !important; }
-}
-@media print {
-  @page {
-    size: A4 portrait;
-    margin: 12mm 12mm 16mm 12mm;
-    /* Suppress browser default header/footer (date, time, title, URL) where supported */
-    @top-left { content: none; }
-    @top-center { content: none; }
-    @top-right { content: none; }
-    @bottom-left { content: none; }
-    @bottom-center { content: none; }
-    @bottom-right {
-      content: "Page " counter(page) " / " counter(pages);
-      font-family: "Times New Roman", Times, serif;
-      font-size: 8pt;
-      color: #333;
-      vertical-align: top;
-      padding-top: 1mm;
-    }
-  }
-  html, body {
-    background: #fff !important;
-    height: auto !important;
-    overflow: visible !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-  body * {
-    visibility: hidden !important;
-  }
-  #pi-view-print-root,
-  #pi-view-print-root * {
-    visibility: visible !important;
-  }
-  #pi-view-print-root {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 !important;
-    padding: 6mm !important;
-    background: #fff !important;
-    box-shadow: none !important;
-    border: none !important;
-    border-radius: 0 !important;
-    min-height: 0 !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  #pi-view-print-root .pi-print-sheet {
-    width: 100% !important;
-    border-collapse: collapse !important;
-  }
-  #pi-view-print-root .pi-print-sheet-body {
-    display: table-row-group !important;
-  }
-  #pi-view-print-root .pi-print-sheet-body > tr {
-    page-break-inside: auto !important;
-    break-inside: auto !important;
-  }
-  #pi-view-print-root .pi-print-sheet-foot {
-    display: table-footer-group !important;
-  }
-  #pi-view-print-root .pi-sheet-footer {
-    padding-top: 4px !important;
-    margin-top: 2mm !important;
-  }
-  #pi-view-print-root .pi-items-table {
-    page-break-inside: auto !important;
-  }
-  #pi-view-print-root .pi-items-table thead {
-    display: table-header-group !important;
-  }
-  #pi-view-print-root .pi-items-table tr {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-}
-`;
+const PRINT_STYLE = piPrintCss('pi-view-print-root');
 
 // ── PI Document ───────────────────────────────────────────────────────────────
 function PIDocument({ pi, company }) {
@@ -197,6 +116,7 @@ function PIDocument({ pi, company }) {
     >
       {/* Letterhead */}
       <Box
+        className="doc-keep"
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -245,6 +165,7 @@ function PIDocument({ pi, company }) {
 
       {/* Title */}
       <Typography
+        className="doc-heading"
         sx={{
           fontFamily: 'inherit',
           fontWeight: 700,
@@ -260,7 +181,7 @@ function PIDocument({ pi, company }) {
       </Typography>
 
       {/* TO + Meta */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2.5, gap: 4, alignItems: 'flex-start' }}>
+      <Box className="doc-keep" sx={{ display: 'flex', justifyContent: 'space-between', mb: 2.5, gap: 4, alignItems: 'flex-start' }}>
         <Box sx={{ flex: 1, minWidth: 0, pr: 2 }}>
           <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '10pt', mb: 0.5 }}>TO,</Typography>
           <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '11pt', mb: 0.35 }}>{pi.client_name}</Typography>
@@ -398,52 +319,54 @@ function PIDocument({ pi, company }) {
           ['PORT OF LOADING',   footer.portOfLoading],
           ['PORT OF DISCHARGE', footer.portOfDischarge],
         ].map(([label, val]) => (
-          <Box key={label} sx={{ display: 'flex', gap: 1.5, mb: 0.85, fontFamily: 'inherit', alignItems: 'flex-start' }}>
+          <Box key={label} className="doc-keep" sx={{ display: 'flex', gap: 1.5, mb: 0.85, fontFamily: 'inherit', alignItems: 'flex-start' }}>
             <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', minWidth: 150, flexShrink: 0 }}>{label}</Typography>
             <Typography sx={{ fontFamily: 'inherit', fontSize: '9.5pt', flex: 1, wordBreak: 'break-word' }}>: {val || '—'}</Typography>
           </Box>
         ))}
-        <Box sx={{ mt: 1.25, fontFamily: 'inherit' }}>
-          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.35 }}>OUR BANK:</Typography>
+      </Box>
+
+      <Box className="doc-keep">
+        <Box className="doc-keep" sx={{ mt: 1.25, fontFamily: 'inherit' }}>
+          <Typography className="doc-heading" sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.35 }}>OUR BANK:</Typography>
           <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', whiteSpace: 'pre-line', lineHeight: 1.45, pl: 0.5 }}>
             {footer.ourBank || '—'}
           </Typography>
         </Box>
-        <Box sx={{ mt: 1.25, fontFamily: 'inherit' }}>
-          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.35 }}>INTERMEDIARY BANK:</Typography>
+        <Box className="doc-keep" sx={{ mt: 1.25, fontFamily: 'inherit' }}>
+          <Typography className="doc-heading" sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.35 }}>INTERMEDIARY BANK:</Typography>
           <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt', whiteSpace: 'pre-line', lineHeight: 1.45, pl: 0.5 }}>
             {footer.intermediaryBank || '—'}
           </Typography>
         </Box>
-      </Box>
-
-      {/* Signature */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          mt: 5,
-          pt: 2,
-          borderTop: '1px solid #999',
-          fontFamily: 'inherit',
-          fontSize: '9.5pt',
-          gap: 3,
-        }}
-      >
-        <Box sx={{ flex: 1 }}>
-          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.5 }}>SIGNATURE &amp; SEAL</Typography>
-          <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt' }}>FOR: {(pi.client_name || '').toUpperCase()}</Typography>
+        <Box
+          className="doc-keep"
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            mt: 5,
+            pt: 2,
+            borderTop: '1px solid #999',
+            fontFamily: 'inherit',
+            fontSize: '9.5pt',
+            gap: 3,
+          }}
+        >
+          <Box sx={{ flex: 1 }}>
+            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.5 }}>SIGNATURE &amp; SEAL</Typography>
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt' }}>FOR: {(pi.client_name || '').toUpperCase()}</Typography>
+          </Box>
+          <Box sx={{ flex: 1, textAlign: 'right' }}>
+            <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.5 }}>SIGNATURE &amp; SEAL</Typography>
+            <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt' }}>FOR: {(company.legal_name || '').toUpperCase()}</Typography>
+          </Box>
         </Box>
-        <Box sx={{ flex: 1, textAlign: 'right' }}>
-          <Typography sx={{ fontFamily: 'inherit', fontWeight: 700, fontSize: '9.5pt', mb: 0.5 }}>SIGNATURE &amp; SEAL</Typography>
-          <Typography sx={{ fontFamily: 'inherit', fontSize: '9pt' }}>FOR: {(company.legal_name || '').toUpperCase()}</Typography>
-        </Box>
+        {company.email && (
+          <Typography sx={{ fontFamily: 'inherit', fontSize: '8pt', textAlign: 'center', mt: 2.5, borderTop: '1px solid #ccc', pt: 1.25, color: '#555' }}>
+            PLS. SEAL &amp; SIGN ON THE ABOVE AND RETURN US BY E-MAIL ID: {company.email}
+          </Typography>
+        )}
       </Box>
-      {company.email && (
-        <Typography sx={{ fontFamily: 'inherit', fontSize: '8pt', textAlign: 'center', mt: 2.5, borderTop: '1px solid #ccc', pt: 1.25, color: '#555' }}>
-          PLS. SEAL &amp; SIGN ON THE ABOVE AND RETURN US BY E-MAIL ID: {company.email}
-        </Typography>
-      )}
 
       <PIDocumentFooter
         company={company}

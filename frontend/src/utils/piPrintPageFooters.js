@@ -1,11 +1,13 @@
 /**
  * Print helpers for Proforma Invoice.
- * Running footers use a table tfoot (see PIPrintSheet) so they reserve layout
- * space and never paint over Value / Date of Dispatch / etc.
+ * The sheet footer is position:fixed in the page margin (see documentPrint.js),
+ * so it repeats without covering Value / Date of Dispatch.
  *
  * Also blanks document.title during print so the browser header does not show
  * the app/website title (e.g. "WeaveCore").
  */
+
+import { bindPrintRootLift } from './documentPrint';
 
 const MM = 96 / 25.4;
 
@@ -46,6 +48,7 @@ export function stampPiPrintPageEstimate(rootId, {
 }
 
 export function bindPiPrintPageFooters(rootId, getMeta) {
+  const unlift = bindPrintRootLift(rootId);
   const run = () => {
     clearPrintDocumentTitle();
     const meta = typeof getMeta === 'function' ? getMeta() : (getMeta || {});
@@ -72,6 +75,7 @@ export function bindPiPrintPageFooters(rootId, getMeta) {
     if (mql.removeEventListener) mql.removeEventListener('change', onChange);
     else if (mql.removeListener) mql.removeListener(onChange);
     restorePrintDocumentTitle();
+    unlift();
   };
 }
 

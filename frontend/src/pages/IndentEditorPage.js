@@ -18,6 +18,7 @@ import { ordersAPI, suppliersAPI, companyAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import { normalizeGarmentSize, sortGarmentSizes } from '../utils/normalizeGarmentSize';
+import { flowRulesCss, pageNumberRules } from '../utils/documentPrint';
 import { extractGsmFromFabricComposition, enrichFabricRowGsm } from '../utils/extractFabricGsm';
 import { companyContactLines } from '../utils/formatCompanyPhone';
 import AddTrimModal from '../components/trims/AddTrimModal';
@@ -60,21 +61,12 @@ const PRINT_STYLE = `
 @media print {
   @page {
     size: A4 portrait;
-    margin: 6mm 5mm 8mm 5mm;
-    @top-left { content: none; }
-    @top-center { content: none; }
-    @top-right { content: none; }
-    @bottom-left { content: none; }
-    @bottom-center { content: none; }
-    @bottom-right {
-      content: "Page " counter(page) " / " counter(pages);
-      font-family: "Source Sans 3", "Segoe UI", sans-serif;
-      font-size: 8pt;
-      color: #475569;
-    }
+    margin: 6mm 5mm 12mm 5mm;
+    ${pageNumberRules('"Source Sans 3", "Segoe UI", sans-serif')}
   }
   html, body {
     height: auto !important;
+    min-height: 0 !important;
     overflow: visible !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -93,13 +85,7 @@ const PRINT_STYLE = `
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  .indent-print-no-break {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  .indent-print-table { page-break-inside: auto !important; break-inside: auto !important; }
-  .indent-print-table thead { display: table-header-group !important; }
-  .indent-print-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+  ${flowRulesCss('#indent-print-root')}
 }
 @media screen {
   #indent-print-root { display: none !important; }
@@ -1195,7 +1181,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
 
       {/* ── Item + qty ── */}
       <Box className="indent-print-no-break" sx={{ mb: 1.25 }}>
-        <Typography sx={indentSectionLabelSx}>Style / Item</Typography>
+        <Typography className="doc-heading" sx={indentSectionLabelSx}>Style / Item</Typography>
         <Box sx={{
           display: 'flex', alignItems: 'stretch', gap: 1,
           p: 0.85, borderRadius: '4px',
@@ -1238,7 +1224,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
       {/* ── Colour × Qty ── */}
       {colors.length > 0 && (
         <Box className="indent-print-no-break" sx={{ mb: 1.25 }}>
-          <Typography sx={indentSectionLabelSx}>Colour breakdown</Typography>
+          <Typography className="doc-heading" sx={indentSectionLabelSx}>Colour breakdown</Typography>
           <Box component="table" className="indent-print-table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
             <Box component="tbody">
               <Box component="tr">
@@ -1269,7 +1255,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
 
       {/* ── Fabric ── */}
       <Box sx={{ mb: 1.25 }}>
-        <Typography sx={indentSectionLabelSx}>Fabric</Typography>
+        <Typography className="doc-heading" sx={indentSectionLabelSx}>Fabric</Typography>
         <Box component="table" className="indent-print-table" sx={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <Box component="thead">
             <Box component="tr">
@@ -1310,7 +1296,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
 
       {/* ── Trims ── */}
       <Box sx={{ mb: 1.25 }}>
-        <Typography sx={indentSectionLabelSx}>Trims &amp; Accessories</Typography>
+        <Typography className="doc-heading" sx={indentSectionLabelSx}>Trims &amp; Accessories</Typography>
         <Box component="table" className="indent-print-table" sx={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <Box component="thead">
             <Box component="tr">
@@ -1367,7 +1353,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
       {/* ── Size breakdown ── */}
       {sizes.length > 0 && (
         <Box sx={{ mb: 1.25 }}>
-          <Typography sx={indentSectionLabelSx}>Size details</Typography>
+          <Typography className="doc-heading" sx={indentSectionLabelSx}>Size details</Typography>
           <Box component="table" className="indent-print-table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
             <Box component="thead">
               <Box component="tr">
@@ -1406,7 +1392,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
 
       {/* ── Notes (space for handwritten notes too) ── */}
       <Box className="indent-print-no-break" sx={{ mb: 1.5 }}>
-        <Typography sx={indentSectionLabelSx}>Notes</Typography>
+        <Typography className="doc-heading" sx={indentSectionLabelSx}>Notes</Typography>
         <Box sx={{
           minHeight: 48,
           px: 1, py: 0.75,

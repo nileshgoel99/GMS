@@ -22,6 +22,7 @@ import {
   TRIM_UNIT_OPTIONS,
 } from '../components/trims/trimConstants';
 import SupplierPOPrintDocument, { SUPPLIER_PO_PRINT_STYLE } from '../components/procurement/SupplierPOPrintDocument';
+import { bindPrintRootLift } from '../utils/documentPrint';
 import AddTrimModal from '../components/trims/AddTrimModal';
 import AddSupplierModal from '../components/suppliers/AddSupplierModal';
 import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
@@ -978,7 +979,11 @@ export default function SupplierPOEditorPage() {
     style.id = 'supplier-po-print-style';
     style.textContent = SUPPLIER_PO_PRINT_STYLE;
     document.head.appendChild(style);
-    return () => style.remove();
+    const unlift = bindPrintRootLift('supplier-po-print-root');
+    return () => {
+      style.remove();
+      unlift();
+    };
   }, []);
 
   // Browser uses document.title as the default PDF / print save name.

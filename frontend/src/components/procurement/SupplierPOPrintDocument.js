@@ -2,6 +2,7 @@ import React from 'react';
 import { formatDateDisplay } from '../../utils/formatDate';
 import { supplyTypeLabel } from '../../utils/gstSupplyType';
 import { parseParticulars } from '../../utils/parseParticulars';
+import { flowRulesCss, isolatePrintRootCss, pageNumberRules } from '../../utils/documentPrint';
 
 /** Brand palette — Gold #F3E21A · Rich Black #000000 · Navy #1E3A5F */
 const BRAND = {
@@ -23,114 +24,29 @@ const FONT = {
 
 const SECTION_GAP = 10;
 
-/**
- * Item-count caps per print page (A4). First page also carries letterhead + meta + parties,
- * so it holds fewer rows than continuation pages.
- * Tuned for trim lines with multi-line particulars.
- */
-const ITEMS_PER_PAGE = {
-  ONE_PAGE: 8,
-  FIRST: 6,
-  MIDDLE: 18,
-  LAST: 12,
-};
-
-/** Splits line items across print pages. Never leaves an empty page. */
-function paginatePoItems(allItems) {
-  const total = allItems.length;
-  if (total === 0) {
-    return [{ items: [], startIndex: 0, isFirst: true, isLast: true, moreCount: 0 }];
-  }
-  if (total <= ITEMS_PER_PAGE.ONE_PAGE) {
-    return [{ items: allItems, startIndex: 0, isFirst: true, isLast: true, moreCount: 0 }];
-  }
-
-  const pages = [];
-  let remaining = [...allItems];
-  let startIndex = 0;
-
-  const firstCount = Math.min(ITEMS_PER_PAGE.FIRST, remaining.length);
-  pages.push({
-    items: remaining.slice(0, firstCount),
-    startIndex,
-    isFirst: true,
-    isLast: false,
-  });
-  remaining = remaining.slice(firstCount);
-  startIndex += firstCount;
-
-  while (remaining.length > ITEMS_PER_PAGE.LAST) {
-    const count = Math.min(ITEMS_PER_PAGE.MIDDLE, remaining.length - ITEMS_PER_PAGE.LAST);
-    pages.push({
-      items: remaining.slice(0, count),
-      startIndex,
-      isFirst: false,
-      isLast: false,
-    });
-    remaining = remaining.slice(count);
-    startIndex += count;
-  }
-
-  if (remaining.length > 0) {
-    pages.push({
-      items: remaining,
-      startIndex,
-      isFirst: false,
-      isLast: true,
-    });
-  } else {
-    // All items were placed on earlier pages — mark the last one as final (footer goes there)
-    pages[pages.length - 1] = { ...pages[pages.length - 1], isLast: true };
-  }
-
-  return pages.map((page, i) => ({
-    ...page,
-    moreCount: i < pages.length - 1
-      ? pages.slice(i + 1).reduce((sum, p) => sum + p.items.length, 0)
-      : 0,
-  }));
-}
-
 export const SUPPLIER_PO_PRINT_STYLE = `
 @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
 
 @media print {
-  html, body {
-    height: auto !important;
-    overflow: visible !important;
-    margin: 0 !important;
-    padding: 0 !important;
+  @page {
+    size: A4 portrait;
+    margin: 8mm 9mm 14mm 9mm;
+    ${pageNumberRules(FONT.body)}
   }
-  body * { visibility: hidden !important; }
-  #supplier-po-print-root,
-  #supplier-po-print-root * { visibility: visible !important; }
+  ${isolatePrintRootCss('supplier-po-print-root')}
   #supplier-po-print-root {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    margin: 0 !important;
     padding: 0 !important;
     background: ${BRAND.pageBg} !important;
     font-family: ${FONT.body} !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
   }
-  .po-print-page {
-    page-break-after: always !important;
-    break-after: page !important;
-  }
-  .po-print-page:last-child {
-    page-break-after: auto !important;
+  ${flowRulesCss('#supplier-po-print-root')}
+  #supplier-po-print-root .po-print-page {
     break-after: auto !important;
+    page-break-after: auto !important;
   }
-  .po-print-no-break { page-break-inside: avoid !important; break-inside: avoid !important; }
-  .po-print-items-table { page-break-inside: auto !important; break-inside: auto !important; }
-  .po-print-items-table thead { display: table-header-group !important; }
-  .po-print-items-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
-  @page {
-    size: A4 portrait;
-    margin: 8mm 9mm;
+  #supplier-po-print-root .po-print-watermark {
+    position: fixed !important;
+    inset: 0 !important;
   }
 }
 @media screen {
@@ -400,28 +316,12 @@ function PoParties({ po }) {
   );
 }
 
-function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = false, poNumber, moreCount = 0 }) {
+function PoItemsTable({ items, trimsMap }) {
   return (
     <div>
-      {showContinuation && (
-        <div style={{
-          padding: '10px 14px',
-          marginBottom: 10,
-          background: BRAND.navy,
-          color: BRAND.white,
-          borderRadius: 6,
-          fontSize: '8.5pt',
-          fontWeight: 600,
-          fontFamily: FONT.body,
-          letterSpacing: '0.04em',
-        }}
-        >
-          Purchase Order {poNumber} — Line Items (continued)
-        </div>
-      )}
       <table
         className="po-print-items-table"
-        style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontFamily: FONT.body, borderRadius: 6, overflow: 'hidden' }}
+        style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontFamily: FONT.body }}
       >
         <thead>
           <tr>
@@ -441,11 +341,10 @@ function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = fals
             </tr>
           ) : (
             items.map((row, i) => {
-              const globalIndex = startIndex + i;
               const { name, props } = getItemParts(row, trimsMap);
               return (
-                <tr key={row.id ?? globalIndex}>
-                  <td style={{ ...tdStyle('center', i % 2 === 1), fontWeight: 600 }}>{row.serial_no || globalIndex + 1}</td>
+                <tr key={row.id ?? i}>
+                  <td style={{ ...tdStyle('center', i % 2 === 1), fontWeight: 600 }}>{row.serial_no || i + 1}</td>
                   <td style={{ ...tdStyle('left', i % 2 === 1), wordBreak: 'break-word' }}>
                     <div style={{ fontWeight: 600 }}>{name}</div>
                     {props ? (
@@ -465,26 +364,6 @@ function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = fals
           )}
         </tbody>
       </table>
-      {moreCount > 0 && (
-        <div
-          className="po-print-no-break"
-          style={{
-            marginTop: 8,
-            padding: '8px 14px',
-            background: BRAND.navyLight,
-            border: `1px dashed ${BRAND.navy}`,
-            borderRadius: 6,
-            fontSize: '7.8pt',
-            fontStyle: 'italic',
-            fontWeight: 600,
-            color: BRAND.navy,
-            fontFamily: FONT.body,
-            textAlign: 'right',
-          }}
-        >
-          + {moreCount} more line item{moreCount === 1 ? '' : 's'} on next page →
-        </div>
-      )}
     </div>
   );
 }
@@ -492,7 +371,7 @@ function PoItemsTable({ items, trimsMap, startIndex = 0, showContinuation = fals
 function PoFooter({ po, totals, companyName, company }) {
   return (
     <>
-      <PrintSection>
+      <PrintSection allowBreak>
         <div style={{
           display: 'grid',
           gridTemplateColumns: '1fr 210px',
@@ -509,15 +388,17 @@ function PoFooter({ po, totals, companyName, company }) {
             minHeight: 52,
           }}
           >
-            <div style={{
-              fontSize: '7.5pt',
-              fontWeight: 600,
-              color: BRAND.navy,
-              fontFamily: FONT.body,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: 6,
-            }}
+            <div
+              className="doc-heading"
+              style={{
+                fontSize: '7.5pt',
+                fontWeight: 600,
+                color: BRAND.navy,
+                fontFamily: FONT.body,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                marginBottom: 6,
+              }}
             >
               Terms & Comments
             </div>
@@ -525,7 +406,7 @@ function PoFooter({ po, totals, companyName, company }) {
               {po.po_comments || '—'}
             </div>
           </div>
-          <div style={{ border: `1px solid ${BRAND.navy}`, borderRadius: 6, overflow: 'hidden' }}>
+          <div className="po-print-no-break" style={{ border: `1px solid ${BRAND.navy}`, borderRadius: 6, overflow: 'hidden' }}>
             {[
               ['Subtotal', totals.subtotal],
               ...(po.tax_mode === 'IGST'
@@ -640,7 +521,7 @@ function CompanyWatermark({ company, companyName }) {
   const displayText = text.toUpperCase().slice(0, 48);
 
   return (
-    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none', zIndex: 0 }}>
+    <div className="po-print-watermark" aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none', zIndex: 0 }}>
       {company?.logo_url && (
         <img
           src={company.logo_url}
@@ -678,10 +559,16 @@ function CompanyWatermark({ company, companyName }) {
   );
 }
 
-function PrintPage({ company, companyName, children }) {
+function PrintPage({ company, companyName, poNumber, children }) {
   return (
     <div className="po-print-page" style={pageStyle}>
       <CompanyWatermark company={company} companyName={companyName} />
+      <div className="po-sheet-footer">
+        <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{companyName}</span>
+        {poNumber ? (
+          <span style={{ color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{poNumber}</span>
+        ) : null}
+      </div>
       <div style={contentWrap}>
         {children}
       </div>
@@ -713,35 +600,17 @@ export default function SupplierPOPrintDocument({ po, company, trimsMap = {} }) 
   ].filter(Boolean).join(' · ');
 
   const allItems = po.items || [];
-  const pages = paginatePoItems(allItems);
   const headerProps = { po, company, companyName, addrLine, contactLine };
 
   return (
-    <>
-      {pages.map((page) => (
-        <PrintPage key={page.startIndex} company={company} companyName={companyName}>
-          {page.isFirst && (
-            <>
-              <PrintSection><PoHeader {...headerProps} /></PrintSection>
-              <PrintSection><PoMeta po={po} piLabel={piLabel} buyerPoLabel={buyerPoLabel} /></PrintSection>
-              <PrintSection><PoParties po={po} /></PrintSection>
-            </>
-          )}
-          <PrintSection last={!page.isLast} allowBreak>
-            <PoItemsTable
-              items={page.items}
-              trimsMap={trimsMap}
-              startIndex={page.startIndex}
-              showContinuation={!page.isFirst}
-              poNumber={po.po_number}
-              moreCount={page.moreCount}
-            />
-          </PrintSection>
-          {page.isLast && (
-            <PoFooter po={po} totals={totals} companyName={companyName} company={company} />
-          )}
-        </PrintPage>
-      ))}
-    </>
+    <PrintPage company={company} companyName={companyName} poNumber={po.po_number}>
+      <PrintSection><PoHeader {...headerProps} /></PrintSection>
+      <PrintSection><PoMeta po={po} piLabel={piLabel} buyerPoLabel={buyerPoLabel} /></PrintSection>
+      <PrintSection><PoParties po={po} /></PrintSection>
+      <PrintSection allowBreak>
+        <PoItemsTable items={allItems} trimsMap={trimsMap} />
+      </PrintSection>
+      <PoFooter po={po} totals={totals} companyName={companyName} company={company} />
+    </PrintPage>
   );
 }
