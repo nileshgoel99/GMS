@@ -167,7 +167,9 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
         leftMargin=1.35 * cm,
         topMargin=1.85 * cm,
         bottomMargin=1.55 * cm,
-        title=f'PI-{pi.pi_number}',
+        title=' '.join(
+            part for part in (str(pi.pi_number or '').strip(), str(pi.client_name or '').strip()) if part
+        ) or f'PI-{pi.pi_number}',
     )
     styles = getSampleStyleSheet()
     title_doc = ParagraphStyle(

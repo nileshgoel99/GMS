@@ -65,7 +65,13 @@ class ProformaInvoiceViewSet(viewsets.ModelViewSet):
             _sync_pi_totals(pi)
             pi.refresh_from_db()
         data = build_pi_pdf_bytes(pi)
-        filename = f'{pi.pi_number.replace("/", "-")}.pdf'
+        def _clean_name(value):
+            text = re.sub(r'[\\/:*?"<>|]+', '-', str(value or ''))
+            return re.sub(r'\s+', ' ', text).strip()
+        filename = ' '.join(
+            part for part in (_clean_name(pi.pi_number), _clean_name(pi.client_name)) if part
+        ) or 'Proforma Invoice'
+        filename = f'{filename}.pdf'
         resp = HttpResponse(data, content_type='application/pdf')
         resp['Content-Disposition'] = f'attachment; filename="{filename}"'
         return resp

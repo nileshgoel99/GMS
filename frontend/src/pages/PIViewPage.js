@@ -8,7 +8,7 @@ import { slate } from '../theme/appTheme';
 import { formatDateDMY } from '../utils/formatDate';
 import PIDocumentFooter from '../components/orders/PIDocumentFooter';
 import PIPrintSheet from '../components/orders/PIPrintSheet';
-import { bindPiPrintPageFooters, installPiPrintPageFooters } from '../utils/piPrintPageFooters';
+import { bindPiPrintPageFooters, installPiPrintPageFooters, piDownloadFileName } from '../utils/piPrintPageFooters';
 import { piPrintCss } from '../utils/documentPrint';
 import { companyContactLines } from '../utils/formatCompanyPhone';
 import { useUnsavedDraft, useMarkSavedWhenReady, confirmDiscardUnsaved } from '../hooks/useUnsavedChanges';
@@ -407,12 +407,15 @@ export default function PIViewPage() {
     return () => style.remove();
   }, [printBanner]);
 
+  const printFileName = piDownloadFileName(pi?.pi_number, pi?.client_name);
+
   useEffect(() => {
     return bindPiPrintPageFooters('pi-view-print-root', () => ({
-      marginTopMm: 12,
-      marginBottomMm: 12,
+      marginTopMm: 16,
+      marginBottomMm: 18,
+      fileName: printFileName,
     }));
-  }, []);
+  }, [printFileName]);
 
   useEffect(() => {
     (async () => {
@@ -464,11 +467,12 @@ export default function PIViewPage() {
 
   const handlePrint = useCallback(() => {
     installPiPrintPageFooters('pi-view-print-root', {
-      marginTopMm: 12,
-      marginBottomMm: 12,
+      marginTopMm: 16,
+      marginBottomMm: 18,
+      fileName: printFileName,
     });
     window.print();
-  }, []);
+  }, [printFileName]);
 
   const handleSaveDetails = async () => {
     setSavingDetails(true);

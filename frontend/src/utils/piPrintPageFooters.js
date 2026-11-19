@@ -3,8 +3,8 @@
  * The sheet footer is a page-margin line (see documentPrint.js), so it sits
  * at the foot of every page and does not follow the last paragraph.
  *
- * Also blanks document.title during print so the browser header does not show
- * the app/website title (e.g. "WeaveCore").
+ * The browser uses document.title as the PDF save name. During print that
+ * title is the PI number and party name, then the app title is restored.
  */
 
 import { bindPrintRootLift } from './documentPrint';
@@ -13,13 +13,21 @@ const MM = 96 / 25.4;
 
 let savedDocumentTitle = null;
 
-/** Hide app/website title from browser print headers; restore after print. */
-export function clearPrintDocumentTitle() {
+/** Safe PDF save name: PI number and party name, without the site title. */
+export function piDownloadFileName(piNumber, partyName) {
+  const clean = (value) => String(value || '')
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return [clean(piNumber), clean(partyName)].filter(Boolean).join(' ') || 'Proforma Invoice';
+}
+
+/** Set the print/save name, remembering the app title so it can be restored. */
+export function setPrintDocumentTitle(fileName) {
   if (savedDocumentTitle === null) {
     savedDocumentTitle = document.title;
   }
-  // Space (not empty) avoids some browsers substituting "Untitled" / the URL
-  document.title = ' ';
+  document.title = fileName || 'Proforma Invoice';
 }
 
 export function restorePrintDocumentTitle() {
@@ -50,8 +58,8 @@ export function stampPiPrintPageEstimate(rootId, {
 export function bindPiPrintPageFooters(rootId, getMeta) {
   const unlift = bindPrintRootLift(rootId);
   const run = () => {
-    clearPrintDocumentTitle();
     const meta = typeof getMeta === 'function' ? getMeta() : (getMeta || {});
+    setPrintDocumentTitle(meta.fileName);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => stampPiPrintPageEstimate(rootId, meta));
     });
@@ -80,6 +88,7 @@ export function bindPiPrintPageFooters(rootId, getMeta) {
 }
 
 export function installPiPrintPageFooters(rootId, meta) {
-  clearPrintDocumentTitle();
-  stampPiPrintPageEstimate(rootId, meta);
+  const info = meta || {};
+  setPrintDocumentTitle(info.fileName);
+  stampPiPrintPageEstimate(rootId, info);
 }

@@ -11,7 +11,7 @@ import { normalizeGarmentSize, sortSizeBreakdownEntries } from '../utils/normali
 import { slate } from '../theme/appTheme';
 import PIDocumentFooter from '../components/orders/PIDocumentFooter';
 import PIPrintSheet from '../components/orders/PIPrintSheet';
-import { bindPiPrintPageFooters, installPiPrintPageFooters } from '../utils/piPrintPageFooters';
+import { bindPiPrintPageFooters, installPiPrintPageFooters, piDownloadFileName } from '../utils/piPrintPageFooters';
 import { piPrintCss } from '../utils/documentPrint';
 import { companyContactLines } from '../utils/formatCompanyPhone';
 import { useUnsavedDraft, useMarkSavedWhenReady } from '../hooks/useUnsavedChanges';
@@ -155,12 +155,15 @@ export default function GeneratePIPage() {
     return () => style.remove();
   }, [printBanner]);
 
+  const printFileName = piDownloadFileName(piRef, po?.buyer_name);
+
   useEffect(() => {
     return bindPiPrintPageFooters('pi-print-root', () => ({
-      marginTopMm: 12,
-      marginBottomMm: 12,
+      marginTopMm: 16,
+      marginBottomMm: 18,
+      fileName: printFileName,
     }));
-  }, []);
+  }, [printFileName]);
 
   useEffect(() => {
     (async () => {
@@ -305,11 +308,12 @@ export default function GeneratePIPage() {
 
   const handlePrint = useCallback(() => {
     installPiPrintPageFooters('pi-print-root', {
-      marginTopMm: 12,
-      marginBottomMm: 12,
+      marginTopMm: 16,
+      marginBottomMm: 18,
+      fileName: printFileName,
     });
     window.print();
-  }, []);
+  }, [printFileName]);
 
   if (loading) return (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
