@@ -3,8 +3,8 @@ import { Box } from '@mui/material';
 
 /**
  * PI body in normal block flow so the browser can break on the space left
- * on the page. The repeating footer is position:fixed in the page margin
- * (see documentPrint.js) and is hidden on screen.
+ * on the page. Header, continuation line, and footer live in the page
+ * margin (see documentPrint.js) and are hidden on screen.
  */
 export default function PIPrintSheet({
   companyName = 'J B INTERNATIONAL',
@@ -19,8 +19,10 @@ export default function PIPrintSheet({
         fontFamily: '"Times New Roman", Times, serif',
       }}
     >
+      <Box className="doc-run-header">{companyName} · {centerText}</Box>
+      <Box className="doc-run-continued">Continued from last page</Box>
       {children}
-      <Box className="pi-sheet-footer">
+      <Box className="doc-run-footer pi-sheet-footer">
         <Box
           component="span"
           className="pi-sf-left"

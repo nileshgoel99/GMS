@@ -2,7 +2,7 @@ import React from 'react';
 import { formatDateDisplay } from '../../utils/formatDate';
 import { supplyTypeLabel } from '../../utils/gstSupplyType';
 import { parseParticulars } from '../../utils/parseParticulars';
-import { flowRulesCss, isolatePrintRootCss, pageNumberRules } from '../../utils/documentPrint';
+import { continuedPageRules, flowRulesCss, isolatePrintRootCss, pageNumberRules } from '../../utils/documentPrint';
 
 /** Brand palette — Gold #F3E21A · Rich Black #000000 · Navy #1E3A5F */
 const BRAND = {
@@ -30,9 +30,10 @@ export const SUPPLIER_PO_PRINT_STYLE = `
 @media print {
   @page {
     size: A4 portrait;
-    margin: 8mm 9mm 14mm 9mm;
+    margin: 14mm 9mm 14mm 9mm;
     ${pageNumberRules(FONT.body)}
   }
+  ${continuedPageRules()}
   ${isolatePrintRootCss('supplier-po-print-root')}
   #supplier-po-print-root {
     padding: 0 !important;
@@ -452,7 +453,7 @@ function PoFooter({ po, totals, companyName, company }) {
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
           gap: 12,
-          paddingTop: 4,
+          paddingTop: 28,
         }}
         >
           <div style={{
@@ -562,8 +563,10 @@ function CompanyWatermark({ company, companyName }) {
 function PrintPage({ company, companyName, poNumber, children }) {
   return (
     <div className="po-print-page" style={pageStyle}>
+      <div className="doc-run-header">{companyName} · Purchase Order{poNumber ? ` · ${poNumber}` : ''}</div>
+      <div className="doc-run-continued">Continued from last page</div>
       <CompanyWatermark company={company} companyName={companyName} />
-      <div className="po-sheet-footer">
+      <div className="doc-run-footer po-sheet-footer">
         <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{companyName}</span>
         {poNumber ? (
           <span style={{ color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{poNumber}</span>

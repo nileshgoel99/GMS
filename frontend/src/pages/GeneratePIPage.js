@@ -653,8 +653,8 @@ export default function GeneratePIPage() {
           sx={{
             display: 'flex',
             justifyContent: 'space-between',
-            mt: 5,
-            pt: 2,
+            mt: 4,
+            pt: 7,
             borderTop: '1px solid #999',
             fontFamily: 'inherit',
             fontSize: '9.5pt',

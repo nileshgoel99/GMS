@@ -18,7 +18,7 @@ import { ordersAPI, suppliersAPI, companyAPI } from '../services/api';
 import { slate } from '../theme/appTheme';
 import { formatDateDisplay } from '../utils/formatDate';
 import { normalizeGarmentSize, sortGarmentSizes } from '../utils/normalizeGarmentSize';
-import { flowRulesCss, pageNumberRules } from '../utils/documentPrint';
+import { continuedPageRules, flowRulesCss, pageNumberRules } from '../utils/documentPrint';
 import { extractGsmFromFabricComposition, enrichFabricRowGsm } from '../utils/extractFabricGsm';
 import { companyContactLines } from '../utils/formatCompanyPhone';
 import AddTrimModal from '../components/trims/AddTrimModal';
@@ -61,9 +61,10 @@ const PRINT_STYLE = `
 @media print {
   @page {
     size: A4 portrait;
-    margin: 6mm 5mm 12mm 5mm;
+    margin: 12mm 5mm 12mm 5mm;
     ${pageNumberRules('"Source Sans 3", "Segoe UI", sans-serif')}
   }
+  ${continuedPageRules()}
   html, body {
     height: auto !important;
     min-height: 0 !important;
@@ -1105,6 +1106,11 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
       mx: 0,
       boxSizing: 'border-box',
     }}>
+      <Box className="doc-run-header">
+        {companyName} · Material Indent{indent?.indent_number ? ` · ${indent.indent_number}` : ''}
+      </Box>
+      <Box className="doc-run-continued">Continued from last page</Box>
+      <Box className="doc-run-footer">{companyName}</Box>
       {/* ── Letterhead header ── */}
       <Box className="indent-print-no-break" sx={{
         display: 'flex',
@@ -1414,7 +1420,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
         display: 'flex',
         justifyContent: 'space-between',
         gap: 1.5,
-        mt: 1,
+        mt: 2.5,
         pt: 1.25,
         borderTop: `2px solid ${INDENT_PRINT.navy}`,
       }}>
@@ -1434,7 +1440,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
           }}>
             {/* Signature / stamp space */}
             <Box sx={{
-              height: 52,
+              height: 68,
               mb: 0.5,
               borderBottom: `1px solid ${INDENT_PRINT.border}`,
               bgcolor: alpha(INDENT_PRINT.navy, 0.02),

@@ -103,11 +103,12 @@ def _company_contact_lines(company) -> str:
     return '<br/>'.join(bits)
 
 
-def _make_page_canvas(company):
-    """Watermark + footer on every page."""
+def _make_page_canvas(company, header_text=''):
+    """Watermark, running header, and a single footer on every page."""
 
     def draw(canvas, doc):
         W, H = A4
+        page = canvas.getPageNumber()
         canvas.saveState()
         if company:
             wm = (company.watermark_text or company.legal_name or '').strip()
@@ -120,6 +121,19 @@ def _make_page_canvas(company):
         canvas.restoreState()
 
         canvas.saveState()
+        y_head = H - 0.85 * cm
+        canvas.setFont('Helvetica-Bold', 8)
+        canvas.setFillColor(SLATE)
+        if header_text:
+            canvas.drawString(1.35 * cm, y_head, header_text[:110])
+        if page > 1:
+            canvas.setFont('Helvetica-Oblique', 8)
+            canvas.setFillColor(SLATE_MUTED)
+            canvas.drawRightString(W - 1.35 * cm, y_head, 'Continued from last page')
+        canvas.setStrokeColor(RULE)
+        canvas.setLineWidth(0.4)
+        canvas.line(1.35 * cm, y_head - 0.18 * cm, W - 1.35 * cm, y_head - 0.18 * cm)
+
         foot = ''
         if company:
             foot = (company.pdf_footer_note or '').strip()
@@ -130,10 +144,10 @@ def _make_page_canvas(company):
                 )
         canvas.setFont('Helvetica', 7)
         canvas.setFillColor(SLATE_MUTED)
-        y = 0.75 * cm
+        y = 0.7 * cm
         if foot:
-            canvas.drawString(1.5 * cm, y, foot[:220])
-        canvas.drawRightString(W - 1.5 * cm, y, f'Page {canvas.getPageNumber()}')
+            canvas.drawString(1.35 * cm, y, foot[:180])
+        canvas.drawRightString(W - 1.35 * cm, y, f'Page {page}')
         canvas.restoreState()
 
     return draw
@@ -151,8 +165,8 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
         pagesize=A4,
         rightMargin=1.35 * cm,
         leftMargin=1.35 * cm,
-        topMargin=1.35 * cm,
-        bottomMargin=1.45 * cm,
+        topMargin=1.85 * cm,
+        bottomMargin=1.55 * cm,
         title=f'PI-{pi.pi_number}',
     )
     styles = getSampleStyleSheet()
@@ -454,7 +468,7 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
             [
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                 ('LINEABOVE', (0, 0), (-1, 0), 0.75, TEAL),
-                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 36),
             ]
         )
     )
@@ -473,7 +487,14 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
         ),
     ]))
 
-    on_page = _make_page_canvas(company)
+    header = ' · '.join(
+        x for x in [
+            (company.legal_name if company else '') or 'J B INTERNATIONAL',
+            'PROFORMA INVOICE',
+            pi.pi_number or '',
+        ] if (x or '').strip()
+    )
+    on_page = _make_page_canvas(company, header)
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
     data = buf.getvalue()
     buf.close()
