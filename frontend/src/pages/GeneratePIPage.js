@@ -97,7 +97,10 @@ function ordinalDate(dateStr) {
   return `${day}${suffix} ${d.toLocaleString('en-US', { month: 'long' }).toUpperCase()} ${d.getFullYear()}`;
 }
 
-const PRINT_STYLE = piPrintCss('pi-print-root');
+const printBannerFor = (company, piRef) => [
+  company?.legal_name || 'J B INTERNATIONAL',
+  piRef ? `PI ${piRef}` : 'PROFORMA INVOICE',
+].filter(Boolean).join(' · ');
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function GeneratePIPage() {
@@ -142,14 +145,15 @@ export default function GeneratePIPage() {
   const { markSaved } = useUnsavedDraft(draft);
   useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: id });
 
+  const printBanner = printBannerFor(company, piRef);
+
   useEffect(() => {
-    // Inject print style
     const style = document.createElement('style');
     style.id = 'pi-print-style';
-    style.textContent = PRINT_STYLE;
+    style.textContent = piPrintCss('pi-print-root', { header: printBanner, footer: printBanner });
     document.head.appendChild(style);
     return () => style.remove();
-  }, []);
+  }, [printBanner]);
 
   useEffect(() => {
     return bindPiPrintPageFooters('pi-print-root', () => ({
@@ -653,8 +657,8 @@ export default function GeneratePIPage() {
           sx={{
             display: 'flex',
             justifyContent: 'space-between',
-            mt: 4,
-            pt: 7,
+            mt: 3,
+            pt: 16,
             borderTop: '1px solid #999',
             fontFamily: 'inherit',
             fontSize: '9.5pt',

@@ -1,7 +1,7 @@
 /**
  * Print helpers for Proforma Invoice.
- * The sheet footer is position:fixed in the page margin (see documentPrint.js),
- * so it repeats without covering Value / Date of Dispatch.
+ * The sheet footer is a page-margin line (see documentPrint.js), so it sits
+ * at the foot of every page and does not follow the last paragraph.
  *
  * Also blanks document.title during print so the browser header does not show
  * the app/website title (e.g. "WeaveCore").

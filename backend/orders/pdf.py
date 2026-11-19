@@ -468,7 +468,7 @@ def build_pi_pdf_bytes(pi, company=None) -> bytes:
             [
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                 ('LINEABOVE', (0, 0), (-1, 0), 0.75, TEAL),
-                ('TOPPADDING', (0, 0), (-1, -1), 36),
+                ('TOPPADDING', (0, 0), (-1, -1), 72),
             ]
         )
     )

@@ -21,7 +21,7 @@ import {
   isCartonDimensionsProperty,
   TRIM_UNIT_OPTIONS,
 } from '../components/trims/trimConstants';
-import SupplierPOPrintDocument, { SUPPLIER_PO_PRINT_STYLE } from '../components/procurement/SupplierPOPrintDocument';
+import SupplierPOPrintDocument, { supplierPoPrintCss } from '../components/procurement/SupplierPOPrintDocument';
 import { bindPrintRootLift } from '../utils/documentPrint';
 import AddTrimModal from '../components/trims/AddTrimModal';
 import AddSupplierModal from '../components/suppliers/AddSupplierModal';
@@ -974,17 +974,19 @@ export default function SupplierPOEditorPage() {
   useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: id });
   const defaultDocTitleRef = useRef(document.title);
 
+  const printBanner = [company?.legal_name || 'J.B. International', 'Purchase Order', form.po_number].filter(Boolean).join(' · ');
+
   useEffect(() => {
     const style = document.createElement('style');
     style.id = 'supplier-po-print-style';
-    style.textContent = SUPPLIER_PO_PRINT_STYLE;
+    style.textContent = supplierPoPrintCss(printBanner, printBanner);
     document.head.appendChild(style);
     const unlift = bindPrintRootLift('supplier-po-print-root');
     return () => {
       style.remove();
       unlift();
     };
-  }, []);
+  }, [printBanner]);
 
   // Browser uses document.title as the default PDF / print save name.
   useEffect(() => {

@@ -55,14 +55,15 @@ const INDENT_PRINT = {
 // ── Print styles ─────────────────────────────────────────────────────────────
 // Print root is portaled to document.body so we can hide #root entirely and
 // avoid blank pages from the tall editor layout under visibility:hidden.
-const PRINT_STYLE = `
+function indentPrintStyle(header, footer) {
+  return `
 @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600;700;800&display=swap');
 
 @media print {
   @page {
     size: A4 portrait;
     margin: 12mm 5mm 12mm 5mm;
-    ${pageNumberRules('"Source Sans 3", "Segoe UI", sans-serif')}
+    ${pageNumberRules('"Source Sans 3", "Segoe UI", sans-serif', { header, footer })}
   }
   ${continuedPageRules()}
   html, body {
@@ -92,6 +93,7 @@ const PRINT_STYLE = `
   #indent-print-root { display: none !important; }
 }
 `;
+}
 
 // ── Unit helpers ──────────────────────────────────────────────────────────────
 const UNITS = ['MTRS', 'PCS', 'CONES', 'KG', 'SET', 'PAIR', 'ROLL', 'GROSS', 'GMS', 'CMS'];
@@ -1106,11 +1108,6 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
       mx: 0,
       boxSizing: 'border-box',
     }}>
-      <Box className="doc-run-header">
-        {companyName} · Material Indent{indent?.indent_number ? ` · ${indent.indent_number}` : ''}
-      </Box>
-      <Box className="doc-run-continued">Continued from last page</Box>
-      <Box className="doc-run-footer">{companyName}</Box>
       {/* ── Letterhead header ── */}
       <Box className="indent-print-no-break" sx={{
         display: 'flex',
@@ -1440,7 +1437,7 @@ function IndentDocument({ pi, indent, fabricLines, trimLines, company, selectedL
           }}>
             {/* Signature / stamp space */}
             <Box sx={{
-              height: 68,
+              height: 120,
               mb: 0.5,
               borderBottom: `1px solid ${INDENT_PRINT.border}`,
               bgcolor: alpha(INDENT_PRINT.navy, 0.02),
@@ -2324,7 +2321,10 @@ export default function IndentEditorPage() {
 
   return (
     <>
-    <style>{PRINT_STYLE}</style>
+    <style>{indentPrintStyle(
+      [company?.legal_name || 'J B INTERNATIONAL', 'Material Indent', indentNumber].filter(Boolean).join(' · '),
+      [company?.legal_name || 'J B INTERNATIONAL', indentNumber].filter(Boolean).join(' · '),
+    )}</style>
     <Box sx={{ p: { xs: 1.5, sm: 2.5 } }}>
       <Snackbar
         open={Boolean(saveNotice)}

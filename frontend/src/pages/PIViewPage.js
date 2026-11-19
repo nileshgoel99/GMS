@@ -74,7 +74,10 @@ function getPiFooter(pi, company) {
   };
 }
 
-const PRINT_STYLE = piPrintCss('pi-view-print-root');
+const printBannerFor = (company, pi) => [
+  company?.legal_name || 'J B INTERNATIONAL',
+  pi?.pi_number ? `PI ${pi.pi_number}` : 'PROFORMA INVOICE',
+].filter(Boolean).join(' · ');
 
 // ── PI Document ───────────────────────────────────────────────────────────────
 function PIDocument({ pi, company }) {
@@ -344,8 +347,8 @@ function PIDocument({ pi, company }) {
           sx={{
             display: 'flex',
             justifyContent: 'space-between',
-            mt: 4,
-            pt: 7,
+            mt: 3,
+            pt: 16,
             borderTop: '1px solid #999',
             fontFamily: 'inherit',
             fontSize: '9.5pt',
@@ -394,13 +397,15 @@ export default function PIViewPage() {
   const { isDirty, markSaved } = useUnsavedDraft(detailDraft);
   useMarkSavedWhenReady(markSaved, { ready: !loading, loadKey: id });
 
+  const printBanner = printBannerFor(company, pi);
+
   useEffect(() => {
     const style = document.createElement('style');
     style.id = 'pi-view-print-style';
-    style.textContent = PRINT_STYLE;
+    style.textContent = piPrintCss('pi-view-print-root', { header: printBanner, footer: printBanner });
     document.head.appendChild(style);
     return () => style.remove();
-  }, []);
+  }, [printBanner]);
 
   useEffect(() => {
     return bindPiPrintPageFooters('pi-view-print-root', () => ({

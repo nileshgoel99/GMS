@@ -24,14 +24,15 @@ const FONT = {
 
 const SECTION_GAP = 10;
 
-export const SUPPLIER_PO_PRINT_STYLE = `
+export function supplierPoPrintCss(header = '', footer = header) {
+  return `
 @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
 
 @media print {
   @page {
     size: A4 portrait;
-    margin: 14mm 9mm 14mm 9mm;
-    ${pageNumberRules(FONT.body)}
+    margin: 14mm 9mm 18mm 9mm;
+    ${pageNumberRules(FONT.body, { header, footer })}
   }
   ${continuedPageRules()}
   ${isolatePrintRootCss('supplier-po-print-root')}
@@ -54,6 +55,9 @@ export const SUPPLIER_PO_PRINT_STYLE = `
   #supplier-po-print-root { display: none !important; }
 }
 `;
+}
+
+export const SUPPLIER_PO_PRINT_STYLE = supplierPoPrintCss();
 
 const pageStyle = {
   fontFamily: FONT.body,
@@ -470,7 +474,7 @@ function PoFooter({ po, totals, companyName, company }) {
             <div style={{ fontSize: '7.5pt', marginBottom: 10, fontFamily: FONT.body, color: BRAND.black }}>
               Placed by: {po.order_placed_by || '—'}
             </div>
-            <div style={{ fontSize: '7.5pt', marginTop: 12, fontFamily: FONT.body, color: BRAND.black }}>
+            <div style={{ fontSize: '7.5pt', marginTop: 72, fontFamily: FONT.body, color: BRAND.black }}>
               Sign: _________________ &nbsp; Name: _________________ &nbsp; Date: _________
             </div>
           </div>
@@ -488,7 +492,7 @@ function PoFooter({ po, totals, companyName, company }) {
             <div style={{ fontSize: '7.5pt', color: BRAND.textMuted, marginBottom: 10, fontFamily: FONT.body }}>
               Confirm acceptance of this order
             </div>
-            <div style={{ fontSize: '7.5pt', marginTop: 12, fontFamily: FONT.body, color: BRAND.black }}>
+            <div style={{ fontSize: '7.5pt', marginTop: 72, fontFamily: FONT.body, color: BRAND.black }}>
               Sign: _________________ &nbsp; Name: {po.supplier_ack_name || '_________________'} &nbsp; Date: {formatDateDisplay(po.supplier_ack_date) === '—' ? '_________' : formatDateDisplay(po.supplier_ack_date)}
             </div>
           </div>
@@ -560,18 +564,10 @@ function CompanyWatermark({ company, companyName }) {
   );
 }
 
-function PrintPage({ company, companyName, poNumber, children }) {
+function PrintPage({ company, companyName, children }) {
   return (
     <div className="po-print-page" style={pageStyle}>
-      <div className="doc-run-header">{companyName} · Purchase Order{poNumber ? ` · ${poNumber}` : ''}</div>
-      <div className="doc-run-continued">Continued from last page</div>
       <CompanyWatermark company={company} companyName={companyName} />
-      <div className="doc-run-footer po-sheet-footer">
-        <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{companyName}</span>
-        {poNumber ? (
-          <span style={{ color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{poNumber}</span>
-        ) : null}
-      </div>
       <div style={contentWrap}>
         {children}
       </div>

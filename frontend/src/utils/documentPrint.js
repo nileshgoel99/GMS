@@ -5,8 +5,8 @@
  * on the page. Blocks that must stay intact opt into `.doc-keep`. Tables with
  * `.pi-items-table`, `.po-print-items-table`, or `.indent-print-table` repeat
  * their header and do not split a row. The page header, continuation line,
- * and footer are running margin boxes, so each is painted once per page
- * and never again in the document body.
+ * and footer are written into the page margin with CSS content strings, so
+ * they sit at the top and foot of every page and never in the document body.
  *
  * Print roots that live inside the app layout are moved to `document.body`
  * for the print (see `bindPrintRootLift`). Hiding the rest of the body with
@@ -16,16 +16,31 @@
 
 const placeholders = new Map();
 
-export function pageNumberRules(fontFamily) {
+/** Escape text for a CSS content: "..." value. */
+export function cssContent(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r?\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 160);
+}
+
+export function pageNumberRules(fontFamily, { header = '', footer = '' } = {}) {
   return `
     @top-left {
-      content: element(docHeader);
+      content: "${cssContent(header)}";
+      font-family: ${fontFamily};
+      font-size: 8pt;
+      font-weight: 700;
+      color: #222;
       vertical-align: bottom;
       padding-bottom: 1mm;
     }
     @top-center { content: none; }
     @top-right {
-      content: element(docContinued);
+      content: "Continued from last page";
       font-family: ${fontFamily};
       font-size: 8pt;
       font-style: italic;
@@ -34,7 +49,10 @@ export function pageNumberRules(fontFamily) {
       padding-bottom: 1mm;
     }
     @bottom-left {
-      content: element(docFooter);
+      content: "${cssContent(footer)}";
+      font-family: ${fontFamily};
+      font-size: 8pt;
+      color: #333;
       vertical-align: top;
       padding-top: 1mm;
     }
@@ -92,34 +110,12 @@ export function flowRulesCss(root) {
       break-inside: avoid !important;
       page-break-inside: avoid !important;
     }
-    ${root} .doc-run-header {
-      position: running(docHeader);
-      display: block !important;
-      font-size: 8pt;
-      font-weight: 700;
-      line-height: 1.2;
-      color: #222;
-      white-space: nowrap;
-    }
-    ${root} .doc-run-continued {
-      position: running(docContinued);
-      display: block !important;
-      font-size: 8pt;
-      font-style: italic;
-      font-weight: 500;
-      line-height: 1.2;
-      color: #555;
-      white-space: nowrap;
-    }
+    ${root} .doc-run-header,
+    ${root} .doc-run-continued,
     ${root} .doc-run-footer,
     ${root} .pi-sheet-footer,
     ${root} .po-sheet-footer {
-      position: running(docFooter);
-      display: block !important;
-      font-size: 8pt;
-      line-height: 1.2;
-      color: #333;
-      white-space: nowrap;
+      display: none !important;
     }
   `;
 }
@@ -158,7 +154,7 @@ export function isolatePrintRootCss(rootId) {
   `;
 }
 
-export function piPrintCss(rootId) {
+export function piPrintCss(rootId, chrome = {}) {
   return `
 @media screen {
   .doc-run-header,
@@ -169,8 +165,8 @@ export function piPrintCss(rootId) {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 16mm 12mm 16mm 12mm;
-    ${pageNumberRules('"Times New Roman", Times, serif')}
+    margin: 16mm 12mm 18mm 12mm;
+    ${pageNumberRules('"Times New Roman", Times, serif', chrome)}
   }
   ${continuedPageRules()}
   ${isolatePrintRootCss(rootId)}
