@@ -2429,48 +2429,52 @@ export default function SupplierPOEditorPage() {
         </Box>
       </Paper>
 
-      <Paper elevation={0} sx={sectionPaperSxByIndex(3)}>
-        <Typography sx={{ ...sectionLabelSx, mb: 1 }}>Notes</Typography>
-        <TextField
-          fullWidth
-          size="small"
-          multiline
-          rows={3}
-          maxRows={3}
-          label="Notes"
-          value={form.notes}
-          onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-          placeholder="Notes for this purchase order…"
-          sx={{ ...sxInput, '& textarea': { lineHeight: 1.4, resize: 'none' } }}
-        />
-      </Paper>
-
-      {/* Footer — compact */}
-      <Paper elevation={0} sx={sectionPaperSxByIndex(4)}>
-        <Typography sx={{ ...sectionLabelSx, mb: 1 }}>Footer & Acknowledgement</Typography>
-        <Grid container spacing={1.5}>
-          <Grid item xs={12}>
-            <TextField fullWidth size="small" multiline minRows={2} label="Purchase Order Comments"
-              value={form.po_comments} onChange={(e) => setForm((f) => ({ ...f, po_comments: e.target.value }))} sx={sxInput} />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField fullWidth size="small" label="Order Placed By" value={form.order_placed_by}
-              onChange={(e) => setForm((f) => ({ ...f, order_placed_by: e.target.value }))} sx={sxInput} />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField fullWidth size="small" label="Supplier Ack. Name" value={form.supplier_ack_name}
-              onChange={(e) => setForm((f) => ({ ...f, supplier_ack_name: e.target.value }))} sx={sxInput} />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField fullWidth size="small" label="Supplier Ack. Date" type="date" value={form.supplier_ack_date}
-              onChange={(e) => setForm((f) => ({ ...f, supplier_ack_date: e.target.value }))}
-              InputLabelProps={{ shrink: true }} sx={sxInput} />
-          </Grid>
+      <Grid container spacing={1.5} sx={{ mb: 1.5, alignItems: 'stretch' }}>
+        <Grid item xs={12} md={4}>
+          <Paper elevation={0} sx={{ ...sectionPaperSxByIndex(3), mb: 0, height: '100%' }}>
+            <Typography sx={{ ...sectionLabelSx, mb: 1 }}>Notes</Typography>
+            <TextField
+              fullWidth
+              size="small"
+              multiline
+              rows={3}
+              maxRows={3}
+              label="Notes"
+              value={form.notes}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              placeholder="Notes for this purchase order…"
+              sx={{ ...sxInput, '& textarea': { lineHeight: 1.4, resize: 'none' } }}
+            />
+          </Paper>
         </Grid>
-        <Typography sx={{ fontSize: '0.68rem', color: 'text.secondary', mt: 1.25, lineHeight: 1.4 }}>
-          Print view includes signature blocks for company and supplier acknowledgement.
-        </Typography>
-      </Paper>
+        <Grid item xs={12} md={8}>
+          <Paper elevation={0} sx={{ ...sectionPaperSxByIndex(4), mb: 0, height: '100%' }}>
+            <Typography sx={{ ...sectionLabelSx, mb: 1 }}>Footer & Acknowledgement</Typography>
+            <Grid container spacing={1.5}>
+              <Grid item xs={12}>
+                <TextField fullWidth size="small" multiline minRows={2} label="Purchase Order Comments"
+                  value={form.po_comments} onChange={(e) => setForm((f) => ({ ...f, po_comments: e.target.value }))} sx={sxInput} />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField fullWidth size="small" label="Order Placed By" value={form.order_placed_by}
+                  onChange={(e) => setForm((f) => ({ ...f, order_placed_by: e.target.value }))} sx={sxInput} />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField fullWidth size="small" label="Supplier Ack. Name" value={form.supplier_ack_name}
+                  onChange={(e) => setForm((f) => ({ ...f, supplier_ack_name: e.target.value }))} sx={sxInput} />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField fullWidth size="small" label="Supplier Ack. Date" type="date" value={form.supplier_ack_date}
+                  onChange={(e) => setForm((f) => ({ ...f, supplier_ack_date: e.target.value }))}
+                  InputLabelProps={{ shrink: true }} sx={sxInput} />
+              </Grid>
+            </Grid>
+            <Typography sx={{ fontSize: '0.68rem', color: 'text.secondary', mt: 1.25, lineHeight: 1.4 }}>
+              Print view includes signature blocks for company and supplier acknowledgement.
+            </Typography>
+          </Paper>
+        </Grid>
+      </Grid>
 
       {/* Bottom actions */}
       <Box sx={{
