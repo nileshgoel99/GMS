@@ -47,9 +47,11 @@ def _fmt_size_breakdown(size_breakdown, qty_pcs: int) -> str:
         if not isinstance(row, dict):
             continue
         sz = str(row.get('size') or '').strip()
+        code = str(row.get('product_code') or '').strip()
         q = int(row.get('qty') or 0)
-        if sz or q:
-            parts.append(f'{sz} / {q}' if sz else str(q))
+        label = f'{code} {sz}'.strip() if code else sz
+        if label or q:
+            parts.append(f'{label} / {q}' if label else str(q))
     if parts:
         return ', '.join(parts) + f' = {qty_pcs} PCS'
     return f'{qty_pcs} PCS'

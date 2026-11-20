@@ -96,19 +96,39 @@ def sort_garment_sizes(sizes) -> list:
     return sorted(sizes or [], key=cmp_to_key(compare_garment_sizes))
 
 
+def _product_code_key(value) -> str:
+    return str(value or '').strip().upper()
+
+
+def compare_size_breakdown_entries(a, b) -> int:
+    """Size order first, then product code, so the same size stays distinct per code."""
+    size_cmp = compare_garment_sizes((a or {}).get('size'), (b or {}).get('size'))
+    if size_cmp != 0:
+        return size_cmp
+    a_code = _product_code_key((a or {}).get('product_code'))
+    b_code = _product_code_key((b or {}).get('product_code'))
+    if a_code < b_code:
+        return -1
+    if a_code > b_code:
+        return 1
+    return 0
+
+
 def sort_size_breakdown_entries(rows: list) -> list:
-    return sorted(rows or [], key=cmp_to_key(lambda a, b: compare_garment_sizes(
-        (a or {}).get('size'),
-        (b or {}).get('size'),
-    )))
+    return sorted(rows or [], key=cmp_to_key(compare_size_breakdown_entries))
 
 
 def normalize_size_breakdown_list(raw) -> list:
-    """Normalize [{size, qty, product_code?}] lists, merge duplicates, sort sizes."""
+    """Normalize [{size, qty, product_code?}] lists.
+
+    Rows merge only when both the size and the product code match.
+    BK-30-R / 30 and BK-30-T / 30 stay as two sizes.
+    """
     if not isinstance(raw, list):
         return []
 
     merged = {}
+    order = []
     for entry in raw:
         if not isinstance(entry, dict):
             continue
@@ -117,14 +137,19 @@ def normalize_size_breakdown_list(raw) -> list:
             continue
         qty = int(entry.get('qty', 0) or 0)
         product_code = str(entry.get('product_code') or '').strip()
-        if size not in merged:
-            merged[size] = {'qty': 0, 'product_code': ''}
-        merged[size]['qty'] += qty
-        if product_code and not merged[size]['product_code']:
-            merged[size]['product_code'] = product_code
+        key = (size, _product_code_key(product_code))
+        if key not in merged:
+            merged[key] = {'qty': 0, 'product_code': product_code}
+            order.append(key)
+        else:
+            if product_code and not merged[key]['product_code']:
+                merged[key]['product_code'] = product_code
+        merged[key]['qty'] += qty
 
     out = []
-    for size, data in merged.items():
+    for key in order:
+        size, _code = key
+        data = merged[key]
         row = {'size': size, 'qty': data['qty']}
         if data['product_code']:
             row['product_code'] = data['product_code']

@@ -7,7 +7,7 @@ import { alpha } from '@mui/material/styles';
 import { ArrowBack, Print, Edit, CheckCircle, Autorenew, Save } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ordersAPI, companyAPI } from '../services/api';
-import { normalizeGarmentSize, sortSizeBreakdownEntries } from '../utils/normalizeGarmentSize';
+import { formatPiSizeBreakdown, normalizeGarmentSize, sortSizeBreakdownEntries } from '../utils/normalizeGarmentSize';
 import { slate } from '../theme/appTheme';
 import PIDocumentFooter from '../components/orders/PIDocumentFooter';
 import PIPrintSheet from '../components/orders/PIPrintSheet';
@@ -74,9 +74,13 @@ function groupLines(lines) {
       if (!qty) return;
       const size = normalizeGarmentSize(sb.size);
       if (!size) return;
-      const existing = grp.sizes.find((s) => s.size === size);
+      const product_code = String(sb.product_code || '').trim();
+      const codeKey = product_code.toUpperCase();
+      const existing = grp.sizes.find(
+        (s) => s.size === size && String(s.product_code || '').trim().toUpperCase() === codeKey,
+      );
       if (existing) existing.qty += qty;
-      else grp.sizes.push({ size, qty });
+      else grp.sizes.push(product_code ? { size, qty, product_code } : { size, qty });
     });
     grp.quantity += parseFloat(line.quantity) || 0;
   });
@@ -490,7 +494,7 @@ export default function GeneratePIPage() {
         </Box>
         <Box component="tbody">
           {piLines.map((line, i) => {
-              const sizeDesc = line.sizes.map((s) => `${s.size} – ${s.qty} pcs`).join(', ');
+              const sizeDesc = formatPiSizeBreakdown(line.sizes);
             const disc = line.discount ? (1 - line.discount / 100) : 1;
             const netPrice = line.unit_price * disc;
             const lineAmt = netPrice * line.quantity;
@@ -882,8 +886,8 @@ export default function GeneratePIPage() {
                           {[line.color, line.item_code].filter(Boolean).join(' · ')}
                         </Typography>
                       )}
-                      <Typography sx={{ fontSize: '0.68rem', color: slate[400], mt: 0.15 }}>
-                        {line.quantity} pcs · {line.sizes.length} sizes
+                      <Typography sx={{ fontSize: '0.68rem', color: slate[400], mt: 0.15, wordBreak: 'break-word' }}>
+                        {line.quantity} pcs · {formatPiSizeBreakdown(line.sizes)}
                       </Typography>
                     </Box>
                     <TextField

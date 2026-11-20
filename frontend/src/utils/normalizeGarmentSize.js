@@ -74,13 +74,26 @@ export function sortGarmentSizes(sizes) {
   return [...sizes].sort(compareGarmentSizes);
 }
 
+const productCodeKey = (value) => String(value ?? '').trim().toUpperCase();
+
+/** Same size with a different product code is a different row. */
+export function compareSizeBreakdownEntries(a, b) {
+  const sizeCmp = compareGarmentSizes(a?.size, b?.size);
+  if (sizeCmp !== 0) return sizeCmp;
+  return productCodeKey(a?.product_code).localeCompare(productCodeKey(b?.product_code));
+}
+
 /** Sort size-breakdown rows; blank size rows stay at the end. */
 export function sortSizeBreakdownEntries(breakdown) {
   if (!Array.isArray(breakdown)) return [];
-  return [...breakdown].sort((a, b) => compareGarmentSizes(a?.size, b?.size));
+  return [...breakdown].sort(compareSizeBreakdownEntries);
 }
 
-/** Normalize and merge [{ size, qty, product_code? }] rows by uppercase size label. */
+/**
+ * Normalize [{ size, qty, product_code? }] rows.
+ * Merge only when size and product code both match.
+ * BK-30-R / 30 and BK-30-T / 30 stay as two sizes.
+ */
 export function normalizeSizeBreakdownEntries(breakdown) {
   if (!Array.isArray(breakdown)) return [];
 
@@ -90,21 +103,35 @@ export function normalizeSizeBreakdownEntries(breakdown) {
     if (!size) return;
     const qty = parseInt(entry?.qty, 10) || 0;
     const product_code = String(entry?.product_code ?? '').trim();
-    const existing = merged.get(size);
+    const key = `${size}\0${productCodeKey(product_code)}`;
+    const existing = merged.get(key);
     if (existing) {
       existing.qty += qty;
       if (!existing.product_code && product_code) existing.product_code = product_code;
     } else {
-      merged.set(size, { qty, product_code });
+      merged.set(key, { size, qty, product_code });
     }
   });
 
-  const rows = [...merged.entries()].map(([size, { qty, product_code }]) => {
+  const rows = [...merged.values()].map(({ size, qty, product_code }) => {
     const row = { size, qty };
     if (product_code) row.product_code = product_code;
     return row;
   });
   return sortSizeBreakdownEntries(rows);
+}
+
+/** PI description line: product code with its size, when a code is set. */
+export function formatPiSizeBreakdown(rows) {
+  return (rows || [])
+    .filter((row) => row && (row.size || row.qty))
+    .map((row) => {
+      const size = normalizeGarmentSize(row.size) || String(row.size || '').trim();
+      const code = String(row.product_code || '').trim();
+      const label = code ? `${code} · ${size}` : size;
+      return `${label} – ${row.qty} pcs`;
+    })
+    .join(', ');
 }
 
 /** Normalize size keys in intent sheet maps, merging duplicate labels. */

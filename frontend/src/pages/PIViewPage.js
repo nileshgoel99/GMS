@@ -11,6 +11,7 @@ import PIPrintSheet from '../components/orders/PIPrintSheet';
 import { bindPiPrintPageFooters, installPiPrintPageFooters, piDownloadFileName } from '../utils/piPrintPageFooters';
 import { piPrintCss } from '../utils/documentPrint';
 import { companyContactLines } from '../utils/formatCompanyPhone';
+import { formatPiSizeBreakdown } from '../utils/normalizeGarmentSize';
 import { useUnsavedDraft, useMarkSavedWhenReady, confirmDiscardUnsaved } from '../hooks/useUnsavedChanges';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -248,7 +249,7 @@ function PIDocument({ pi, company }) {
         <Box component="tbody">
           {(pi.lines || []).map((line, i) => {
             const sb = (line.size_breakdown || []);
-            const sizeDesc = sb.map((s) => `${s.size} – ${s.qty} pcs`).join(', ');
+            const sizeDesc = formatPiSizeBreakdown(sb);
             const price = parseFloat(line.unit_price_usd || 0);
             const qty   = line.quantity_pcs || 0;
             const val   = parseFloat(line.line_value_usd || price * qty || 0);
