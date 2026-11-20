@@ -2038,10 +2038,10 @@ export default function BuyerPOEditorPage() {
 
             <Divider sx={{ mb: 3, borderStyle: 'dashed' }} />
 
-            <Typography sx={groupLabelSx}>Internal remarks</Typography>
-            <TextField size="small" fullWidth label="Internal notes"
+            <Typography sx={groupLabelSx}>Notes</Typography>
+            <TextField size="small" fullWidth multiline minRows={3} label="Notes"
               value={formData.notes} onChange={(e) => setField('notes', e.target.value)}
-              placeholder="Any internal remarks about this PO (won't be printed)…" 
+              placeholder="Notes for this purchase order…"
               sx={{ ...fieldSx, '& .MuiInputBase-root': { bgcolor: '#fcfcfc' } }} />
 
             <Divider sx={{ my: 4, borderStyle: 'dashed' }} />

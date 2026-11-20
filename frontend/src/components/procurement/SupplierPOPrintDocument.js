@@ -410,6 +410,27 @@ function PoFooter({ po, totals, companyName, company }) {
             <div style={{ fontSize: '7.5pt', color: BRAND.textMuted, whiteSpace: 'pre-line', lineHeight: 1.5, fontFamily: FONT.body }}>
               {po.po_comments || '—'}
             </div>
+            {String(po.notes || '').trim() && (
+              <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${BRAND.border}` }}>
+                <div
+                  className="doc-heading"
+                  style={{
+                    fontSize: '7.5pt',
+                    fontWeight: 600,
+                    color: BRAND.navy,
+                    fontFamily: FONT.body,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    marginBottom: 4,
+                  }}
+                >
+                  Notes
+                </div>
+                <div style={{ fontSize: '7.5pt', color: BRAND.black, whiteSpace: 'pre-line', lineHeight: 1.5, fontFamily: FONT.body }}>
+                  {po.notes}
+                </div>
+              </div>
+            )}
           </div>
           <div className="po-print-no-break" style={{ border: `1px solid ${BRAND.navy}`, borderRadius: 6, overflow: 'hidden' }}>
             {[

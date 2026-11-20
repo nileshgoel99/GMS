@@ -190,6 +190,15 @@ export default function SupplierPOViewModal({ open, poId, onClose, onEdit }) {
               </Box>
             </Box>
 
+            {String(po.notes || '').trim() && (
+              <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: alpha('#b45309', 0.06), border: `1px solid ${alpha('#b45309', 0.2)}` }}>
+                <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#b45309', mb: 0.5 }}>
+                  Notes
+                </Typography>
+                <Typography sx={{ fontSize: '0.85rem', whiteSpace: 'pre-line', color: slate[800] }}>{po.notes}</Typography>
+              </Box>
+            )}
+
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <InfoItem label="Payment Terms" value={po.payment_terms} />

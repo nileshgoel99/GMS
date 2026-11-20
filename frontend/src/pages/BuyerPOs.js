@@ -344,7 +344,7 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
 
               {po.notes && (
                 <Box sx={{ mt: 2, p: 2, bgcolor: '#fffbf0', border: `1px solid ${alpha('#b45309', 0.2)}`, borderRadius: 2 }}>
-                  <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#b45309', mb: 0.5 }}>Internal Notes</Typography>
+                  <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#b45309', mb: 0.5 }}>Notes</Typography>
                   <Typography sx={{ fontSize: '0.85rem', color: slate[700], whiteSpace: 'pre-line' }}>{po.notes}</Typography>
                 </Box>
               )}

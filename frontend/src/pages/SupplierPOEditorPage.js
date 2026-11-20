@@ -2434,6 +2434,13 @@ export default function SupplierPOEditorPage() {
         <Typography sx={{ ...sectionLabelSx, mb: 1 }}>Footer & Acknowledgement</Typography>
         <Grid container spacing={1.5}>
           <Grid item xs={12}>
+            <TextField fullWidth size="small" multiline minRows={3} label="Notes"
+              value={form.notes}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              placeholder="Notes for this purchase order…"
+              sx={sxInput} />
+          </Grid>
+          <Grid item xs={12}>
             <TextField fullWidth size="small" multiline minRows={2} label="Purchase Order Comments"
               value={form.po_comments} onChange={(e) => setForm((f) => ({ ...f, po_comments: e.target.value }))} sx={sxInput} />
           </Grid>
