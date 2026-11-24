@@ -393,13 +393,15 @@ class ProformaInvoiceListSerializer(serializers.ModelSerializer):
     customer_id = serializers.IntegerField(read_only=True, allow_null=True)
     customer_code = serializers.CharField(source='customer.customer_code', read_only=True, allow_null=True)
     linked_po_id = serializers.SerializerMethodField()
+    ex_factory_date = serializers.SerializerMethodField()
+    currency = serializers.SerializerMethodField()
 
     class Meta:
         model = ProformaInvoice
         fields = [
             'id', 'pi_number', 'buyer_po_number', 'customer_id', 'customer_code', 'client_name', 'order_date',
-            'delivery_date', 'garment_type', 'quantity', 'total_amount', 'status', 'created_by_name',
-            'indents_count', 'lines_count', 'linked_po_id', 'created_at',
+            'delivery_date', 'ex_factory_date', 'garment_type', 'quantity', 'total_amount', 'currency', 'status',
+            'created_by_name', 'indents_count', 'lines_count', 'linked_po_id', 'created_at',
         ]
 
     def get_indents_count(self, obj):
@@ -408,9 +410,25 @@ class ProformaInvoiceListSerializer(serializers.ModelSerializer):
     def get_lines_count(self, obj):
         return obj.lines.count()
 
+    def _linked_po(self, obj):
+        pos = list(obj.buyer_pos.all())
+        if not pos:
+            return None
+        return min(pos, key=lambda po: po.id or 0)
+
     def get_linked_po_id(self, obj):
-        po = obj.buyer_pos.order_by('id').first()
+        po = self._linked_po(obj)
         return po.id if po else None
+
+    def get_ex_factory_date(self, obj):
+        po = self._linked_po(obj)
+        if po and po.ex_factory_date:
+            return po.ex_factory_date
+        return obj.delivery_date
+
+    def get_currency(self, obj):
+        po = self._linked_po(obj)
+        return (po.currency if po and po.currency else None) or 'USD'
 
 
 # ---------------------------------------------------------------------------

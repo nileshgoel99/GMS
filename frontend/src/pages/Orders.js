@@ -33,6 +33,11 @@ const STATUS_LABELS = {
   CANCELLED: 'Cancelled',
 };
 
+const fmtMoney = (n, ccy = 'USD') =>
+  n == null || n === ''
+    ? '—'
+    : `${ccy} ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 const Orders = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
@@ -189,6 +194,31 @@ const Orders = () => {
       headerAlign: 'right',
       renderCell: (p) => cell('right',
         <Typography sx={{ fontWeight: 700, fontSize: '0.8rem' }}>{p.value?.toLocaleString?.() ?? p.value ?? '—'}</Typography>
+      ),
+    },
+    {
+      field: 'total_amount',
+      headerName: 'Order Value',
+      minWidth: 120,
+      flex: 0.7,
+      type: 'number',
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (p) => cell('right',
+        <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums', color: 'primary.dark' }} noWrap>
+          {fmtMoney(p.value, p.row.currency || 'USD')}
+        </Typography>
+      ),
+    },
+    {
+      field: 'ex_factory_date',
+      headerName: 'Ex Factory Date',
+      minWidth: 108,
+      flex: 0.65,
+      renderCell: (p) => cell('left',
+        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: p.value ? 'text.secondary' : slate[300] }} noWrap>
+          {formatDateDisplay(p.value)}
+        </Typography>
       ),
     },
     {
