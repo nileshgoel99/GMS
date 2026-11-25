@@ -381,6 +381,12 @@ class BuyerPO(models.Model):
         help_text='Fixed overall discount amount, applied after the percent discount',
     )
     total_value = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    advance_received = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text='Advance already received against this buyer PO',
+    )
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RECEIVED')
     notes = models.TextField(blank=True, default='')

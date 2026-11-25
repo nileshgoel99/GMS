@@ -211,6 +211,20 @@ const Orders = () => {
       ),
     },
     {
+      field: 'advance_received',
+      headerName: 'Advance',
+      minWidth: 110,
+      flex: 0.6,
+      type: 'number',
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (p) => cell('right',
+        <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums', color: 'text.secondary' }} noWrap>
+          {fmtMoney(p.value, p.row.currency || 'USD')}
+        </Typography>
+      ),
+    },
+    {
       field: 'ex_factory_date',
       headerName: 'Ex Factory Date',
       minWidth: 108,

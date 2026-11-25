@@ -395,13 +395,15 @@ class ProformaInvoiceListSerializer(serializers.ModelSerializer):
     linked_po_id = serializers.SerializerMethodField()
     ex_factory_date = serializers.SerializerMethodField()
     currency = serializers.SerializerMethodField()
+    advance_received = serializers.SerializerMethodField()
 
     class Meta:
         model = ProformaInvoice
         fields = [
             'id', 'pi_number', 'buyer_po_number', 'customer_id', 'customer_code', 'client_name', 'order_date',
-            'delivery_date', 'ex_factory_date', 'garment_type', 'quantity', 'total_amount', 'currency', 'status',
-            'created_by_name', 'indents_count', 'lines_count', 'linked_po_id', 'created_at',
+            'delivery_date', 'ex_factory_date', 'garment_type', 'quantity', 'total_amount', 'currency',
+            'advance_received', 'status', 'created_by_name', 'indents_count', 'lines_count', 'linked_po_id',
+            'created_at',
         ]
 
     def get_indents_count(self, obj):
@@ -429,6 +431,12 @@ class ProformaInvoiceListSerializer(serializers.ModelSerializer):
     def get_currency(self, obj):
         po = self._linked_po(obj)
         return (po.currency if po and po.currency else None) or 'USD'
+
+    def get_advance_received(self, obj):
+        po = self._linked_po(obj)
+        if po is None or po.advance_received is None:
+            return None
+        return po.advance_received
 
 
 # ---------------------------------------------------------------------------
@@ -963,7 +971,8 @@ class BuyerPOListSerializer(serializers.ModelSerializer):
             'customer', 'customer_name',
             'ship_to_customer', 'ship_to_customer_name', 'ship_to_name', 'ship_to_address',
             'currency', 'status',
-            'ex_factory_date', 'total_qty', 'overall_discount', 'overall_discount_amount', 'total_value', 'lines_count',
+            'ex_factory_date', 'total_qty', 'overall_discount', 'overall_discount_amount', 'total_value',
+            'advance_received', 'lines_count',
             'po_document', 'pi_ref', 'pi_id', 'pi_stale', 'created_at',
         ]
 
@@ -994,7 +1003,8 @@ class BuyerPOSerializer(serializers.ModelSerializer):
             'supplier_code', 'currency',
             'delivery_terms', 'payment_terms', 'delivery_method',
             'freight_terms', 'packaging_terms', 'ex_factory_date',
-            'total_qty', 'overall_discount', 'overall_discount_amount', 'total_value', 'status', 'notes', 'pi',
+            'total_qty', 'overall_discount', 'overall_discount_amount', 'total_value', 'advance_received',
+            'status', 'notes', 'pi',
             'po_document', 'pi_ref', 'indent_count',
             'inco_terms', 'port_of_loading', 'port_of_discharge',
             'lines', 'created_by', 'created_by_name', 'created_at', 'updated_at',
@@ -1007,6 +1017,17 @@ class BuyerPOSerializer(serializers.ModelSerializer):
 
     def validate_overall_discount_amount(self, value):
         return clean_money_discount(value)
+
+    def validate_advance_received(self, value):
+        if value in (None, ''):
+            return Decimal('0.00')
+        try:
+            amt = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            raise serializers.ValidationError('Advance received must be a number.')
+        if amt < 0:
+            raise serializers.ValidationError('Advance received cannot be negative.')
+        return amt.quantize(Decimal('0.01'))
 
     def get_customer_name(self, obj):
         return obj.customer.company_legal_name if obj.customer else None
@@ -1084,7 +1105,7 @@ class BuyerPOSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         lines_data = validated_data.pop('lines', None)
-        skip_stale_fields = {'pi', 'pi_ref'}
+        skip_stale_fields = {'pi', 'pi_ref', 'advance_received'}
         content_changed = bool(set(validated_data.keys()) - skip_stale_fields) or lines_data is not None
         for attr, value in validated_data.items():
             setattr(instance, attr, value)

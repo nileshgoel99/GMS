@@ -125,6 +125,7 @@ const emptyForm = () => ({
   port_of_discharge: '',
   overall_discount: '',
   overall_discount_amount: '',
+  advance_received: '',
   pi_ref: '',
   pi: null,
   pi_stale: false,
@@ -1077,7 +1078,10 @@ const discountFieldSx = (theme) => ({
   '& input': { textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' },
 });
 
-function SummaryBar({ lines, currency, overallDiscount, overallDiscountAmount, onOverallDiscount, onOverallDiscountAmount }) {
+function SummaryBar({
+  lines, currency, overallDiscount, overallDiscountAmount, advanceReceived,
+  onOverallDiscount, onOverallDiscountAmount, onAdvanceReceived,
+}) {
   const theme = useTheme();
   const totalQty = lines.reduce((s, l) => s + lineQty(l), 0);
   const subtotal = lines.reduce((s, l) => s + (lineAmt(l) ?? 0), 0);
@@ -1160,6 +1164,24 @@ function SummaryBar({ lines, currency, overallDiscount, overallDiscountAmount, o
         <Typography sx={{ mt: 0.75, fontSize: '0.72rem', color: '#94a3b8', fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
           {hasDiscount ? `− ${fmtMoney(percentOff + flatOff, ccy)}` : 'Percent, amount, or both'}
         </Typography>
+      </Box>
+
+      <Box sx={{ flex: '2 1 180px', bgcolor: '#1e293b', p: 2.5, display: 'flex', flexDirection: 'column', alignItems: 'center', borderRight: `1px solid ${alpha('#fff', 0.06)}` }}>
+        <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', mb: 0.75 }}>
+          Advance Received
+        </Typography>
+        <TextField
+          size="small"
+          type="number"
+          value={advanceReceived}
+          onChange={(e) => onAdvanceReceived(e.target.value)}
+          placeholder="0.00"
+          inputProps={{ min: 0, step: '0.01' }}
+          InputProps={{
+            startAdornment: <InputAdornment position="start"><Typography sx={{ color: alpha('#fff', 0.55), fontSize: '0.75rem', fontWeight: 700 }}>{ccy}</Typography></InputAdornment>,
+          }}
+          sx={discountFieldSx(theme)}
+        />
       </Box>
 
       {/* Order Value tile */}
@@ -1301,6 +1323,7 @@ export default function BuyerPOEditorPage() {
           port_of_discharge: po.port_of_discharge || '',
           overall_discount: po.overall_discount != null && po.overall_discount !== '' ? String(po.overall_discount) : '',
           overall_discount_amount: po.overall_discount_amount != null && po.overall_discount_amount !== '' ? String(po.overall_discount_amount) : '',
+          advance_received: po.advance_received != null && po.advance_received !== '' ? String(po.advance_received) : '',
           pi_ref:          po.pi_ref || '',
           pi:              po.pi || null,
           pi_stale:        Boolean(po.pi_stale),
@@ -1402,6 +1425,10 @@ export default function BuyerPOEditorPage() {
     if (Number.isNaN(overallAmt) || overallAmt < 0) {
       return alert('Overall discount amount cannot be negative.');
     }
+    const advance = formData.advance_received === '' ? 0 : parseFloat(formData.advance_received);
+    if (Number.isNaN(advance) || advance < 0) {
+      return alert('Advance received cannot be negative.');
+    }
 
     const payload = {
       ...formData,
@@ -1412,6 +1439,7 @@ export default function BuyerPOEditorPage() {
       ex_factory_date:   formData.ex_factory_date || null,
       overall_discount:  formData.overall_discount !== '' ? parseFloat(formData.overall_discount) : null,
       overall_discount_amount: formData.overall_discount_amount !== '' ? parseFloat(formData.overall_discount_amount) : null,
+      advance_received: advance,
       lines: lines.map((l) => {
         const fabric = isFabricLine(l);
         return {
@@ -1958,6 +1986,8 @@ export default function BuyerPOEditorPage() {
             overallDiscountAmount={formData.overall_discount_amount}
             onOverallDiscount={(val) => setField('overall_discount', val)}
             onOverallDiscountAmount={(val) => setField('overall_discount_amount', val)}
+            advanceReceived={formData.advance_received}
+            onAdvanceReceived={(val) => setField('advance_received', val)}
           />
         </Box>
       </Collapse>

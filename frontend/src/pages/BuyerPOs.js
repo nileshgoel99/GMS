@@ -335,6 +335,12 @@ export function BuyerPoDetailDialog({ poId, onClose, onEdit, onGeneratePI, onCre
                   </Box>
                 )}
                 <Box sx={{ textAlign: 'right' }}>
+                  <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4), mb: 0.3 }}>Advance Received</Typography>
+                  <Typography sx={{ fontWeight: 800, fontSize: '1.15rem', color: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtMoney(po.advance_received || 0, po.currency)}
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: 'right' }}>
                   <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: alpha('#fff', 0.4), mb: 0.3 }}>Order Value</Typography>
                   <Typography sx={{ fontWeight: 900, fontSize: '1.5rem', color: theme.palette.primary.light, fontVariantNumeric: 'tabular-nums' }}>
                     {fmtMoney(po.total_value, po.currency)}
