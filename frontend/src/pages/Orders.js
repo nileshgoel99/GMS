@@ -81,9 +81,16 @@ const Orders = () => {
         alignItems: verticalAlign,
         justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
         width: '100%',
+        minWidth: 0,
         height: '100%',
-        px: 0.5,
+        px: 0.25,
         overflow: 'visible',
+        '& .MuiTypography-root': {
+          whiteSpace: 'normal',
+          wordBreak: 'break-word',
+          overflowWrap: 'anywhere',
+          lineHeight: 1.35,
+        },
       }}
     >
       {children}
@@ -99,12 +106,25 @@ const Orders = () => {
       bgcolor: slate[50],
       borderBottom: `2px solid ${slate[200]}`,
     },
+    '& .MuiDataGrid-columnHeader': {
+      height: 'auto',
+      minHeight: 48,
+    },
+    '& .MuiDataGrid-columnHeaderTitleContainer, & .MuiDataGrid-columnHeaderTitleContainerContent': {
+      whiteSpace: 'normal',
+      overflow: 'visible',
+      lineHeight: 1.25,
+    },
     '& .MuiDataGrid-columnHeaderTitle': {
       fontWeight: 800,
-      fontSize: '0.72rem',
+      fontSize: '0.68rem',
       textTransform: 'uppercase',
-      letterSpacing: '0.06em',
+      letterSpacing: '0.04em',
       color: slate[500],
+      whiteSpace: 'normal',
+      lineHeight: 1.25,
+      overflow: 'visible',
+      textOverflow: 'clip',
     },
     '& .MuiDataGrid-cell': {
       ...(dataGridSx['& .MuiDataGrid-cell'] || {}),
@@ -112,7 +132,11 @@ const Orders = () => {
       alignItems: 'center',
       borderBottom: `1px solid ${slate[100]}`,
       overflow: 'visible',
-      py: 0.75,
+      whiteSpace: 'normal',
+      wordBreak: 'break-word',
+      lineHeight: 1.35,
+      py: 1,
+      minWidth: '0 !important',
     },
     '& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus': { outline: 'none' },
     '& .MuiDataGrid-row.pi-row--alt': {
@@ -121,8 +145,11 @@ const Orders = () => {
     '& .MuiDataGrid-row.pi-row--alt:hover': {
       bgcolor: `${alpha('#0f766e', 0.12)} !important`,
     },
-    '& .MuiDataGrid-virtualScroller': {
+    '& .MuiDataGrid-main, & .MuiDataGrid-virtualScroller, & .MuiDataGrid-virtualScrollerContent': {
       overflowX: 'hidden',
+    },
+    '& .MuiDataGrid-scrollbar--horizontal': {
+      display: 'none',
     },
   };
 
@@ -135,8 +162,8 @@ const Orders = () => {
     {
       field: 'pi_number',
       headerName: 'PI #',
-      minWidth: 92,
-      flex: 0.85,
+      minWidth: 56,
+      flex: 0.9,
       renderCell: (p) => cell('left',
         <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', fontFamily: 'monospace', color: 'primary.main' }}>
           {p.value}
@@ -146,19 +173,19 @@ const Orders = () => {
     {
       field: 'buyer_po_number',
       headerName: 'Buyer PO',
-      minWidth: 82,
-      flex: 0.75,
+      minWidth: 56,
+      flex: 0.8,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600 }} noWrap>{p.value || '—'}</Typography>
+        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600 }}>{p.value || '—'}</Typography>
       ),
     },
     {
       field: 'customer_code',
       headerName: 'Code',
-      minWidth: 48,
-      flex: 0.45,
+      minWidth: 40,
+      flex: 0.4,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.8rem', fontFamily: 'monospace', color: 'text.secondary' }} noWrap>
+        <Typography sx={{ fontSize: '0.8rem', fontFamily: 'monospace', color: 'text.secondary' }}>
           {p.value || '—'}
         </Typography>
       ),
@@ -166,17 +193,17 @@ const Orders = () => {
     {
       field: 'client_name',
       headerName: 'Bill To',
-      minWidth: 88,
-      flex: 1.15,
+      minWidth: 72,
+      flex: 1.2,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }} noWrap>{p.value || '—'}</Typography>
+        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{p.value || '—'}</Typography>
       ),
     },
     {
       field: 'lines_count',
       headerName: 'Lines',
-      minWidth: 48,
-      flex: 0.38,
+      minWidth: 40,
+      flex: 0.35,
       type: 'number',
       align: 'center',
       headerAlign: 'center',
@@ -187,8 +214,8 @@ const Orders = () => {
     {
       field: 'quantity',
       headerName: 'Pcs',
-      minWidth: 60,
-      flex: 0.45,
+      minWidth: 44,
+      flex: 0.4,
       type: 'number',
       align: 'right',
       headerAlign: 'right',
@@ -199,13 +226,13 @@ const Orders = () => {
     {
       field: 'total_amount',
       headerName: 'Order Value',
-      minWidth: 120,
+      minWidth: 64,
       flex: 0.7,
       type: 'number',
       align: 'right',
       headerAlign: 'right',
       renderCell: (p) => cell('right',
-        <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums', color: 'primary.dark' }} noWrap>
+        <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums', color: 'primary.dark' }}>
           {fmtMoney(p.value, p.row.currency || 'USD')}
         </Typography>
       ),
@@ -213,13 +240,13 @@ const Orders = () => {
     {
       field: 'advance_received',
       headerName: 'Advance',
-      minWidth: 110,
+      minWidth: 56,
       flex: 0.6,
       type: 'number',
       align: 'right',
       headerAlign: 'right',
       renderCell: (p) => cell('right',
-        <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums', color: 'text.secondary' }} noWrap>
+        <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums', color: 'text.secondary' }}>
           {fmtMoney(p.value, p.row.currency || 'USD')}
         </Typography>
       ),
@@ -227,10 +254,10 @@ const Orders = () => {
     {
       field: 'ex_factory_date',
       headerName: 'Ex Factory Date',
-      minWidth: 108,
+      minWidth: 64,
       flex: 0.65,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: p.value ? 'text.secondary' : slate[300] }} noWrap>
+        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: p.value ? 'text.secondary' : slate[300] }}>
           {formatDateDisplay(p.value)}
         </Typography>
       ),
@@ -238,17 +265,17 @@ const Orders = () => {
     {
       field: 'order_date',
       headerName: 'PI Date',
-      minWidth: 84,
-      flex: 0.55,
+      minWidth: 52,
+      flex: 0.5,
       renderCell: (p) => cell('left',
-        <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }} noWrap>{formatDateDisplay(p.value)}</Typography>
+        <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>{formatDateDisplay(p.value)}</Typography>
       ),
     },
     {
       field: 'status',
       headerName: 'Status',
-      minWidth: 128,
-      flex: 0.65,
+      minWidth: 64,
+      flex: 0.6,
       align: 'center',
       headerAlign: 'center',
       renderCell: (params) => cell('center',
@@ -279,8 +306,8 @@ const Orders = () => {
     {
       field: 'actions',
       headerName: 'Actions',
-      minWidth: 120,
-      flex: 0.45,
+      minWidth: 88,
+      flex: 0.5,
       sortable: false,
       align: 'center',
       headerAlign: 'center',
@@ -361,8 +388,9 @@ const Orders = () => {
           columns={columns}
           getRowId={(row) => row.id}
           getRowClassName={(p) => (orders.findIndex((r) => r.id === p.id) % 2 === 1 ? 'pi-row--alt' : '')}
-          rowHeight={100}
-          columnHeaderHeight={48}
+          getRowHeight={() => 'auto'}
+          columnHeaderHeight={56}
+          scrollbarSize={0}
           pageSizeOptions={[10, 25, 50]}
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
           loading={loading}
